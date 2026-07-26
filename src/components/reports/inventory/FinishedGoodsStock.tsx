@@ -1,0 +1,36 @@
+import React, { useMemo, useState } from 'react';
+import { formatNumber } from '../../../lib/utils';
+import { GenericReportTemplate } from '../common/GenericReportTemplate';
+import { Package, Database } from 'lucide-react';
+import { InventoryReportService } from "../../../lib/reporting/InventoryReportService";
+
+export function FinishedGoodsStock() {
+  const [dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });
+  const [search, setSearch] = useState('');
+
+  const data = useMemo(() => InventoryReportService.getFinishedGoodsStockData(search), [search]);
+
+  const totalStock = data.reduce((sum, item) => sum + item.currentStock, 0);
+
+  return (
+    <GenericReportTemplate
+      title="Finished Goods Stock"
+      data={data}
+      onDateRangeChange={setDateRange}
+      onSearch={setSearch}
+      kpis={[
+        { title: "Product Types", value: data.length, icon: Database },
+        { title: "Total PCS in Stock", value: formatNumber(totalStock), icon: Package }
+      ]}
+      columns={[
+        { key: "name", label: "Product Name" },
+        { key: "category", label: "Category" },
+        { key: "currentStock", label: "Current Stock", align: "right", render: (item) => <span className="font-medium">{formatNumber(item.currentStock)}</span> }
+      ]}
+      exportDataMapping={(item) => ({
+        ...item,
+        currentStock: formatNumber(item.currentStock)
+      })}
+    />
+  );
+}
