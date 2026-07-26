@@ -1,0 +1,29 @@
+{
+  "timestamp": "2026-07-18T14:57:25.979Z",
+  "environment": "Node.js Benchmark Simulator",
+  "metrics": {
+    "dataGeneration": {
+      "durationMs": 896.3378399999999,
+      "throughput": 256599.67674688375,
+      "recordsCreated": {
+        "customers": 20001,
+        "suppliers": 10000,
+        "purchases": 100000,
+        "sales": 100000
+      }
+    },
+    "memoryUsage": {
+      "heapUsedMB": 216,
+      "heapTotalMB": 319,
+      "rssMB": 454
+    },
+    "queryPerformance": {
+      "salesAggregationDurationMs": 1.5820330000001377,
+      "totalSalesAmount": 687787548
+    },
+    "qaValidation": {
+      "durationMs": 2004.00168,
+      "status": "Passed"
+    }
+  }
+}
