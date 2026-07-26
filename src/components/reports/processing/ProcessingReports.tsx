@@ -1,0 +1,29 @@
+import React from 'react';
+import { ProcessingDispatchReport } from './ProcessingDispatchReport';
+import { ProcessingReceiveReport } from './ProcessingReceiveReport';
+import { PendingProcessingReport } from './PendingProcessingReport';
+import { ProcessorBillingReport } from './ProcessorBillingReport';
+import { ProcessorLedgerReport } from './ProcessorLedgerReport';
+import { ProcessingChargesReport } from './ProcessingChargesReport';
+import { ProcessingEfficiency } from './ProcessingEfficiency';
+import { ProcessingLossReport } from './ProcessingLossReport';
+import { ProcessorPerformance } from './ProcessorPerformance';
+import { PendingPCSReport } from './PendingPCSReport';
+
+const Placeholder = ({ name }: {name:string}) => <div className="p-8 text-center text-muted-foreground">{name} Report will be implemented here.</div>;
+
+export function ProcessingReports({ activeReport }: { activeReport: string }) {
+  switch (activeReport) {
+    case 'processing-dispatch': return <ProcessingDispatchReport />;
+    case 'processing-receive': return <ProcessingReceiveReport />;
+    case 'pending-processing': return <PendingProcessingReport />;
+    case 'processor-billing': return <ProcessorBillingReport />;
+    case 'processor-ledger': return <ProcessorLedgerReport />;
+    case 'processing-charges': return <ProcessingChargesReport />;
+    case 'processing-efficiency': return <ProcessingEfficiency />;
+    case 'processing-loss': return <ProcessingLossReport />;
+    case 'processor-performance': return <ProcessorPerformance />;
+    case 'pending-pcs': return <PendingPCSReport />;
+    default: return <Placeholder name={activeReport} />;
+  }
+}

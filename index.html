@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="hmr-force-reload" content="1" />
+    <style>
+      /* Startup loading spinner — shown until React mounts */
+      #startup-loader {
+        position: fixed; inset: 0;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        background: #0f172a;
+        z-index: 9999;
+        transition: opacity 0.4s ease;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
+      #startup-loader.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #startup-loader .spinner {
+        width: 40px; height: 40px;
+        border: 3px solid rgba(255,255,255,0.1);
+        border-top-color: #6366f1;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      #startup-loader .brand {
+        margin-top: 20px;
+        font-size: 14px;
+        color: rgba(255,255,255,0.5);
+        letter-spacing: 0.5px;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div id="startup-loader">
+        <div class="spinner"></div>
+        <div class="brand">W-RAW ERP PROFESSIONAL</div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+<!-- force reload -->
