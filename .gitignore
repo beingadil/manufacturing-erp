@@ -43,6 +43,15 @@ scripts/fixTypeErrors*.mjs
 scripts/generate*.mjs
 scripts/updateReportsList.mjs
 
+# Production-unnecessary files
+ELECTRON_MIGRATION_GUIDE.md
+docs/
+electron/persistenceTest.cjs
+scripts/persistence-smoke-test.sh
+src/pages/SamplePage.tsx
+src/services/.keep
+src/electron/tests/
+
 # Test artifacts
 playwright-report
 test-results
