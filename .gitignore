@@ -1,14 +1,7 @@
 # Environment variables — contains API keys
 .env
-
-# Logs
-logs
-
-# Built artifacts
-dist-electron/
-
-# Freebuff / AI assistant data
-.freebuff/
+.env.local
+.env.*.local
 
 # Logs
 logs
@@ -19,12 +12,38 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
+# Built artifacts
+dist-electron/
+dist/
 dist-ssr
 output
-*.local
+
+# Dependencies
+node_modules
 package-lock.json
+
+# Freebuff / AI assistant data — private conversation history
+.freebuff/
+.rules/
+historical_context.txt
+internal-assessment.md
+memory.md
+sgconfig.yml
+
+# Development-only scripts — not needed by other developers
+refactorAll.ts
+refactorTest.ts
+hash.js
+benchmark_results.json
+RELEASE_NOTES.md
+
+# Dev-only report generators / one-time migration scripts
+scripts/benchmark.ts
+scripts/fixTypeErrors*.mjs
+scripts/generate*.mjs
+scripts/updateReportsList.mjs
+
+# Test artifacts
 playwright-report
 test-results
 
@@ -42,5 +61,7 @@ package.json.[0-9]*
 .sync
 history/*.json
 .vite_cache
+
+# Skills dirs
 /.skills
 /tasks
