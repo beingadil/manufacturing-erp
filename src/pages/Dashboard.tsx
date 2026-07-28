@@ -3,10 +3,11 @@ import { filterFinancialData } from "../lib/abac";
 import React, { useMemo } from "react";
 import { useERPStore } from "../store/useERPStore";
 import { formatCurrency, formatNumber } from "../lib/utils";
-import { ArrowRight, PackageSearch, Users, Truck, Wallet, TrendingUp, AlertTriangle, CircleDollarSign } from "lucide-react";
+import { ArrowRight, PackageSearch, Users, Truck, Wallet, TrendingUp, AlertTriangle, CircleDollarSign, ArrowUpCircle, ArrowDownCircle, DollarSign } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { format, subDays, isAfter } from 'date-fns';
+import { CashBookEngine } from '../lib/finance/CashBookEngine';
 
 export function Dashboard() {
   const { profile, isAdmin, dataPolicies } = useAuth();
@@ -26,14 +27,11 @@ export function Dashboard() {
   const totalSalesRevenue = secureSales.reduce((acc: number, s: any) => acc + s.totalAmount, 0);
   const totalPurchasesCost = purchases.reduce((acc, p) => acc + p.amount, 0);
 
-  const cashAccounts = accounts.filter(a => a.name.toLowerCase().includes('cash') || a.name.toLowerCase().includes('bank'));
-  const totalCashInHand = cashAccounts.reduce((total, acc) => {
-    let bal = acc.openingBalanceType === 'Debit' ? acc.openingBalance : -acc.openingBalance;
-    const entries = journalEntries.filter(je => je.accountId === acc.id);
-    const debits = entries.reduce((sum, je) => sum + je.debit, 0);
-    const credits = entries.reduce((sum, je) => sum + je.credit, 0);
-    return total + bal + debits - credits;
-  }, 0);
+  // Use CashBookEngine for all cash position calculations
+  const cashPosition = useMemo(() =>
+    CashBookEngine.getCashPosition(accounts, journalEntries, vouchers),
+    [accounts, journalEntries, vouchers]
+  );
 
 
   // Generate last 7 days sales data
@@ -89,11 +87,35 @@ export function Dashboard() {
             <CircleDollarSign className="h-5 w-5 text-emerald-500" />
             <span className="text-sm font-medium">Cash in Hand</span>
           </div>
-          <div className="text-2xl font-bold text-foreground">{formatCurrency(totalCashInHand)}</div>
+          <div className="text-2xl font-bold text-foreground">{formatCurrency(cashPosition.cashInHand)}</div>
         </div>
         <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col justify-between">
           <div className="flex items-center gap-3 text-muted-foreground mb-2">
-            <Wallet className="h-5 w-5 text-emerald-500" />
+            <ArrowUpCircle className="h-5 w-5 text-emerald-500" />
+            <span className="text-sm font-medium">Today's Receipts</span>
+          </div>
+          <div className="text-2xl font-bold text-success">{formatCurrency(cashPosition.todayReceipts)}</div>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center gap-3 text-muted-foreground mb-2">
+            <ArrowDownCircle className="h-5 w-5 text-red-500" />
+            <span className="text-sm font-medium">Today's Payments</span>
+          </div>
+          <div className="text-2xl font-bold text-destructive">{formatCurrency(cashPosition.todayPayments)}</div>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center gap-3 text-muted-foreground mb-2">
+            <DollarSign className="h-5 w-5 text-primary" />
+            <span className="text-sm font-medium">Today's Closing</span>
+          </div>
+          <div className="text-2xl font-bold text-foreground">{formatCurrency(cashPosition.todayClosing)}</div>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center gap-3 text-muted-foreground mb-2">
+            <Wallet className="h-5 w-5 text-blue-500" />
             <span className="text-sm font-medium">Total Revenue</span>
           </div>
           <div className="text-2xl font-bold text-foreground">{formatCurrency(totalSalesRevenue)}</div>
@@ -113,22 +135,6 @@ export function Dashboard() {
             <span className="text-sm font-medium">Raw Inventory (PCS)</span>
           </div>
           <div className="text-2xl font-bold text-foreground">{formatNumber(totalRawStockPcs)}</div>
-        </div>
-
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center gap-3 text-muted-foreground mb-2">
-            <PackageSearch className="h-5 w-5 text-emerald-500" />
-            <span className="text-sm font-medium">Finished Stock (PCS)</span>
-          </div>
-          <div className="text-2xl font-bold text-foreground">{formatNumber(totalProcessedStockPcs)}</div>
-        </div>
-
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center gap-3 text-muted-foreground mb-2">
-            <Truck className="h-5 w-5 text-amber-500" />
-            <span className="text-sm font-medium">At Processors (PCS)</span>
-          </div>
-          <div className="text-2xl font-bold text-foreground">{formatNumber(totalPendingWithProcessors)}</div>
         </div>
       </div>
       

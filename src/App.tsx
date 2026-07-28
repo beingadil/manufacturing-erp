@@ -23,6 +23,7 @@ import { Customers } from './pages/Customers';
 import { Reports } from './pages/Reports';
 import Categories from './pages/Categories';
 import { Accounting } from './pages/Accounting';
+import { FinanceLayout } from './pages/finance/FinanceLayout';
 import { SystemHealthDashboard } from './pages/SystemHealth';
 import { AuthProvider } from './contexts/AuthContext';
 import { RouteGuard } from './components/common/RouteGuard';
@@ -129,7 +130,8 @@ export default function App() {
           <Route path="reports" element={<RouteGuard requireModule="Reports" requireAction="View"><Reports /></RouteGuard>} />
           <Route path="accounting" element={<Navigate to="/accounting/chart-of-accounts" replace />} />
           <Route path="accounting/chart-of-accounts" element={<RouteGuard requireModule="Accounting" requireAction="View"><Accounting /></RouteGuard>} />
-          <Route path="accounting/cashbook" element={<RouteGuard requireModule="Accounting" requireAction="View"><Accounting /></RouteGuard>} />
+          <Route path="accounting/cashbook" element={<RouteGuard requireModule="Accounting" requireAction="View"><FinanceLayout /></RouteGuard>} />
+          <Route path="accounting/finance" element={<RouteGuard requireModule="Accounting" requireAction="View"><FinanceLayout /></RouteGuard>} />
           <Route path="accounting/journal-vouchers" element={<RouteGuard requireModule="Accounting" requireAction="View"><Accounting /></RouteGuard>} />
           <Route path="accounting/opening-balance" element={<RouteGuard requireModule="Accounting" requireAction="View"><Accounting /></RouteGuard>} />
           <Route path="accounting/general-ledger" element={<RouteGuard requireModule="Accounting" requireAction="View"><Accounting /></RouteGuard>} />
