@@ -11,7 +11,7 @@ import { CashBookEngine } from '../lib/finance/CashBookEngine';
 
 export function Dashboard() {
   const { profile, isAdmin, dataPolicies } = useAuth();
-  const { materials, processors, suppliers, customers, processingSends, processingReceipts, sales, purchases, products, accounts, journalEntries } = useERPStore();
+  const { materials, processors, suppliers, customers, processingSends, processingReceipts, sales, purchases, products, accounts, journalEntries, vouchers } = useERPStore();
   const navigate = useNavigate();
   const secureSales = filterFinancialData(sales, profile, isAdmin, dataPolicies);
   const securePurchases = filterFinancialData(purchases, profile, isAdmin, dataPolicies);
