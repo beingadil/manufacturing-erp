@@ -10,6 +10,7 @@ import { CreateVoucherModal } from "../components/CreateVoucherModal";
 import { CashbookEntryModal } from "../components/CashbookEntryModal";
 import { AddAccountModal } from "../components/AddAccountModal";
 import { Cashbook } from "../components/Cashbook";
+import { OpeningBalance } from "./finance/OpeningBalance";
 import { generateVoucherPDF, generateLedgerStatementPDF } from "../lib/documentGenerators";
 
 export function Accounting() {
@@ -34,19 +35,7 @@ export function Accounting() {
   );
 }
 
-function OpeningBalance() {
-  return (
-    <div className="flex-1 flex flex-col h-full">
-      <div className="p-6 border-b border-border/50">
-        <h2 className="text-lg font-semibold text-foreground">Opening Balance</h2>
-        <p className="text-sm text-muted-foreground">Manage initial account balances</p>
-      </div>
-      <div className="p-6 flex-1 overflow-auto">
-        <p className="text-muted-foreground">Opening balance functionality will be implemented here.</p>
-      </div>
-    </div>
-  );
-}
+
 
 function GeneralLedger() {
   const { accounts, vouchers, journalEntries, suppliers, customers, processors, accountSubtypes } = useERPStore();

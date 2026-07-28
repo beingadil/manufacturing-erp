@@ -87,8 +87,12 @@ const navigationGroups: { title: string; items: NavItem[] }[] = [
         icon: Calculator,
         subItems: [
                     { name: 'Chart of Accounts', href: '/accounting/chart-of-accounts' },
+          { name: '💳 Cash Receipt Voucher', href: '/accounting/finance?tab=crv' },
+          { name: '💰 Cash Payment Voucher', href: '/accounting/finance?tab=cpv' },
+          { name: '🔄 Contra Voucher', href: '/accounting/finance?tab=contra' },
+          { name: '📒 Cash Book', href: '/accounting/finance' },
+          { name: '📊 Daily Cash Summary', href: '/accounting/finance?tab=daily-summary' },
           { name: 'Journal Vouchers', href: '/accounting/journal-vouchers' },
-          { name: 'Cashbook', href: '/accounting/cashbook' },
           { name: 'General Ledger', href: '/accounting/general-ledger' },
           { name: 'Trial Balance', href: '/accounting/trial-balance' },
           { name: 'Profit & Loss', href: '/accounting/profit-loss' },
