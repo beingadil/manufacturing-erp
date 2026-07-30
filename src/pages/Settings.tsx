@@ -3,7 +3,7 @@ import {
   User, Image as ImageIcon, Palette, Bell, Shield, Download, Upload,
   Save, CheckCircle2, Lock, Smartphone, Key, Globe, Clock, Monitor, Trash2,
   Database, Activity, Hash, Info, ExternalLink, RotateCw, DownloadCloud,
-  AlertCircle
+  AlertCircle, FileDown, FileUp, HardDrive, AlertTriangle
 } from "lucide-react";
 import { SeedChartOfAccountsButton } from "@/components/settings/SeedChartOfAccountsButton";
 import { cn } from "../lib/utils";
@@ -620,7 +620,10 @@ function SecurityTab({ onSave, showSavedToast }: { onSave: () => void, showSaved
 function BackupTab() {
   const [backups, setBackups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [backingUp, setBackingUp] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const loadBackups = async () => {
     setLoading(true);
@@ -634,24 +637,24 @@ function BackupTab() {
   };
 
   const handleCreateBackup = async () => {
+    setBackingUp(true);
     try {
       if ((window as any).electronDB?.backup) {
         await (window as any).electronDB.backup();
         await loadBackups();
       }
     } catch {}
+    setBackingUp(false);
   };
 
   const handleRestore = async (backupPath: string) => {
-    if (!confirm('WARNING: Restoring will replace ALL current data with the backup. This cannot be undone. Are you sure?')) return;
-    if (!confirm('Create a safety backup of the current data before restoring?')) return;
+    if (!confirm('WARNING: Restoring will replace ALL current data with the backup. Cannot be undone.\n\nA safety backup will be created first.')) return;
     setRestoring(true);
     try {
-      if ((window as any).electronDB?.backup) {
-        await (window as any).electronDB.backup();
-      }
-      if ((window as any).electronDB?.restore) {
-        const res = await (window as any).electronDB.restore(backupPath);
+      const db = (window as any).electronDB;
+      if (db?.backup) await db.backup();
+      if (db?.restore) {
+        const res = await db.restore(backupPath);
         if (res.success) {
           alert('Database restored successfully. The application will now reload.');
           window.location.reload();
@@ -663,6 +666,46 @@ function BackupTab() {
       alert(`Restore failed: ${e.message}`);
     }
     setRestoring(false);
+  };
+
+  const handleExportBackup = async () => {
+    const db = (window as any).electronDB;
+    if (!db?.exportBackup) {
+      alert('Export backup is only available in the desktop app.');
+      return;
+    }
+    setExporting(true);
+    try {
+      const result = await db.exportBackup();
+      if (result.canceled) return;
+      if (!result.success) alert(`Export failed: ${result.error}`);
+    } catch (e: any) {
+      alert(`Export failed: ${e.message}`);
+    }
+    setExporting(false);
+  };
+
+  const handleImportBackup = async () => {
+    const db = (window as any).electronDB;
+    if (!db?.importBackup) {
+      alert('Import backup is only available in the desktop app.');
+      return;
+    }
+    if (!confirm('WARNING: Importing will REPLACE ALL current data.\n\nA safety backup will be created first.\n\nAre you sure?')) return;
+    setImporting(true);
+    try {
+      const result = await db.importBackup();
+      if (result.canceled) return;
+      if (result.success) {
+        alert('Database imported successfully. The application will now reload.');
+        window.location.reload();
+      } else {
+        alert(`Import failed: ${result.error}`);
+      }
+    } catch (e: any) {
+      alert(`Import failed: ${e.message}`);
+    }
+    setImporting(false);
   };
 
   const formatSize = (bytes: number) => {
@@ -683,27 +726,60 @@ function BackupTab() {
     <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
       <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40/50">
         <h3 className="text-lg font-bold text-foreground">Backup & Restore</h3>
-        <p className="text-sm text-muted-foreground mt-1">Create on-demand SQLite snapshots or restore from a previous backup.</p>
+        <p className="text-sm text-muted-foreground mt-1">Create on-demand SQLite snapshots, export to a file, or restore from a backup.</p>
       </div>
       <div className="p-6 sm:p-8 space-y-8">
-        <div>
-          <h4 className="text-sm font-bold text-foreground mb-4 uppercase tracking-wider flex items-center gap-2">
-            <Database className="h-4 w-4" /> SQLite Backups
-          </h4>
-          <div className="p-5 rounded-xl border border-border/50 bg-muted/20 flex flex-col items-start gap-3 mb-6">
+        {/* ── Action Buttons ── */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <button
+            onClick={handleCreateBackup}
+            disabled={backingUp}
+            className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50"
+          >
+            <Database className="h-4 w-4" />
+            {backingUp ? 'Backing up...' : 'Create Backup'}
+          </button>
+          <button
+            onClick={handleExportBackup}
+            disabled={exporting}
+            className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium bg-secondary text-secondary-foreground rounded-xl hover:bg-secondary/80 transition-colors disabled:opacity-50"
+          >
+            <FileDown className="h-4 w-4" />
+            {exporting ? 'Exporting...' : 'Export to File'}
+          </button>
+          <button
+            onClick={handleImportBackup}
+            disabled={importing}
+            className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium border-2 border-amber-400/50 text-amber-700 dark:text-amber-300 rounded-xl hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors disabled:opacity-50"
+          >
+            <FileUp className="h-4 w-4" />
+            {importing ? 'Importing...' : 'Import from File'}
+          </button>
+          <div className="flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground bg-muted/20 rounded-xl border border-dashed border-border/50">
+            <HardDrive className="h-4 w-4 shrink-0" />
+            <span>Daily auto-backup</span>
+          </div>
+        </div>
+
+        {/* ── Warning Info ── */}
+        <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-sm text-foreground">Create a new backup</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Generates a point-in-time snapshot of the entire database. Daily backups are automatic.
+              <p className="font-medium text-sm text-amber-800 dark:text-amber-300">Native SQLite Format</p>
+              <p className="text-xs text-amber-600/70 dark:text-amber-400/70 mt-1">
+                Backups are full SQLite database files. Export a backup to copy it to another computer, then Import it there. 
+                A safety backup of the current database is always created automatically before restoring or importing.
               </p>
             </div>
-            <button
-              onClick={handleCreateBackup}
-              className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2"
-            >
-              <Database className="h-4 w-4" /> Create Backup Now
-            </button>
           </div>
+        </div>
+
+        {/* ── Backup List ── */}
+        <div>
+          <h4 className="text-sm font-bold text-foreground mb-4 uppercase tracking-wider flex items-center gap-2">
+            <Database className="h-4 w-4" /> Saved Snapshots
+          </h4>
 
           {loading ? (
             <div className="p-8 text-center text-sm text-muted-foreground">Loading backups...</div>
@@ -712,7 +788,7 @@ function BackupTab() {
               No backups found. Create one to get started.
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2 max-h-80 overflow-y-auto">
               {backups.map((b, i) => (
                 <div key={i} className="flex items-center justify-between p-4 rounded-xl border border-border/50 bg-card hover:bg-muted/20 transition-colors">
                   <div className="min-w-0 flex-1">

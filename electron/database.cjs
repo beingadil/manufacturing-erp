@@ -311,12 +311,12 @@ function exportBackupToPath(targetPath) {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    // Use better-sqlite3's native backup API for a consistent, valid SQLite file
-    db.backup(targetPath)
-      .then(() => {
-        console.log('[DB] Backup exported to:', targetPath);
-      })
-      .catch(err => console.error('[DB] Backup export failed:', err));
+    // Use synchronous WAL checkpoint + file copy (not async db.backup())
+    // This guarantees the backup is complete before the function returns.
+    db.pragma('wal_checkpoint(TRUNCATE)');
+    const sourcePath = getDbPath();
+    fs.copyFileSync(sourcePath, targetPath);
+    console.log('[DB] Backup exported to:', targetPath);
     return { success: true, path: targetPath };
   } catch (error) {
     console.error('[DB] Export error:', error);
@@ -365,6 +365,67 @@ function importBackupFromPath(sourcePath) {
   }
 }
 
+// ─── Update-safe backup ───────────────────────────────────────────────────
+// Creates a backup of the DB *outside* userData so it survives uninstall
+// Uses synchronous WAL checkpoint + file copy (not async db.backup()) so the
+// backup is guaranteed complete before the function returns. This is critical
+// because the caller needs the backup done before quitAndInstall() is called.
+function createUpdateSafeBackup() {
+  try {
+    const fs = require('fs');
+    const dbPath = getDbPath();
+    if (!fs.existsSync(dbPath)) {
+      return { success: false, error: 'Database file not found at ' + dbPath };
+    }
+    // Force WAL to flush into main DB file so the file copy is consistent
+    db.pragma('wal_checkpoint(TRUNCATE)');
+    // Save backup next to the EXE (survives uninstall of old version because
+    // the NSIS uninstaller only removes files it installed, not sidecar files)
+    const exeDir = path.dirname(app.getPath('exe'));
+    const backupPath = path.join(exeDir, 'pre-update-backup.sqlite');
+    fs.copyFileSync(dbPath, backupPath);
+    console.log('[DB] Update-safe backup saved:', backupPath);
+    return { success: true, path: backupPath };
+  } catch (error) {
+    console.error('[DB] createUpdateSafeBackup error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Restore from update-safe backup (used if DB is missing on startup)
+function restoreFromUpdateSafeBackup() {
+  try {
+    const fs = require('fs');
+    const exeDir = path.dirname(app.getPath('exe'));
+    const backupPath = path.join(exeDir, 'pre-update-backup.sqlite');
+
+    if (!fs.existsSync(backupPath)) {
+      return { success: false, error: 'No update-safe backup found' };
+    }
+
+    const dbPath = getDbPath();
+    console.log('[DB] Restoring from update-safe backup:', backupPath, '->', dbPath);
+
+    if (db) {
+      db.close();
+      db = null;
+      initialized = false;
+    }
+
+    fs.copyFileSync(backupPath, dbPath);
+    console.log('[DB] Database restored from update-safe backup');
+
+    // Remove the backup file so we don't restore stale data next time
+    try { fs.rmSync(backupPath, { force: true }); } catch {}
+
+    // Re-initialize
+    return initializeDatabase();
+  } catch (error) {
+    console.error('[DB] restoreFromUpdateSafeBackup error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 function listBackups() {
   try {
     const fs = require('fs');
@@ -383,4 +444,4 @@ function listBackups() {
   }
 }
 
-module.exports = { initializeDatabase, query, queryOne, execute, transaction, closeDatabase, runIntegrityCheck, backupDatabase, restoreDatabase, listBackups, exportBackupToPath, importBackupFromPath };
+module.exports = { initializeDatabase, query, queryOne, execute, transaction, closeDatabase, runIntegrityCheck, backupDatabase, restoreDatabase, listBackups, exportBackupToPath, importBackupFromPath, createUpdateSafeBackup, restoreFromUpdateSafeBackup };

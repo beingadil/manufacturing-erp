@@ -126,12 +126,16 @@
       "icon": "public/favicon.ico"
     },
     "nsis": {
-      "oneClick": false,
-      "perMachine": true,
-      "allowToChangeInstallationDirectory": true,
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Manufacturing ERP"
+      "shortcutName": "Manufacturing ERP",
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "public/favicon.ico",
+      "uninstallerIcon": "public/favicon.ico",
+      "installerHeaderIcon": "public/favicon.ico"
     },
     "publish": [
       {
