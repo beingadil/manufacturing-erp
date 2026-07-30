@@ -1,366 +1,207 @@
-import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
-import { DatabaseBackup, backupService } from '@/lib/desktop/services/BackupService';
-import { Desktop } from '@/lib/desktop/DesktopInterop';
-import { format } from 'date-fns';
-import { DownloadCloud, UploadCloud, AlertTriangle, CheckCircle2, ShieldAlert, FileDown, FileUp, HardDrive } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { DownloadCloud, AlertTriangle, CheckCircle2, Database, FileDown, FileUp, HardDrive, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-export function BackupRestoreTab() {
-  const [isBackingUp, setIsBackingUp] = useState(false);
-  const [isRestoring, setIsRestoring] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
-  const [backupDescription, setBackupDescription] = useState('');
-  
-  const [selectedFileContent, setSelectedFileContent] = useState<string | null>(null);
-  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
-  const [validationResult, setValidationResult] = useState<{ valid: boolean; metadata?: any; error?: string } | null>(null);
+// ─── Electron IPC helpers ──────────────────────────────────────────────────
+const electronDB = () => (window as any).electronDB;
 
-  const handleBackup = async () => {
-    setIsBackingUp(true);
+// ─── BackupRestoreTab ─────────────────────────────────────────────────────
+export function BackupRestoreTab() {
+  const [backups, setBackups] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [backingUp, setBackingUp] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+
+  const loadBackups = async () => {
+    setLoading(true);
     try {
-      const success = await backupService.performManualBackup(backupDescription);
-      if (success) {
-        toast.success('Backup Successful', { description: 'The database backup has been saved.' });
-        setBackupDescription('');
+      const db = electronDB();
+      if (db?.listBackups) {
+        const res = await db.listBackups();
+        if (res.success) setBackups(res.data || []);
       }
-    } finally {
-      setIsBackingUp(false);
-    }
+    } catch { /* not in electron */ }
+    setLoading(false);
   };
 
-  const handleSelectRestoreFile = async () => {
+  useEffect(() => { loadBackups(); }, []);
+
+  const handleCreateBackup = async () => {
+    setBackingUp(true);
     try {
-      const content = await Desktop.file.readFile({
-        filters: [{ name: 'Database Backup', extensions: ['db', 'json'] }]
-      });
-      
-      if (!content) return; // User cancelled
-      
-      setSelectedFileName('Selected Backup File');
-      setSelectedFileContent(content);
-      
-      // Validate immediately
-      const result = await backupService.validateBackup(content);
-      setValidationResult(result);
+      const db = electronDB();
+      if (db?.backup) {
+        const res = await db.backup();
+        if (res.success) {
+          toast.success('Backup Created', { description: 'SQLite database snapshot saved.' });
+          await loadBackups();
+        } else {
+          toast.error('Backup Failed', { description: res.error || 'Unknown error' });
+        }
+      }
     } catch (e: any) {
-      toast.error('File Read Failed', { description: e.message });
+      toast.error('Backup Failed', { description: e.message });
     }
+    setBackingUp(false);
+  };
+
+  const handleRestore = async (backupPath: string) => {
+    if (!confirm('WARNING: Restoring will replace ALL current data with the backup. This cannot be undone.\n\nCreate a safety backup first?')) return;
+    setRestoring(true);
+    try {
+      const db = electronDB();
+      // Auto safety backup
+      if (db?.backup) await db.backup();
+      if (db?.restore) {
+        const res = await db.restore(backupPath);
+        if (res.success) {
+          alert('Database restored successfully. The application will now reload.');
+          window.location.reload();
+        } else {
+          toast.error('Restore Failed', { description: res.error });
+        }
+      }
+    } catch (e: any) {
+      toast.error('Restore Failed', { description: e.message });
+    }
+    setRestoring(false);
   };
 
   const handleExportBackup = async () => {
-    if (!(window as any).electronDB?.exportBackup) {
+    const db = electronDB();
+    if (!db?.exportBackup) {
       toast.error('Not available', { description: 'Export backup is only available in the desktop app.' });
       return;
     }
-    setIsExporting(true);
+    setExporting(true);
     try {
-      const result = await (window as any).electronDB.exportBackup();
+      const result = await db.exportBackup();
       if (result.canceled) return;
       if (result.success) {
-        toast.success('Backup Exported', {
-          description: `Database saved to: ${result.path}`
-        });
+        toast.success('Backup Exported', { description: `Saved to: ${result.path}` });
       } else {
         toast.error('Export Failed', { description: result.error || 'Unknown error' });
       }
     } catch (e: any) {
       toast.error('Export Failed', { description: e.message });
-    } finally {
-      setIsExporting(false);
     }
+    setExporting(false);
   };
 
   const handleImportBackup = async () => {
-    if (!(window as any).electronDB?.importBackup) {
+    const db = electronDB();
+    if (!db?.importBackup) {
       toast.error('Not available', { description: 'Import backup is only available in the desktop app.' });
       return;
     }
-
-    const confirm = await Desktop.dialog.showMessageBox({
-      type: 'warning',
-      title: 'Import Database Backup',
-      message: 'This will REPLACE ALL current data with the backup file.',
-      detail: 'A safety backup of your current database will be created automatically before importing.\n\nThe application will reload after a successful import. Are you sure?',
-      buttons: ['Yes, import backup', 'Cancel'],
-      defaultId: 1
-    });
-
-    if (confirm !== 0) return;
-
-    setIsImporting(true);
+    if (!confirm('WARNING: Importing will REPLACE ALL current data with the backup file.\n\nA safety backup of your current database will be created first.\n\nAre you sure?')) return;
+    setImporting(true);
     try {
-      const result = await (window as any).electronDB.importBackup();
+      const result = await db.importBackup();
       if (result.canceled) return;
       if (result.success) {
-        await Desktop.dialog.showMessageBox({
-          type: 'info',
-          title: 'Import Complete',
-          message: 'The database has been successfully imported.',
-          detail: 'The application will now reload to apply the changes.',
-          buttons: ['OK']
-        });
+        alert('Database imported successfully. The application will now reload.');
         window.location.reload();
       } else {
         toast.error('Import Failed', { description: result.error || 'Unknown error' });
       }
     } catch (e: any) {
       toast.error('Import Failed', { description: e.message });
-    } finally {
-      setIsImporting(false);
     }
+    setImporting(false);
   };
 
-  const handleRestore = async () => {
-    if (!validationResult?.valid || !selectedFileContent) return;
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
 
-    const confirm1 = await Desktop.dialog.showMessageBox({
-      type: 'warning',
-      title: 'Confirm Restore',
-      message: 'You are about to restore the database from a backup file.',
-      detail: 'This will OVERWRITE your current database. All unsaved changes will be lost.\n\nAre you absolutely sure you want to proceed?',
-      buttons: ['Yes, proceed to restore', 'Cancel'],
-      defaultId: 1
-    });
-
-    if (confirm1 !== 0) return;
-
-    // Force safety backup
-    const confirm2 = await Desktop.dialog.showMessageBox({
-      type: 'question',
-      title: 'Safety Backup',
-      message: 'Would you like to create a safety backup of your CURRENT data before restoring?',
-      buttons: ['Yes, create safety backup', 'No, skip safety backup'],
-      defaultId: 0
-    });
-
-    if (confirm2 === 0) {
-      const safetySaved = await backupService.performManualBackup('Auto-Safety Backup before Restore');
-      if (!safetySaved) {
-        const proceedAnyway = await Desktop.dialog.showMessageBox({
-          type: 'warning',
-          title: 'Safety Backup Failed',
-          message: 'The safety backup was cancelled or failed.',
-          detail: 'Do you still want to proceed with the restore without a safety backup?',
-          buttons: ['No, abort restore', 'Yes, proceed anyway'],
-          defaultId: 0
-        });
-        if (proceedAnyway !== 1) return;
-      }
-    }
-
-    setIsRestoring(true);
-    try {
-      const backupObj = JSON.parse(selectedFileContent) as DatabaseBackup;
-      const success = await backupService.restoreBackup(backupObj);
-      if (success) {
-        await Desktop.dialog.showMessageBox({
-          type: 'info',
-          title: 'Restore Complete',
-          message: 'The database has been successfully restored.',
-          detail: 'The application will now reload to apply the changes.',
-          buttons: ['OK']
-        });
-        window.location.reload();
-      } else {
-        toast.error('Restore Failed', { description: 'An error occurred while writing data to storage.' });
-      }
-    } catch (e: any) {
-      toast.error('Restore Failed', { description: e.message });
-    } finally {
-      setIsRestoring(false);
-    }
+  const formatDate = (iso: string) => {
+    try { return new Date(iso).toLocaleString(); } catch { return iso; }
   };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <Card className="flex flex-col">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <DownloadCloud className="h-5 w-5 text-primary" />
-            Create Backup
-          </CardTitle>
-          <CardDescription>
-            Download a full copy of the ERP database. This includes all accounting, inventory, and configuration data.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex-1 space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="backupDesc">Description (Optional)</Label>
-            <Input 
-              id="backupDesc" 
-              placeholder="e.g. Before closing financial year" 
-              value={backupDescription}
-              onChange={e => setBackupDescription(e.target.value)}
-              disabled={isBackingUp}
-            />
-          </div>
-          <div className="bg-muted/50 p-4 rounded-lg text-sm text-muted-foreground flex gap-3">
-            <ShieldAlert className="h-5 w-5 shrink-0 text-amber-500" />
-            <p>Backups are stored locally on your device. Please ensure you keep them in a safe, secure location.</p>
-          </div>
-        </CardContent>
-        <CardFooter>
-          <Button onClick={handleBackup} disabled={isBackingUp} className="w-full">
-            {isBackingUp ? 'Creating Backup...' : 'Generate Backup File'}
-          </Button>
-        </CardFooter>
-      </Card>
-
-      <Card className="flex flex-col border-destructive/20">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-destructive">
-            <UploadCloud className="h-5 w-5" />
-            Restore Database
-          </CardTitle>
-          <CardDescription>
-            Restore the ERP from a previously saved backup file.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex-1 space-y-4">
-          <Button 
-            variant="outline" 
-            onClick={handleSelectRestoreFile} 
-            disabled={isRestoring}
-            className="w-full"
-          >
-            Select Backup File
-          </Button>
-
-          {validationResult && (
-            <div className={`p-4 rounded-lg text-sm border ${validationResult.valid ? 'bg-success/100/10 border-success/20 text-success ' : 'bg-destructive/100/10 border-destructive/20 text-destructive'}`}>
-              {validationResult.valid ? (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 font-semibold">
-                    <CheckCircle2 className="h-4 w-4" /> Valid Backup File Detected
-                  </div>
-                  <ul className="space-y-1 mt-2 list-disc list-inside pl-4 text-xs opacity-90">
-                    <li>Company: {validationResult.metadata.companyName}</li>
-                    <li>Timestamp: {format(new Date(validationResult.metadata.timestamp), 'PPpp')}</li>
-                    <li>Version: {validationResult.metadata.version}</li>
-                    <li>ERP Records: {validationResult.metadata.recordCounts.erp}</li>
-                    <li>Access Records: {validationResult.metadata.recordCounts.access}</li>
-                  </ul>
-                  {validationResult.metadata.description && (
-                    <p className="mt-2 text-xs italic">"{validationResult.metadata.description}"</p>
-                  )}
-                </div>
-              ) : (
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-                  <div>
-                    <span className="font-semibold block mb-1">Validation Failed</span>
-                    {validationResult.error}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-        <CardFooter>
-          <Button 
-            variant="destructive" 
-            onClick={handleRestore} 
-            disabled={!validationResult?.valid || isRestoring} 
-            className="w-full"
-          >
-            {isRestoring ? 'Restoring Database...' : 'Restore from Backup'}
-          </Button>
-        </CardFooter>
-      </Card>
-
-      {/* ─── External File Export/Import (Full SQLite) ──────────────────── */}
-      <div className="md:col-span-2">
-        <div className="relative">
-          <Separator className="my-4" />
-          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background px-4 text-xs text-muted-foreground font-medium">
-            PORTABLE FILE TRANSFER
-          </span>
+      {/* ── Create & Manage Internal Backups ── */}
+      <div className="md:col-span-2 rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-border/50 bg-muted/40/50">
+          <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+            <Database className="h-5 w-5 text-primary" />
+            SQLite Database Backups
+          </h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Create, restore, export, and import full SQLite database snapshots. Daily backups are automatic.
+          </p>
         </div>
-        <p className="text-xs text-muted-foreground text-center mb-6 mt-2">
-          Export the full database as a SQLite file to copy to another computer. Import a backup from another installation.
-        </p>
-      </div>
-
-      <Card className="border-primary/20">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-primary">
-            <FileDown className="h-5 w-5" />
-            Export Backup to File
-          </CardTitle>
-          <CardDescription>
-            Save a full SQLite database backup to any location on your computer. Copy this file to another computer to migrate or restore your data.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="bg-primary/5 border border-primary/10 rounded-lg p-4 text-sm space-y-2">
-            <div className="flex items-center gap-2 font-medium text-primary">
-              <HardDrive className="h-4 w-4" />
-              Portable SQLite Backup
+        <div className="p-6 space-y-6">
+          {/* Action Buttons */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <button
+              onClick={handleCreateBackup}
+              disabled={backingUp}
+              className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50"
+            >
+              {backingUp ? <Loader2 className="h-4 w-4 animate-spin" /> : <DownloadCloud className="h-4 w-4" />}
+              {backingUp ? 'Backing up...' : 'Create Backup'}
+            </button>
+            <button
+              onClick={handleExportBackup}
+              disabled={exporting}
+              className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium bg-secondary text-secondary-foreground rounded-xl hover:bg-secondary/80 transition-colors disabled:opacity-50"
+            >
+              {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+              {exporting ? 'Exporting...' : 'Export to File'}
+            </button>
+            <button
+              onClick={handleImportBackup}
+              disabled={importing}
+              className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium border-2 border-amber-400/50 text-amber-700 dark:text-amber-300 rounded-xl hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors disabled:opacity-50"
+            >
+              {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
+              {importing ? 'Importing...' : 'Import from File'}
+            </button>
+            <div className="flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground bg-muted/20 rounded-xl border border-dashed border-border/50">
+              <HardDrive className="h-4 w-4 shrink-0" />
+              <span>Auto-backup daily + before updates</span>
             </div>
-            <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside pl-2">
-              <li>Full database with all tables and records</li>
-              <li>Native SQLite format — open with any SQLite tool</li>
-              <li>Compatible across different computers</li>
-              <li>File is saved to a location you choose</li>
-            </ul>
           </div>
-        </CardContent>
-        <CardFooter>
-          <Button
-            id="export-backup-btn"
-            onClick={handleExportBackup}
-            disabled={isExporting}
-            variant="default"
-            className="w-full gap-2"
-          >
-            <FileDown className="h-4 w-4" />
-            {isExporting ? 'Exporting...' : 'Export Database Backup'}
-          </Button>
-        </CardFooter>
-      </Card>
 
-      <Card className="border-amber-500/20">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
-            <FileUp className="h-5 w-5" />
-            Import Backup from File
-          </CardTitle>
-          <CardDescription>
-            Restore your entire database from a SQLite backup file. This will replace ALL current data with the backup.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4 text-sm">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-medium text-amber-800 dark:text-amber-300">This will replace all current data</p>
-                <p className="text-xs text-amber-600/70 dark:text-amber-400/70 mt-1">
-                  A safety backup of your current database is automatically created before importing. The app will reload after a successful import.
-                </p>
+          {/* Backup List */}
+          <div>
+            <h4 className="text-sm font-bold text-foreground mb-3 uppercase tracking-wider">Saved Snapshots</h4>
+            {loading ? (
+              <div className="p-8 text-center text-sm text-muted-foreground">Loading backups...</div>
+            ) : backups.length === 0 ? (
+              <div className="p-8 text-center text-sm text-muted-foreground border border-dashed border-border/50 rounded-xl">
+                No backups found. Create one to get started.
               </div>
-            </div>
+            ) : (
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {backups.map((b, i) => (
+                  <div key={i} className="flex items-center justify-between p-4 rounded-xl border border-border/50 bg-card hover:bg-muted/20 transition-colors">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground truncate">{b.filename}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {formatDate(b.modifiedAt)} &middot; {formatSize(b.size)}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleRestore(b.path)}
+                      disabled={restoring}
+                      className="shrink-0 ml-4 px-3 py-1.5 text-xs font-medium border border-border text-foreground rounded-lg hover:bg-muted transition-colors disabled:opacity-50"
+                    >
+                      {restoring ? 'Restoring...' : 'Restore'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        </CardContent>
-        <CardFooter>
-          <Button
-            id="import-backup-btn"
-            onClick={handleImportBackup}
-            disabled={isImporting}
-            variant="outline"
-            className="w-full gap-2 border-amber-400/50 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40"
-          >
-            <FileUp className="h-4 w-4" />
-            {isImporting ? 'Importing...' : 'Import Database Backup'}
-          </Button>
-        </CardFooter>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

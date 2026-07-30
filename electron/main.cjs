@@ -27,17 +27,27 @@ const createWindow = () => {
 app.whenReady().then(() => {
   console.log('[Main] App ready, userData:', app.getPath('userData'));
 
-  // Check if DB file already exists
   const fs = require('fs');
   const dbPath = require('path').join(app.getPath('userData'), 'manufacturing-erp.sqlite');
+
+  // ── Database recovery: if DB is missing, try to restore from update-safe backup FIRST ──
+  // This MUST happen before initializeDatabase() because that call creates a new empty
+  // DB file — making fs.existsSync() always return true afterwards.
   if (fs.existsSync(dbPath)) {
     const stat = fs.statSync(dbPath);
     console.log('[Main] Existing database found:', dbPath, 'size:', stat.size, 'bytes');
   } else {
-    console.log('[Main] No existing database, will create new one at:', dbPath);
+    console.log('[Main] Database not found at', dbPath);
+    console.log('[Main] Attempting recovery from update-safe backup...');
+    const recoveryResult = db.restoreFromUpdateSafeBackup();
+    if (recoveryResult.success) {
+      console.log('[Main] Database recovered successfully from update-safe backup');
+    } else {
+      console.log('[Main] No update-safe backup found — will create new database');
+    }
   }
 
-  // Initialize database
+  // Initialize database (creates tables if needed — no-op if DB already has them)
   const initResult = db.initializeDatabase();
   if (!initResult.success) {
     console.error('[Main] Database initialization failed');
@@ -272,11 +282,29 @@ app.whenReady().then(() => {
 
   autoUpdater.on('update-downloaded', (info) => {
     console.log('[AutoUpdater] Update downloaded:', info.version);
+
+    // ── Critical: backup database before update installs ──
+    // The backup goes to the EXE directory which survives uninstall.
+    const backupResult = db.createUpdateSafeBackup();
+    if (backupResult.success) {
+      console.log('[AutoUpdater] Pre-update database backup saved:', backupResult.path);
+    } else {
+      console.warn('[AutoUpdater] Pre-update backup failed (non-fatal):', backupResult.error);
+    }
+
     sendUpdateStatus({
       status: 'downloaded',
-      message: `Version ${info.version} ready to install`,
+      message: `Version ${info.version} ready to install — database backed up`,
       info,
     });
+
+    // ── Auto-install: wait 2 seconds, then install silently ──
+    // With oneClick:true + perMachine:false, this installs without prompting.
+    // The user can cancel by closing the app before the timeout.
+    setTimeout(() => {
+      console.log('[AutoUpdater] Auto-installing update...');
+      setImmediate(() => autoUpdater.quitAndInstall(false, true));
+    }, 2000);
   });
 
   autoUpdater.on('error', (error) => {
