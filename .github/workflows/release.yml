@@ -32,11 +32,14 @@ jobs:
       - name: Build Vite frontend
         run: npx vite build
 
-      - name: Set up MSVC build environment (better-sqlite3 native rebuild)
+      - name: Install Visual Studio Build Tools (better-sqlite3 native rebuild)
         # node-gyp needs a Visual Studio toolchain to rebuild better-sqlite3 for
-        # the Electron ABI on the runner; without this the packaging step fails
-        # with 'Could not find any Visual Studio installation to use'.
-        uses: ilammy/msvc-dev-cmd@v1
+        # the Electron ABI on the runner. The runner image's VS is not always
+        # visible to node-gyp's vswhere detection, so install Build Tools with
+        # the C++ workload explicitly (deterministic fix).
+        shell: powershell
+        run: |
+          choco install visualstudio2022buildtools --yes --no-progress --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --norestart"
 
       - name: Build & publish to GitHub Releases
         env:
