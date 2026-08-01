@@ -45,7 +45,7 @@ else
   SKIP="$BASE_SKIP"
 fi
 
-OUTPUT=$(cd "$PROJECT_DIR" && npx ts-prune --project "$PROJECT" 2>/dev/null | grep -vE "$SKIP" || true)
+OUTPUT=$(cd "$PROJECT_DIR" && npx --yes ts-prune --project "$PROJECT" 2>/dev/null | grep -vE "$SKIP" || true)
 
 if [ -n "$OUTPUT" ]; then
   COUNT=$(echo "$OUTPUT" | grep -c '[^[:space:]]' || echo 0)
