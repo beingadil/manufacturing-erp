@@ -1,123 +1,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
-import { Desktop } from '../lib/desktop/DesktopInterop';
-import { dbService } from '../database/DatabaseService';
+import { SQLiteStorageAdapter } from '../database/sqlite/SQLiteStorageAdapter';
 import { Role, Permission, RolePermission, UserRow, AuditLog, LoginHistory, DataAccessPolicy } from '../types/access';
-
-const OLD_KEY = 'access-storage';
-const NEW_KEY = 'erp-access-storage';
-
-// Async storage adapter: prefers SQLite, falls back to localStorage,
-// and migrates data from old key to new key automatically.
-const desktopStorage = {
-  getItem: async (_name: string): Promise<string | null> => {
-    const name = NEW_KEY;
-
-    // 1. Try SQLite (wait a moment for dbService to become ready if needed)
-    let dbReady = dbService.isReady();
-    if (!dbReady) {
-      // The persist middleware calls getItem at module import time, before
-      // bootstrap() has finished initializing the database. Retry briefly.
-      // Start with a 0ms check so we don't waste a full setTimeout cycle
-      // when bootstrap is already running.
-      for (let i = 0; i < 20; i++) {
-        await new Promise<void>(r => setTimeout(r, i === 0 ? 0 : 50));
-        dbReady = dbService.isReady();
-        if (dbReady) break;
-      }
-    }
-    if (dbReady) {
-      const db = dbService.getAdapter();
-      try {
-        const row = await db.queryOne<{value: string}>(
-          'SELECT value FROM key_value_store WHERE key = ?',
-          [name]
-        );
-        if (row) return row.value;
-      } catch { /* fall through */ }
-    }
-
-    // 2. Try the new key in localStorage
-    const newVal = await Desktop.storage.getItem(name);
-    if (newVal) {
-      // Migrate to SQLite (fire-and-forget)
-      if (dbService.isReady()) {
-        try {
-          const db = dbService.getAdapter();
-          await db.execute(
-            `INSERT INTO key_value_store (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)`,
-            [name, newVal]
-          );
-        } catch {}
-      }
-      return newVal;
-    }
-
-    // 3. Try the old key in localStorage and migrate
-    const oldVal = await Desktop.storage.getItem(OLD_KEY);
-    if (oldVal) {
-      if (dbService.isReady()) {
-        try {
-          const db = dbService.getAdapter();
-          await db.execute(
-            `INSERT INTO key_value_store (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)`,
-            [name, oldVal]
-          );
-        } catch {}
-      }
-      await Desktop.storage.setItem(name, oldVal);
-      await Desktop.storage.removeItem(OLD_KEY);
-      return oldVal;
-    }
-
-    return null;
-  },
-
-  setItem: async (_name: string, value: string): Promise<void> => {
-    const name = NEW_KEY;
-    
-    // Always write to localStorage as a safety backup.
-    // This ensures getItem can recover data on startup even when
-    // dbService.isReady() is false (before bootstrap finishes).
-    try {
-      await Desktop.storage.setItem(name, value);
-    } catch (err) {
-      console.warn('[AccessStore] localStorage backup failed, data safe in SQLite:', err);
-    }
-
-    // Also persist to SQLite as the primary store
-    if (dbService.isReady()) {
-      const db = dbService.getAdapter();
-      try {
-        await db.execute(
-          `INSERT INTO key_value_store (key, value, updated_at)
-           VALUES (?, ?, CURRENT_TIMESTAMP)
-           ON CONFLICT(key) DO UPDATE SET
-           value = excluded.value,
-           updated_at = excluded.updated_at`,
-          [name, value]
-        );
-      } catch (err) {
-        console.warn('[AccessStore] SQLite persist failed, localStorage has backup:', err);
-      }
-    }
-    // Clean up old key if present
-    try { await Desktop.storage.removeItem(OLD_KEY); } catch {}
-  },
-
-  removeItem: async (_name: string): Promise<void> => {
-    const name = NEW_KEY;
-    if (dbService.isReady()) {
-      const db = dbService.getAdapter();
-      try {
-        await db.execute('DELETE FROM key_value_store WHERE key = ?', [name]);
-      } catch {}
-    }
-    await Desktop.storage.removeItem(name);
-    try { await Desktop.storage.removeItem(OLD_KEY); } catch {}
-  },
-};
 
 export interface UserPassword {
   user_id: string;
@@ -345,14 +230,13 @@ export const useAccessStore = create<AccessState>()(
       }
     }),
     {
-      name: NEW_KEY,
+      name: 'erp-access-storage',
       version: 2,
-      storage: createJSONStorage(() => desktopStorage),
-      migrate: (persisted: any, version: number) => {
-        // Version 1 to 2: key renamed from 'access-storage' to 'erp-access-storage',
-        // adapter already handles migration transparently
-        return persisted as any;
-      }
+      // skipHydration:true prevents Zustand from calling getItem() during store
+      // creation (before the DB is ready). main.tsx bootstrap rehydrates the
+      // store explicitly via SQLiteStorageAdapter after database init.
+      skipHydration: true,
+      storage: createJSONStorage(() => SQLiteStorageAdapter)
     }
   )
 );

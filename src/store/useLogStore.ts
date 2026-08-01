@@ -1,16 +1,7 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-
-export type LogLevel = 'info' | 'warning' | 'error';
-
-export interface LogEntry {
-  id: string;
-  timestamp: string;
-  level: LogLevel;
-  source: string;
-  message: string;
-  details?: string;
-}
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { SQLiteStorageAdapter } from '../database/sqlite/SQLiteStorageAdapter';
+import { LogLevel, LogEntry, registerLogSink } from '../lib/logger';
 
 interface LogState {
   logs: LogEntry[];
@@ -19,7 +10,7 @@ interface LogState {
 
 export const useLogStore = create<LogState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       logs: [],
       addLog: (level, source, message, details) => {
         const newLog: LogEntry = {
@@ -35,16 +26,21 @@ export const useLogStore = create<LogState>()(
           logs: [newLog, ...state.logs].slice(0, 5000)
         }));
       },
-      
     }),
     {
       name: 'erp-system-logs',
+      // skipHydration:true prevents Zustand from calling getItem() during store
+      // creation (before the DB is ready). main.tsx bootstrap rehydrates the
+      // store explicitly via SQLiteStorageAdapter after database init.
+      skipHydration: true,
+      storage: createJSONStorage(() => SQLiteStorageAdapter)
     }
   )
 );
 
-export const Logger = {
-  info: (source: string, message: string, details?: string) => useLogStore.getState().addLog('info', source, message, details),
-  warn: (source: string, message: string, details?: string) => useLogStore.getState().addLog('warning', source, message, details),
-  error: (source: string, message: string, details?: string) => useLogStore.getState().addLog('error', source, message, details),
-};
+// Route every Logger call through this store so entries persist via the
+// unified SQLiteStorageAdapter. Registered at module load (leaf logger.ts
+// falls back to console before this runs — the DB layer can't import us).
+registerLogSink((level, source, message, details) => {
+  useLogStore.getState().addLog(level, source, message, details);
+});

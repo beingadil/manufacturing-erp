@@ -188,17 +188,29 @@ app.whenReady().then(() => {
     try {
       const { dialog } = require('electron');
       const result = await dialog.showSaveDialog({
-        title: 'Export Database Backup',
-        defaultPath: path.join(app.getPath('documents'), `manufacturing-erp-backup-${new Date().toISOString().slice(0, 10)}.sqlite`),
+        title: 'Export Unified Backup',
+        defaultPath: path.join(app.getPath('documents'), `manufacturing-erp-backup-${new Date().toISOString().slice(0, 10)}.merpbak`),
         filters: [
-          { name: 'SQLite Database', extensions: ['sqlite', 'db', 'bak'] },
+          { name: 'Manufacturing ERP Backup (.merpbak)', extensions: ['merpbak'] },
           { name: 'All Files', extensions: ['*'] }
         ]
       });
       if (result.canceled || !result.filePath) {
         return { success: false, canceled: true };
       }
-      const exportResult = db.exportBackupToPath(result.filePath);
+      // Ensure the file has the .merpbak extension so the manifest format is clear.
+      // Replace any other extension the user typed (e.g. foo.sqlite → foo.merpbak).
+      let target = result.filePath;
+      if (!target.toLowerCase().endsWith('.merpbak')) {
+        const dot = target.lastIndexOf('.');
+        const sep = target.lastIndexOf(path.sep);
+        if (dot > sep) {
+          target = target.slice(0, dot) + '.merpbak';
+        } else {
+          target = target + '.merpbak';
+        }
+      }
+      const exportResult = db.exportUnifiedBackupToPath(target);
       return exportResult;
     } catch (error) {
       return { success: false, error: error.message };
@@ -209,9 +221,10 @@ app.whenReady().then(() => {
     try {
       const { dialog } = require('electron');
       const result = await dialog.showOpenDialog({
-        title: 'Import Database Backup',
+        title: 'Import Unified Backup',
         filters: [
-          { name: 'SQLite Database', extensions: ['sqlite', 'db', 'bak'] },
+          { name: 'Manufacturing ERP Backup (.merpbak)', extensions: ['merpbak'] },
+          { name: 'SQLite Database (legacy)', extensions: ['sqlite', 'db', 'bak'] },
           { name: 'All Files', extensions: ['*'] }
         ],
         properties: ['openFile']
@@ -219,7 +232,7 @@ app.whenReady().then(() => {
       if (result.canceled || result.filePaths.length === 0) {
         return { success: false, canceled: true };
       }
-      const importResult = db.importBackupFromPath(result.filePaths[0]);
+      const importResult = db.importUnifiedBackupFromPath(result.filePaths[0]);
       return importResult;
     } catch (error) {
       return { success: false, error: error.message };

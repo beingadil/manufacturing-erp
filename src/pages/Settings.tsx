@@ -678,7 +678,16 @@ function BackupTab() {
     try {
       const result = await db.exportBackup();
       if (result.canceled) return;
-      if (!result.success) alert(`Export failed: ${result.error}`);
+      if (result.success) {
+        const m = result.manifest;
+        alert(
+          `Unified backup exported successfully!\n\n` +
+          `File: ${result.path}\n` +
+          (m ? `App v${m.appVersion} · ${m.stores?.length ?? 0} store(s) · ${new Date(m.createdAt).toLocaleString()}` : '')
+        );
+      } else {
+        alert(`Export failed: ${result.error}`);
+      }
     } catch (e: any) {
       alert(`Export failed: ${e.message}`);
     }
@@ -697,7 +706,11 @@ function BackupTab() {
       const result = await db.importBackup();
       if (result.canceled) return;
       if (result.success) {
-        alert('Database imported successfully. The application will now reload.');
+        const m = result.manifest;
+        alert(
+          `Database imported successfully. The application will now reload.\n\n` +
+          (m ? `Manifest: v${m.appVersion} · ${m.stores?.length ?? 0} store(s) · ${new Date(m.createdAt).toLocaleString()}` : '')
+        );
         window.location.reload();
       } else {
         alert(`Import failed: ${result.error}`);
@@ -726,7 +739,7 @@ function BackupTab() {
     <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
       <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40/50">
         <h3 className="text-lg font-bold text-foreground">Backup & Restore</h3>
-        <p className="text-sm text-muted-foreground mt-1">Create on-demand SQLite snapshots, export to a file, or restore from a backup.</p>
+        <p className="text-sm text-muted-foreground mt-1">Create on-demand SQLite snapshots, or export/import a unified .merpbak bundle with a version manifest.</p>
       </div>
       <div className="p-6 sm:p-8 space-y-8">
         {/* ── Action Buttons ── */}
@@ -745,7 +758,7 @@ function BackupTab() {
             className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium bg-secondary text-secondary-foreground rounded-xl hover:bg-secondary/80 transition-colors disabled:opacity-50"
           >
             <FileDown className="h-4 w-4" />
-            {exporting ? 'Exporting...' : 'Export to File'}
+            {exporting ? 'Exporting...' : 'Export Unified Backup'}
           </button>
           <button
             onClick={handleImportBackup}
@@ -753,7 +766,7 @@ function BackupTab() {
             className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium border-2 border-amber-400/50 text-amber-700 dark:text-amber-300 rounded-xl hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors disabled:opacity-50"
           >
             <FileUp className="h-4 w-4" />
-            {importing ? 'Importing...' : 'Import from File'}
+            {importing ? 'Importing...' : 'Import Unified Backup'}
           </button>
           <div className="flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground bg-muted/20 rounded-xl border border-dashed border-border/50">
             <HardDrive className="h-4 w-4 shrink-0" />
@@ -766,9 +779,10 @@ function BackupTab() {
           <div className="flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
             <div>
-              <p className="font-medium text-sm text-amber-800 dark:text-amber-300">Native SQLite Format</p>
+              <p className="font-medium text-sm text-amber-800 dark:text-amber-300">Unified Backup Format (.merpbak)</p>
               <p className="text-xs text-amber-600/70 dark:text-amber-400/70 mt-1">
-                Backups are full SQLite database files. Export a backup to copy it to another computer, then Import it there. 
+                Exports bundle the full SQLite database with a version manifest (app version, stores, timestamps, row counts, SHA-256).
+                Import validates integrity and schema compatibility, so restoring on another computer is fully deterministic.
                 A safety backup of the current database is always created automatically before restoring or importing.
               </p>
             </div>

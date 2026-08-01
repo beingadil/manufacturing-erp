@@ -149,7 +149,7 @@ export class CashBookEngine {
           balance: 0, // calculated below
         };
       })
-      .filter((row): row is CashBookRow => row !== null)
+      .filter((row): row is NonNullable<typeof row> => row !== null)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     // Calculate running balance

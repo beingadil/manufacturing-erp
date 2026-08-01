@@ -50,8 +50,8 @@ export function ContraVoucher() {
         sourceModule: 'Cashbook',
         narration,
       }, [
-        { accountId: fromAccountId, debit: 0, credit: numAmount, description: narration },
-        { accountId: toAccountId, debit: numAmount, credit: 0, description: narration },
+        { accountId: fromAccountId, debit: 0, credit: numAmount, narration },
+        { accountId: toAccountId, debit: numAmount, credit: 0, narration },
       ]);
 
       alert(`Contra Voucher ${voucherNo} saved!`);

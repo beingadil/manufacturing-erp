@@ -3,7 +3,8 @@ import App from "./App.tsx";
 import { AppWrapper } from "./components/common/PageMeta.tsx";
 import "./index.css";
 import { Desktop } from "./lib/desktop/DesktopInterop";
-import { Logger } from "./store/useLogStore";
+import { Logger } from "./lib/logger";
+import { useLogStore } from "./store/useLogStore";
 import { APP_VERSION, IS_PRODUCTION } from "./config/version.ts";
 import { dbService } from "./database/DatabaseService";
 
@@ -26,18 +27,18 @@ async function bootstrap() {
 
     Logger.info('Startup', `DB ready: ${dbService.isReady()}`);
 
-    // Rehydrate Zustand stores from persisted key_value_store blob
+    // Rehydrate Zustand stores from persisted key_value_store blob.
+    // Reads go through SQLiteStorageAdapter so the localStorage mirror is
+    // honored in the browser preview (MockSQLiteAdapter stores nothing).
     try {
       if (dbService.isReady()) {
+        const { SQLiteStorageAdapter } = await import('./database/sqlite/SQLiteStorageAdapter');
         const db = dbService.getAdapter();
 
         // ---- ERP store rehydration ----
-        const erpRow = await db.queryOne<{ value: string }>(
-          'SELECT value FROM key_value_store WHERE key = ?',
-          ['erp-storage']
-        );
-        if (erpRow && erpRow.value) {
-          const parsed = JSON.parse(erpRow.value);
+        const erpValue = await SQLiteStorageAdapter.getItem('erp-storage');
+        if (erpValue) {
+          const parsed = JSON.parse(erpValue);
           const persistedState = parsed.state || parsed;
           if (persistedState && typeof persistedState === 'object') {
             const { useERPStore } = await import('./store/useERPStore');
@@ -48,13 +49,10 @@ async function bootstrap() {
           Logger.info('Startup', 'No persisted ERP state found (first launch)');
         }
 
-        // ---- Access store rehydration ----
-        const accessRow = await db.queryOne<{ value: string }>(
-          'SELECT value FROM key_value_store WHERE key = ?',
-          ['erp-access-storage']
-        );
-        if (accessRow && accessRow.value) {
-          const parsed = JSON.parse(accessRow.value);
+        // ---- Access store rehydration + legacy key migration ----
+        const accessValue = await SQLiteStorageAdapter.getItem('erp-access-storage');
+        if (accessValue) {
+          const parsed = JSON.parse(accessValue);
           const persistedState = parsed.state || parsed;
           if (persistedState && typeof persistedState === 'object') {
             const { useAccessStore } = await import('./store/useAccessStore');
@@ -62,17 +60,35 @@ async function bootstrap() {
             Logger.info('Startup', 'Access state rehydrated from SQLite key_value_store');
           }
         } else {
-          Logger.info('Startup', 'No persisted access state found (first launch)');
+          // Legacy: migrate old 'access-storage' localStorage key (pre-unification)
+          let migrated = false;
+          try {
+            const legacyAccess = localStorage.getItem('access-storage');
+            if (legacyAccess) {
+              await SQLiteStorageAdapter.setItem('erp-access-storage', legacyAccess);
+              localStorage.removeItem('access-storage');
+              const parsed = JSON.parse(legacyAccess);
+              const persistedState = parsed.state || parsed;
+              if (persistedState && typeof persistedState === 'object') {
+                const { useAccessStore } = await import('./store/useAccessStore');
+                useAccessStore.setState(persistedState);
+                Logger.info('Startup', 'Access state migrated from legacy localStorage key');
+              }
+              migrated = true;
+            }
+          } catch (_e) {
+            // localStorage may be unavailable
+          }
+          if (!migrated) {
+            Logger.info('Startup', 'No persisted access state found (first launch)');
+          }
         }
 
         // ---- Settings store rehydration + localStorage migration ----
-        const settingsRow = await db.queryOne<{ value: string }>(
-          'SELECT value FROM key_value_store WHERE key = ?',
-          ['erp-settings']
-        );
-        if (settingsRow && settingsRow.value) {
-          // Settings already in SQLite — rehydrate
-          const parsed = JSON.parse(settingsRow.value);
+        const settingsValue = await SQLiteStorageAdapter.getItem('erp-settings');
+        if (settingsValue) {
+          // Settings already persisted — rehydrate
+          const parsed = JSON.parse(settingsValue);
           const state = parsed.state || parsed;
           if (state && typeof state === 'object') {
             const { useSettingsStore } = await import('./store/useSettingsStore');
@@ -107,6 +123,26 @@ async function bootstrap() {
           if (!migrated) {
             Logger.info('Startup', 'No persisted settings found (first launch or clean start)');
           }
+        }
+
+        // ---- Log store rehydration ----
+        // Merge, don't replace: bootstrap already wrote this session's startup
+        // logs to the store (via the registered sink), so we prepend them to the
+        // persisted history instead of clobbering them.
+        const logsValue = await SQLiteStorageAdapter.getItem('erp-system-logs');
+        if (logsValue) {
+          const parsed = JSON.parse(logsValue);
+          const persistedState = parsed.state || parsed;
+          const persistedLogs = persistedState && typeof persistedState === 'object' && Array.isArray(persistedState.logs)
+            ? persistedState.logs
+            : [];
+          if (persistedLogs.length > 0) {
+            useLogStore.setState((state) => ({
+              // Current-session entries are newest-first and belong first.
+              logs: [...state.logs, ...persistedLogs].slice(0, 5000)
+            }));
+          }
+          Logger.info('Startup', `Logs rehydrated from SQLite key_value_store (${persistedLogs.length} merged)`);
         }
       } else {
         Logger.info('Startup', 'DB not ready, skipping rehydration');

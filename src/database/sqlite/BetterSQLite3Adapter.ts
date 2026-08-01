@@ -16,6 +16,8 @@ declare global {
       restore: (backupPath: string) => Promise<{ success: boolean; error?: string }>;
       listBackups: () => Promise<{ success: boolean; data?: any[]; error?: string }>;
       diag: () => Promise<{ success: boolean; data?: { path: string; exists: boolean; size: number }; error?: string }>;
+      exportBackup: () => Promise<{ success: boolean; canceled?: boolean; path?: string; error?: string; manifest?: any }>;
+      importBackup: () => Promise<{ success: boolean; canceled?: boolean; error?: string; safetyBackupPath?: string; manifest?: any }>;
       isElectron?: boolean;
       onUpdateStatus: (callback: (status: any) => void) => void;
       checkForUpdates: () => Promise<{ success: boolean; error?: string }>;

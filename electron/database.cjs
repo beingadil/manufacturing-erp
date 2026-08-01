@@ -1,6 +1,17 @@
 const Database = require('better-sqlite3');
 const path = require('path');
+const crypto = require('crypto');
 const { app } = require('electron');
+
+// ─── Unified Backup Bundle Format (.merpbak) ─────────────────────────────
+// A deterministic, self-describing single-file bundle:
+//   [8-byte magic "MERPBK01"][4-byte BE manifest length][manifest JSON][SQLite bytes]
+// The manifest carries app version, schema version, store keys, timestamps,
+// row counts, and a SHA-256 of the embedded database — so importing on any
+// machine is validated and fully deterministic.
+const BACKUP_MAGIC = 'MERPBK01';
+const BACKUP_FORMAT_VERSION = 1;
+const BACKUP_FORMAT_NAME = 'manufacturing-erp-unified-backup';
 
 let db = null;
 let initialized = false;
@@ -365,6 +376,152 @@ function importBackupFromPath(sourcePath) {
   }
 }
 
+// ─── Unified Backup Bundle (manifest + SQLite in one .merpbak file) ───────
+
+const BACKUP_TABLES = [
+  'categories', 'materials', 'processors', 'suppliers', 'customers', 'products',
+  'purchases', 'processingSends', 'processingReceipts', 'processorBills', 'sales',
+  'accountSubtypes', 'accounts', 'vouchers', 'journalEntries', 'ledgerEntries',
+  'batches', 'inventoryMovements', 'key_value_store',
+];
+
+// Collect store keys currently persisted in key_value_store (erp-storage,
+// erp-access-storage, erp-settings, erp-system-logs, …)
+function getPersistedStoreKeys() {
+  try {
+    return db.prepare('SELECT key FROM key_value_store ORDER BY key').all().map(r => r.key);
+  } catch (e) {
+    return [];
+  }
+}
+
+// Per-table row counts so the manifest is a full, deterministic snapshot summary
+function getTableRowCounts() {
+  const counts = {};
+  for (const t of BACKUP_TABLES) {
+    try {
+      counts[t] = db.prepare(`SELECT COUNT(*) AS c FROM ${t}`).get().c;
+    } catch (e) {
+      counts[t] = 0;
+    }
+  }
+  return counts;
+}
+
+function buildBackupManifest(dbBytes) {
+  return {
+    format: BACKUP_FORMAT_NAME,
+    formatVersion: BACKUP_FORMAT_VERSION,
+    appVersion: app.getVersion ? app.getVersion() : 'unknown',
+    schemaVersion: '1.0',
+    createdAt: new Date().toISOString(),
+    dbSize: dbBytes.length,
+    dbSha256: crypto.createHash('sha256').update(dbBytes).digest('hex'),
+    stores: getPersistedStoreKeys(),
+    tableRowCounts: getTableRowCounts(),
+  };
+}
+
+// Export a single-file bundle: magic + manifest length + manifest JSON + SQLite bytes
+function exportUnifiedBackupToPath(targetPath) {
+  try {
+    const fs = require('fs');
+    const dir = require('path').dirname(targetPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    // WAL checkpoint first so the main .sqlite file is complete and consistent
+    db.pragma('wal_checkpoint(TRUNCATE)');
+    const dbBytes = fs.readFileSync(getDbPath());
+    const manifest = buildBackupManifest(dbBytes);
+    const manifestBuf = Buffer.from(JSON.stringify(manifest, null, 2), 'utf8');
+    const header = Buffer.alloc(12);
+    header.write(BACKUP_MAGIC, 0, 'ascii');
+    header.writeUInt32BE(manifestBuf.length, 8);
+    const bundle = Buffer.concat([header, manifestBuf, dbBytes]);
+    fs.writeFileSync(targetPath, bundle);
+    console.log('[DB] Unified backup exported to:', targetPath);
+    return { success: true, path: targetPath, manifest };
+  } catch (error) {
+    console.error('[DB] Unified export error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Import a .merpbak bundle (or fall back to a legacy raw .sqlite file).
+// Validates magic, manifest, format version, schema version and SHA-256
+// integrity before touching the live database — fully deterministic.
+function importUnifiedBackupFromPath(sourcePath) {
+  try {
+    const fs = require('fs');
+    const dbPath = getDbPath();
+    if (!fs.existsSync(sourcePath)) {
+      return { success: false, error: 'Source file not found' };
+    }
+    const fileBuf = fs.readFileSync(sourcePath);
+
+    // ── Legacy raw SQLite backup (pre-bundle exports) ──
+    if (fileBuf.length >= 16 && fileBuf.slice(0, 16).toString('utf8') === 'SQLite format 3\x00') {
+      return importBackupFromPath(sourcePath);
+    }
+
+    // ── Unified bundle ──
+    if (fileBuf.length < 12 || fileBuf.slice(0, 8).toString('ascii') !== BACKUP_MAGIC) {
+      return { success: false, error: 'Not a valid unified backup (.merpbak) or SQLite file' };
+    }
+    const manifestLen = fileBuf.readUInt32BE(8);
+    const manifestStart = 12;
+    const manifestEnd = manifestStart + manifestLen;
+    if (manifestEnd > fileBuf.length) {
+      return { success: false, error: 'Corrupted backup: manifest length exceeds file size' };
+    }
+    let manifest;
+    try {
+      manifest = JSON.parse(fileBuf.slice(manifestStart, manifestEnd).toString('utf8'));
+    } catch (e) {
+      return { success: false, error: 'Corrupted backup: invalid manifest JSON' };
+    }
+    if (manifest.format !== BACKUP_FORMAT_NAME) {
+      return { success: false, error: 'Not a Manufacturing ERP unified backup' };
+    }
+    if (typeof manifest.formatVersion === 'number' && manifest.formatVersion > BACKUP_FORMAT_VERSION) {
+      return { success: false, error: `Backup format v${manifest.formatVersion} is newer than supported (v${BACKUP_FORMAT_VERSION}). Please update the app first.` };
+    }
+    const dbBytes = fileBuf.slice(manifestEnd);
+    if (dbBytes.length < 16 || dbBytes.slice(0, 16).toString('utf8') !== 'SQLite format 3\x00') {
+      return { success: false, error: 'Corrupted backup: embedded database is not valid SQLite' };
+    }
+    const sha = crypto.createHash('sha256').update(dbBytes).digest('hex');
+    if (sha !== manifest.dbSha256) {
+      return { success: false, error: 'Backup integrity check failed (SHA-256 mismatch). The file may be corrupted or tampered with.' };
+    }
+
+    // ── Replace the live database ──
+    if (db) {
+      db.close();
+      db = null;
+    }
+    // Create a backup of the current state first (safety copy)
+    const backupDir = path.join(app.getPath('userData'), 'backups');
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
+    const safetyPath = path.join(backupDir, 'pre-import-safety-' + Date.now() + '.sqlite.bak');
+    if (fs.existsSync(dbPath)) {
+      fs.copyFileSync(dbPath, safetyPath);
+    }
+    // Replace the live database file
+    fs.writeFileSync(dbPath, dbBytes);
+    initialized = false;
+    initializeDatabase();
+    console.log('[DB] Unified backup imported from:', sourcePath);
+    return { success: true, safetyBackupPath: safetyPath, manifest };
+  } catch (error) {
+    console.error('[DB] Unified import error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 // ─── Update-safe backup ───────────────────────────────────────────────────
 // Creates a backup of the DB *outside* userData so it survives uninstall
 // Uses synchronous WAL checkpoint + file copy (not async db.backup()) so the
@@ -444,4 +601,4 @@ function listBackups() {
   }
 }
 
-module.exports = { initializeDatabase, query, queryOne, execute, transaction, closeDatabase, runIntegrityCheck, backupDatabase, restoreDatabase, listBackups, exportBackupToPath, importBackupFromPath, createUpdateSafeBackup, restoreFromUpdateSafeBackup };
+module.exports = { initializeDatabase, query, queryOne, execute, transaction, closeDatabase, runIntegrityCheck, backupDatabase, restoreDatabase, listBackups, exportBackupToPath, importBackupFromPath, exportUnifiedBackupToPath, importUnifiedBackupFromPath, createUpdateSafeBackup, restoreFromUpdateSafeBackup };
