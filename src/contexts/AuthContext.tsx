@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { useAccessStore, hashPassword } from '../store/useAccessStore';
 import { UserRow } from '../types/access';
-import { Logger } from '../store/useLogStore';
+import { Logger } from '../lib/logger';
 
 interface AuthContextType {
   user: { id: string; email: string } | null;

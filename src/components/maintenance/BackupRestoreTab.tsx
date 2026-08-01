@@ -13,6 +13,7 @@ export function BackupRestoreTab() {
   const [restoring, setRestoring] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [lastManifest, setLastManifest] = useState<any>(null);
 
   const loadBackups = async () => {
     setLoading(true);
@@ -80,7 +81,12 @@ export function BackupRestoreTab() {
       const result = await db.exportBackup();
       if (result.canceled) return;
       if (result.success) {
-        toast.success('Backup Exported', { description: `Saved to: ${result.path}` });
+        setLastManifest(result.manifest || null);
+        const m = result.manifest;
+        const stores = m?.stores?.length ?? 0;
+        toast.success('Unified Backup Exported', {
+          description: `Saved to: ${result.path}${m ? ` — v${m.appVersion}, ${stores} store(s)` : ''}`,
+        });
       } else {
         toast.error('Export Failed', { description: result.error || 'Unknown error' });
       }
@@ -102,7 +108,11 @@ export function BackupRestoreTab() {
       const result = await db.importBackup();
       if (result.canceled) return;
       if (result.success) {
-        alert('Database imported successfully. The application will now reload.');
+        const m = result.manifest;
+        alert(
+          `Database imported successfully. The application will now reload.\n\n` +
+          (m ? `Manifest: v${m.appVersion} · ${m.stores?.length ?? 0} store(s) · ${new Date(m.createdAt).toLocaleString()}` : '')
+        );
         window.location.reload();
       } else {
         toast.error('Import Failed', { description: result.error || 'Unknown error' });
@@ -134,6 +144,7 @@ export function BackupRestoreTab() {
           </h3>
           <p className="text-sm text-muted-foreground mt-1">
             Create, restore, export, and import full SQLite database snapshots. Daily backups are automatic.
+            Exports bundle the database with a version manifest (.merpbak) so restores on any machine are validated and deterministic.
           </p>
         </div>
         <div className="p-6 space-y-6">
@@ -153,7 +164,7 @@ export function BackupRestoreTab() {
               className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium bg-secondary text-secondary-foreground rounded-xl hover:bg-secondary/80 transition-colors disabled:opacity-50"
             >
               {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-              {exporting ? 'Exporting...' : 'Export to File'}
+              {exporting ? 'Exporting...' : 'Export Unified Backup'}
             </button>
             <button
               onClick={handleImportBackup}
@@ -161,13 +172,61 @@ export function BackupRestoreTab() {
               className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium border-2 border-amber-400/50 text-amber-700 dark:text-amber-300 rounded-xl hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors disabled:opacity-50"
             >
               {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
-              {importing ? 'Importing...' : 'Import from File'}
+              {importing ? 'Importing...' : 'Import Unified Backup'}
             </button>
             <div className="flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground bg-muted/20 rounded-xl border border-dashed border-border/50">
               <HardDrive className="h-4 w-4 shrink-0" />
               <span>Auto-backup daily + before updates</span>
             </div>
           </div>
+
+          {/* Last Export Manifest */}
+          {lastManifest && (
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+              <h4 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-primary" />
+                Last Exported Backup Manifest
+              </h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                <div className="p-3 rounded-lg bg-card border border-border/50">
+                  <p className="text-muted-foreground">App Version</p>
+                  <p className="font-mono font-bold text-foreground mt-1">v{lastManifest.appVersion}</p>
+                </div>
+                <div className="p-3 rounded-lg bg-card border border-border/50">
+                  <p className="text-muted-foreground">Created</p>
+                  <p className="font-medium text-foreground mt-1">{formatDate(lastManifest.createdAt)}</p>
+                </div>
+                <div className="p-3 rounded-lg bg-card border border-border/50">
+                  <p className="text-muted-foreground">DB Size</p>
+                  <p className="font-medium text-foreground mt-1">{formatSize(lastManifest.dbSize)}</p>
+                </div>
+                <div className="p-3 rounded-lg bg-card border border-border/50 col-span-2 sm:col-span-3">
+                  <p className="text-muted-foreground">Persisted Stores</p>
+                  <div className="flex flex-wrap gap-2 mt-1.5">
+                    {(lastManifest.stores || []).map((s: string) => (
+                      <span key={s} className="px-2 py-0.5 rounded-md bg-background border border-border/50 font-mono text-[11px] text-foreground">
+                        {s}
+                      </span>
+                    ))}
+                    {(!lastManifest.stores || lastManifest.stores.length === 0) && (
+                      <span className="text-muted-foreground">None yet</span>
+                    )}
+                  </div>
+                </div>
+                <div className="p-3 rounded-lg bg-card border border-border/50 col-span-2 sm:col-span-3">
+                  <p className="text-muted-foreground">Records per table</p>
+                  <p className="font-mono text-[11px] text-foreground mt-1.5 leading-relaxed">
+                    {lastManifest.tableRowCounts
+                      ? Object.entries(lastManifest.tableRowCounts as Record<string, number>)
+                          .filter(([, c]) => c > 0)
+                          .map(([t, c]) => `${t}: ${c}`)
+                          .join(' · ') || 'All tables empty'
+                      : '—'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Backup List */}
           <div>

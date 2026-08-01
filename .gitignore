@@ -43,6 +43,10 @@ scripts/fixTypeErrors*.mjs
 scripts/generate*.mjs
 scripts/updateReportsList.mjs
 
+# Dev-only electron test scripts (run locally, not shipped to the repo)
+scripts/test-unified-backup.cjs
+scripts/test-update-data-survival.cjs
+
 # Production-unnecessary files
 ELECTRON_MIGRATION_GUIDE.md
 docs/

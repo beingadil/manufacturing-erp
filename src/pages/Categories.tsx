@@ -120,6 +120,13 @@ export default function Categories() {
       render: (item) => (
         <div className="flex items-center justify-end space-x-2">
           <button
+            onClick={() => editCategory(item)}
+            className="text-muted-foreground/80 hover:text-primary transition-colors p-1"
+            title="Edit Category"
+          >
+            <Edit className="w-4 h-4" />
+          </button>
+          <button
             onClick={() => handleDeleteClick(item)}
             className="text-muted-foreground/80 hover:text-destructive transition-colors p-1"
             title="Delete"

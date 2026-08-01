@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { useERPStore } from "../store/useERPStore";
 import { cn } from "../lib/utils";
-import { Plus, PackageSearch, X } from "lucide-react";
+import { Plus, PackageSearch, X, Pencil } from "lucide-react";
 import { Link } from "react-router-dom";
 import { DataTable, Column } from "../components/DataTable";
 
@@ -13,6 +13,7 @@ export function RawMaterials() {
   const { materials, categories, purchases, processingSends, processingReceipts, batches, addRawMaterial, removeModuleItem } = useERPStore();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingMaterial, setEditingMaterial] = useState<any | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<{ 
     isOpen: boolean; 
     id: string; 
@@ -88,6 +89,24 @@ export function RawMaterials() {
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<'Active' | 'Inactive'>("Active");
 
+  const openEditModal = (material: any) => {
+    setEditingMaterial(material);
+    setName(material.name);
+    setCategoryId(material.categoryId);
+    setDescription(material.description || '');
+    setStatus(material.status === 'Inactive' ? 'Inactive' : 'Active');
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditingMaterial(null);
+    setName("");
+    setCategoryId("");
+    setDescription("");
+    setStatus("Active");
+  };
+
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !categoryId) return;
@@ -100,13 +119,27 @@ export function RawMaterials() {
         status
       });
       toast.success('Material created successfully');
-      setIsModalOpen(false);
-      setName("");
-      setCategoryId("");
-      setDescription("");
-      setStatus("Active");
+      closeModal();
     } catch (error: any) {
       toast.error(error.message || 'Failed to create material');
+    }
+  };
+
+  const handleEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMaterial || !name.trim() || !categoryId) return;
+
+    try {
+      MaterialService.update(editingMaterial.id, {
+        name,
+        categoryId,
+        description,
+        status
+      });
+      toast.success('Material updated successfully');
+      closeModal();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update material');
     }
   };
 
@@ -178,6 +211,13 @@ export function RawMaterials() {
       render: (item) => (
         <div className="flex items-center justify-end space-x-2">
           <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); openEditModal(item); }}
+            className="text-muted-foreground/80 hover:text-primary transition-colors p-1"
+            title="Edit Material"
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+          <button
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteClick(item); }}
             className="text-muted-foreground/80 hover:text-destructive transition-colors p-1"
             title="Delete"
@@ -238,12 +278,12 @@ export function RawMaterials() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-card rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-border/50 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-foreground">Add Raw Material</h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-muted-foreground/80 hover:text-muted-foreground transition-colors">
+              <h3 className="text-lg font-bold text-foreground">{editingMaterial ? 'Edit Raw Material' : 'Add Raw Material'}</h3>
+              <button onClick={closeModal} className="text-muted-foreground/80 hover:text-muted-foreground transition-colors">
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <form onSubmit={handleCreate} className="p-6 pb-64 space-y-4">
+            <form onSubmit={editingMaterial ? handleEdit : handleCreate} className="p-6 pb-64 space-y-4">
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-foreground">Material Name *</label>
                 <input type="text" required value={name} onChange={e => setName(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors" placeholder="e.g. Circle 6½ Inch" />
@@ -269,8 +309,8 @@ export function RawMaterials() {
                 </select>
               </div>
               <div className="pt-4 flex gap-3">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground/80 hover:bg-muted/40 transition-colors">Cancel</button>
-                <button type="submit" className="flex-1 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-md">Save Material</button>
+                <button type="button" onClick={closeModal} className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground/80 hover:bg-muted/40 transition-colors">Cancel</button>
+                <button type="submit" className="flex-1 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-md">{editingMaterial ? 'Save Changes' : 'Save Material'}</button>
               </div>
             </form>
           </div>

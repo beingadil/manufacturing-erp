@@ -99,8 +99,8 @@ export function CashReceiptVoucher() {
         sourceModule: 'Cashbook',
         narration,
       }, [
-        { accountId: counterpartyAccId, debit: 0, credit: numAmount, description: narration },
-        { accountId: cashAccountId, debit: numAmount, credit: 0, description: narration },
+        { accountId: counterpartyAccId, debit: 0, credit: numAmount, narration },
+        { accountId: cashAccountId, debit: numAmount, credit: 0, narration },
       ]);
 
       // Update customer receivable balance

@@ -1,20 +1,45 @@
 import React, { useState, useMemo } from "react";
 import { useERPStore } from "../store/useERPStore";
-import { Plus, PackageCheck, X } from "lucide-react";
+import { Plus, X, Pencil } from "lucide-react";
 import { DataTable, Column } from "../components/DataTable";
 import { formatCurrency } from "../lib/utils";
 import { SearchableSelect } from "../components/SearchableSelect";
 import { QuickAddMaterial } from "../components/QuickAddModals";
+import { toast } from "sonner";
 
 export function FinishedGoods() {
-  const { products, materials, categories, addProduct } = useERPStore();
+  const { products, materials, categories, addProduct, updateModuleItem } = useERPStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAddMaterialOpen, setIsAddMaterialOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [name, setName] = useState("");
   const [materialId, setMaterialId] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [sellingPrice, setSellingPrice] = useState("");
+  const [sku, setSku] = useState("");
   const [description, setDescription] = useState("");
+
+  const openEditModal = (product: any) => {
+    setEditingProduct(product);
+    setName(product.name);
+    setMaterialId(product.materialId || "");
+    setCategoryId(product.categoryId || "");
+    setSellingPrice(product.sellingPrice != null ? String(product.sellingPrice) : "");
+    setSku(product.sku || "");
+    setDescription(product.description || "");
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditingProduct(null);
+    setName("");
+    setMaterialId("");
+    setCategoryId("");
+    setSellingPrice("");
+    setSku("");
+    setDescription("");
+  };
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,15 +50,32 @@ export function FinishedGoods() {
       materialId,
       categoryId,
       sellingPrice: parseFloat(sellingPrice),
+      sku: sku.trim() || undefined,
       description
     });
-    
-    setIsModalOpen(false);
-    setName("");
-    setCategoryId("");
-    setMaterialId("");
-    setSellingPrice("");
-    setDescription("");
+
+    toast.success('Product created successfully');
+    closeModal();
+  };
+
+  const handleEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct || !name || !materialId || !sellingPrice) return;
+
+    try {
+      updateModuleItem('products', editingProduct.id, {
+        name,
+        materialId,
+        categoryId,
+        sellingPrice: parseFloat(sellingPrice),
+        sku: sku.trim() || undefined,
+        description
+      });
+      toast.success('Product updated successfully');
+      closeModal();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update product');
+    }
   };
 
   const enrichedProducts = useMemo(() => products.map(p => {
@@ -49,10 +91,27 @@ export function FinishedGoods() {
 
   const columns: Column<typeof enrichedProducts[0]>[] = [
     { key: "name", label: "Product Name", sortable: true, render: (item) => <span className="font-medium">{item.name}</span> },
+    { key: "sku", label: "SKU", sortable: true, render: (item) => <span className="font-mono text-xs text-muted-foreground">{item.sku || '—'}</span> },
     { key: "categoryName", label: "Category", sortable: true },
     { key: "materialName", label: "Linked Material", sortable: true },
     { key: "sellingPrice", label: "Selling Price", align: "right", sortable: true, render: (item) => <span className="font-medium">{formatCurrency(item.sellingPrice)}</span> },
-    { key: "availableStock", label: "Available Stock (PCS)", align: "right", sortable: true, render: (item) => <span className="font-bold text-success">{item.availableStock}</span> }
+    { key: "availableStock", label: "Available Stock (PCS)", align: "right", sortable: true, render: (item) => <span className="font-bold text-success">{item.availableStock}</span> },
+    {
+      key: "actions",
+      label: "Actions",
+      align: "right",
+      render: (item) => (
+        <div className="flex items-center justify-end space-x-2">
+          <button
+            onClick={() => openEditModal(item)}
+            className="text-muted-foreground/80 hover:text-primary transition-colors p-1"
+            title="Edit Product"
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+        </div>
+      )
+    }
   ];
 
   return (
@@ -70,7 +129,7 @@ export function FinishedGoods() {
       <DataTable
         data={enrichedProducts}
         columns={columns}
-        searchKeys={["name", "categoryName", "materialName"]}
+        searchKeys={["name", "sku", "categoryName", "materialName"]}
         searchPlaceholder="Search products..."
         persistKey="products-table"
         defaultSortKey="name"
@@ -80,12 +139,17 @@ export function FinishedGoods() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-card rounded-2xl shadow-xl w-full max-w-md">
             <div className="px-6 py-4 border-b flex justify-between">
-              <h3 className="text-lg font-bold">Add Product</h3>
-              <button onClick={() => setIsModalOpen(false)}><X className="h-5 w-5 text-muted-foreground/80" /></button>
+              <h3 className="text-lg font-bold">{editingProduct ? 'Edit Product' : 'Add Product'}</h3>
+              <button onClick={closeModal}><X className="h-5 w-5 text-muted-foreground/80" /></button>
             </div>
-            <form onSubmit={handleCreate} className="p-6 pb-64 space-y-4">
+            <form onSubmit={editingProduct ? handleEdit : handleCreate} className="p-6 pb-64 space-y-4">
               <input type="text" required placeholder="Product Name" value={name} onChange={e => setName(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
               
+              <div className="grid grid-cols-2 gap-3">
+                <input type="text" placeholder="SKU (Optional)" value={sku} onChange={e => setSku(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
+                <input type="number" step="0.01" required placeholder="Selling Price" value={sellingPrice} onChange={e => setSellingPrice(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
+              </div>
+
               <select value={categoryId} onChange={e => setCategoryId(e.target.value)} className="w-full rounded-xl border p-3 text-sm bg-card">
                 <option value="">Select Category (Optional)</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -102,9 +166,8 @@ export function FinishedGoods() {
                 />
               </div>
               
-              <input type="number" step="0.01" required placeholder="Selling Price (₹)" value={sellingPrice} onChange={e => setSellingPrice(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
               <input type="text" placeholder="Description (Optional)" value={description} onChange={e => setDescription(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
-              <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">Save Product</button>
+              <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">{editingProduct ? 'Save Changes' : 'Save Product'}</button>
             </form>
           </div>
         </div>

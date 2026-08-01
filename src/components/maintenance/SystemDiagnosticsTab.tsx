@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Desktop } from '@/lib/desktop/DesktopInterop';
 import { useERPStore } from '@/store/useERPStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import { SQLiteStorageAdapter } from '@/database/sqlite/SQLiteStorageAdapter';
 import { Server, Cpu, HardDrive, Database, ListOrdered, FileJson, Beaker, Play, RefreshCw, ShieldCheck } from 'lucide-react';
 import { DataSimulator } from '@/lib/qa/DataSimulator';
 import { toast } from 'sonner';
@@ -30,9 +31,13 @@ export function SystemDiagnosticsTab() {
     // Rough estimation of DB size in memory for browser
     const getDbSize = async () => {
       try {
-        const erp = await Desktop.storage.getItem('erp-storage') || '';
-        const access = await Desktop.storage.getItem('erp-access-storage') || '';
-        const bytes = erp.length + access.length;
+        // Read through the unified adapter (mirror-aware) so the estimate
+        // reflects the actual persisted blob, not the localStorage envelope.
+        const erp = await SQLiteStorageAdapter.getItem('erp-storage') || '';
+        const access = await SQLiteStorageAdapter.getItem('erp-access-storage') || '';
+        const settings = await SQLiteStorageAdapter.getItem('erp-settings') || '';
+        const logs = await SQLiteStorageAdapter.getItem('erp-system-logs') || '';
+        const bytes = erp.length + access.length + settings.length + logs.length;
         if (bytes > 1024 * 1024) {
           setDbSize(`${(bytes / (1024 * 1024)).toFixed(2)} MB`);
         } else {

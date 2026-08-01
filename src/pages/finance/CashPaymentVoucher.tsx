@@ -120,8 +120,8 @@ export function CashPaymentVoucher() {
         sourceModule: 'Cashbook',
         narration,
       }, [
-        { accountId: debitAccountId, debit: numAmount, credit: 0, description: narration },
-        { accountId: cashAccountId, debit: 0, credit: numAmount, description: narration },
+        { accountId: debitAccountId, debit: numAmount, credit: 0, narration },
+        { accountId: cashAccountId, debit: 0, credit: numAmount, narration },
       ]);
 
       // Update supplier payable balance

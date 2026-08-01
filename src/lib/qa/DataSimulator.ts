@@ -1,7 +1,7 @@
 import { useERPStore } from '../../store/useERPStore';
 import { Customer, Supplier, RawMaterial, Product, Purchase, Sale, Voucher, JournalEntry } from '../../types/erp';
 import { format, subDays, addDays } from 'date-fns';
-import { Logger } from '../../store/useLogStore';
+import { Logger } from '../../lib/logger';
 
 export class DataSimulator {
   

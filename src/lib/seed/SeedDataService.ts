@@ -1,5 +1,5 @@
 import { useERPStore } from '../../store/useERPStore';
-import { Logger } from '../../store/useLogStore';
+import { Logger } from '../../lib/logger';
 
 const MONTHS_AGO = (n: number) => {
   const d = new Date();
