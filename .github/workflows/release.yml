@@ -32,6 +32,12 @@ jobs:
       - name: Build Vite frontend
         run: npx vite build
 
+      - name: Set up MSVC build environment (better-sqlite3 native rebuild)
+        # node-gyp needs a Visual Studio toolchain to rebuild better-sqlite3 for
+        # the Electron ABI on the runner; without this the packaging step fails
+        # with 'Could not find any Visual Studio installation to use'.
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Build & publish to GitHub Releases
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
