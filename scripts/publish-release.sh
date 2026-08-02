@@ -11,7 +11,7 @@
 #   1. A GitHub repository with your code pushed to 'origin'
 #   2. GH_TOKEN or GITHUB_TOKEN environment variable set
 #   3. Publish config in package.json pointing to your repo
-#   4. All changes committed and pushed to main
+#   4. All changes committed and pushed to your current branch
 #
 # What it does:
 #   1. Bumps version in package.json + src/config/version.ts
@@ -84,9 +84,16 @@ echo "Tagged: v$NEW_VERSION"
 
 # ── Push ───────────────────────────────────────────────────────────
 
+# Push the current branch (do not hardcode 'main' — repos may use 'master')
+CURRENT_BRANCH=$(git branch --show-current)
+if [ -z "$CURRENT_BRANCH" ]; then
+  echo "❌  Detached HEAD — check out a branch before publishing."
+  exit 1
+fi
+
 echo ""
-echo "Pushing commit and tag to origin..."
-git push origin main
+echo "Pushing commit and tag to origin ($CURRENT_BRANCH)..."
+git push origin "$CURRENT_BRANCH"
 git push origin "v$NEW_VERSION"
 
 echo ""
