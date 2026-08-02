@@ -8,6 +8,10 @@ on:
 jobs:
   release:
     runs-on: windows-latest
+    # GITHUB_TOKEN needs write access to contents to create the GitHub
+    # Release and upload the installer assets via electron-builder.
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout code
@@ -45,9 +49,22 @@ jobs:
         run: |
           choco install visualstudio2022buildtools --yes --no-progress --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --norestart"
 
+      - name: Setup Python 3.11 (node-gyp needs distutils)
+        # The windows-latest runner defaults to Python 3.13, which REMOVED the
+        # 'distutils' module from the stdlib. node-gyp imports distutils when
+        # rebuilding better-sqlite3 for the Electron ABI, so every release run
+        # previously died with 'ModuleNotFoundError: No module named distutils'.
+        # Python 3.11 still ships distutils — pin it and hand node-gyp the exact
+        # path via npm_config_python so it cannot fall back to 3.13.
+        id: setup-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - name: Build & publish to GitHub Releases
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          npm_config_python: ${{ steps.setup-python.outputs.python-path }}
         # Run electron-builder directly (not via npm script) so --publish always
         # is passed to the builder, not to vite build.
         run: npx electron-builder --win --publish always
