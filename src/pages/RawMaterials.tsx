@@ -166,6 +166,7 @@ export function RawMaterials() {
           <div>
             <div className="font-semibold text-foreground" onClick={(e) => e.stopPropagation()}>
               <input 
+                key={`mat-name-${item.id}-${item.name}`}
                 type="text" 
                 defaultValue={item.name}
                 className="bg-transparent border-none p-0 h-auto font-semibold focus:ring-1 focus:ring-primary rounded"

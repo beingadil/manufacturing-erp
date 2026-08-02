@@ -96,6 +96,7 @@ export default function Categories() {
             <Tags className="w-5 h-5 text-primary" />
           </div>
           <input
+            key={`cat-name-${item.id}-${item.name}`}
             type="text"
             className="font-medium text-foreground bg-transparent border-none p-0 focus:ring-1 focus:ring-primary rounded"
             defaultValue={item.name}
@@ -106,6 +107,7 @@ export default function Categories() {
     },
     { key: "description", label: "Description", sortable: true, render: (item) => (
       <input
+        key={`cat-desc-${item.id}-${item.description || ''}`}
         type="text"
         className="text-muted-foreground bg-transparent border-none p-0 focus:ring-1 focus:ring-primary rounded w-full"
         defaultValue={item.description || ''}
