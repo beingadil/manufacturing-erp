@@ -18,7 +18,9 @@
 #   2. Commits the version bump
 #   3. Tags with v*.*.*
 #   4. Pushes tag to GitHub (triggers Actions release workflow)
-#   5. Builds & publishes to GitHub Releases
+#   5. Auto-generates the release notes body from the commit log since the
+#      previous tag and PATCHes it onto the GitHub release (creates it if
+#      the release doesn't exist yet; CI uploads the installer assets)
 #
 # ============================================================
 
@@ -96,10 +98,17 @@ echo "Pushing commit and tag to origin ($CURRENT_BRANCH)..."
 git push origin "$CURRENT_BRANCH"
 git push origin "v$NEW_VERSION"
 
+# ── Auto-generate release notes & update the GitHub release ─────────
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+echo ""
+echo "Updating release body on GitHub..."
+bash "$SCRIPT_DIR/set-release-notes.sh"
+
 echo ""
 echo "✅  Release v$NEW_VERSION pushed!"
 echo ""
 echo "GitHub Actions will now build and publish the release."
-echo "Check progress at: https://github.com/$(git remote get-url origin | sed 's/.*://;s/\.git//')/actions"
+echo "Check progress at: https://github.com/$REPO_SLUG/actions"
 echo ""
 echo "Users will receive the update automatically within minutes."
