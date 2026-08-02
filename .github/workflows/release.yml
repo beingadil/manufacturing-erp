@@ -12,6 +12,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # Fetch all history + tags so the release-notes generator can
+          # compute the previous tag and the commit log since it.
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -47,3 +51,11 @@ jobs:
         # Run electron-builder directly (not via npm script) so --publish always
         # is passed to the builder, not to vite build.
         run: npx electron-builder --win --publish always
+
+      - name: Set professional release notes on the release
+        # electron-builder may overwrite the release body with its own default
+        # during --publish always; re-apply our generated changelog afterwards
+        # so the release always carries the professional notes.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/set-release-notes.sh
