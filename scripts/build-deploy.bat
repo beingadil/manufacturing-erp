@@ -50,6 +50,34 @@ if %errorlevel% neq 0 (
 echo Done.
 echo.
 
+:: Find the newest setup installer in dist-electron (works with any version
+:: and tolerates both "Manufacturing ERP Setup X.exe" and
+:: "Manufacturing-ERP-Setup-X.exe" artifact naming)
+set "INSTALLER="
+for /f "delims=" %%I in ('dir /b /o-d "dist-electron\Manufacturing*ERP*Setup*.exe" 2^>nul') do (
+    if not defined INSTALLER set "INSTALLER=dist-electron\%%I"
+)
+if not defined INSTALLER (
+    echo [!] No installer found in dist-electron\Manufacturing*ERP*Setup*.exe
+    pause
+    exit /b 1
+)
+echo Detected installer: %INSTALLER%
+echo.
+
+:: Step 3b — Verify code signature (informational)
+echo [3b] Verifying installer signature...
+call node scripts\verify-signature.cjs "%INSTALLER%"
+if %errorlevel% equ 0 (
+    echo Signature valid.
+) else (
+    echo.
+    echo [!] Installer is NOT signed with a trusted certificate.
+    echo     Users will see a SmartScreen "unknown publisher" warning.
+    echo     See CODE_SIGNING.md to enable signing (Azure Trusted Signing / CA cert).
+)
+echo.
+
 :: Step 4 — Zip source code (excluding heavy / generated folders)
 echo [4/5] Creating source archive...
 set "DESKTOP=%USERPROFILE%\Desktop"
@@ -84,17 +112,6 @@ echo.
 
 :: Step 5 — Copy installer to Desktop
 echo [5/5] Copying installer to Desktop...
-set "INSTALLER=dist-electron\Manufacturing ERP Setup 1.0.0.exe"
-
-if not exist "%INSTALLER%" (
-    echo [!] Installer not found at %INSTALLER%
-    echo     The application build succeeded but the NSIS installer
-    echo     did not compile. The source archive is still on your
-    echo     Desktop.
-    pause
-    exit /b 1
-)
-
 copy /Y "%INSTALLER%" "%DESKTOP%" >nul
 if %errorlevel% equ 0 (
     echo Done.
@@ -108,7 +125,7 @@ if %errorlevel% equ 0 (
     echo     developers. Extract and run this same
     echo     script to build on another machine.
     echo.
-    echo  2. %DESKTOP%\Manufacturing ERP Setup 1.0.0.exe
+    echo  2. %DESKTOP%\%~nxINSTALLER%
     echo     Standalone installer — run on any Windows
     echo     machine to install the app.
     echo.

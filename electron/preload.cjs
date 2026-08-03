@@ -27,4 +27,7 @@ contextBridge.exposeInMainWorld('electronDB', {
   // Backup export/import via native dialogs
   exportBackup: () => ipcRenderer.invoke('dialog:exportBackup'),
   importBackup: () => ipcRenderer.invoke('dialog:importBackup'),
+
+  // Update migration notice — legacy per-machine install detection
+  checkLegacyInstall: () => ipcRenderer.invoke('migration:checkLegacyInstall'),
 });

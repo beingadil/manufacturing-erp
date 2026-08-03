@@ -72,12 +72,8 @@ export const useSettingsStore = create<SettingsState>()(
       voucherYearlyReset: true,
       voucherPrefixes: {
         'Journal Voucher': 'JV',
-        'Receipt Voucher': 'RV',
-        'Payment Voucher': 'PV',
         'Purchase Voucher': 'PUV',
         'Sales Voucher': 'SV',
-        'Contra Voucher': 'CV',
-        'Opening Balance': 'OB',
         'Bank Payment': 'BP',
         'Bank Receipt': 'BR',
         'Cash Payment': 'CP',

@@ -1,14 +1,12 @@
-import { MultiEntryVoucher } from './MultiEntryVoucher';
+import { VoucherListPage } from '../../components/VoucherListPage';
 
 export function CashPaymentVoucher() {
   return (
-    <MultiEntryVoucher
-      config={{
-        mode: 'payment',
-        title: 'Payment Voucher',
-        subtitle: 'Record money going out of the business',
-        accent: 'rose',
-      }}
+    <VoucherListPage
+      kind="Cash Payment"
+      title="Cash Payment Voucher"
+      subtitle="Record money paid out of the cash in hand"
+      accent="rose"
     />
   );
 }

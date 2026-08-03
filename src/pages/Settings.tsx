@@ -3,7 +3,8 @@ import {
   User, Image as ImageIcon, Palette, Bell, Shield, Download, Upload,
   Save, CheckCircle2, Lock, Smartphone, Key, Globe, Clock, Monitor, Trash2,
   Database, Activity, Hash, Info, ExternalLink, RotateCw, DownloadCloud,
-  AlertCircle, FileDown, FileUp, HardDrive, AlertTriangle
+  AlertCircle, FileDown, FileUp, HardDrive, AlertTriangle,
+  Sparkles, ChevronDown, ChevronRight
 } from "lucide-react";
 import { SeedChartOfAccountsButton } from "@/components/settings/SeedChartOfAccountsButton";
 import { cn } from "../lib/utils";
@@ -13,6 +14,7 @@ import { useNavigate } from "react-router-dom";
 
 import { useAuth } from '../contexts/AuthContext';
 import { APP_VERSION, BUILD_NUMBER, RELEASE_DATE, DATABASE_SCHEMA_VERSION } from '../config/version';
+import { CHANGELOG, type ChangelogEntry } from '../config/changelog';
 import { Loader2 } from 'lucide-react';
 
 export function Settings() {
@@ -945,12 +947,8 @@ function VoucherNumberingTab({ onSave, showSavedToast }: { onSave: () => void, s
     { type: 'Cash Receipt', default: 'CR', example: 'CR-0001' },
     { type: 'Bank Receipt', default: 'BR', example: 'BR-0001' },
     { type: 'Journal Voucher', default: 'JV', example: 'JV-0001' },
-    { type: 'Contra Voucher', default: 'CV', example: 'CV-0001' },
-    { type: 'Payment Voucher', default: 'PV', example: 'PV-0001' },
-    { type: 'Receipt Voucher', default: 'RV', example: 'RV-0001' },
     { type: 'Purchase Voucher', default: 'PUV', example: 'PUV-0001' },
     { type: 'Sales Voucher', default: 'SV', example: 'SV-0001' },
-    { type: 'Opening Balance', default: 'OB', example: 'OB-0001' },
     { type: 'Processor Bill', default: 'PB', example: 'PB-0001' },
   ];
 
@@ -1127,6 +1125,23 @@ function AboutUpdatesTab() {
           </div>
         </div>
 
+        {/* What's New — Changelog */}
+        <div className="space-y-4">
+          <h4 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+            <Sparkles className="h-4 w-4" /> What's New
+          </h4>
+          <div className="rounded-xl border border-border/50 bg-muted/10 overflow-hidden">
+            {CHANGELOG.map((entry, idx) => (
+              <ChangelogAccordionItem
+                key={entry.version}
+                entry={entry}
+                isCurrent={entry.version === APP_VERSION}
+                showTopBorder={idx > 0}
+              />
+            ))}
+          </div>
+        </div>
+
         {/* Electron Detection */}
         {!isElectron && (
           <div className="p-5 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
@@ -1265,6 +1280,69 @@ function AboutUpdatesTab() {
 // ----------------------------------------------------------------------
 // Shared UI Components
 // ----------------------------------------------------------------------
+
+// Accordion row for the in-app changelog. Lives in its own component so each
+// entry owns its useState (hooks must not be called inside .map callbacks).
+function ChangelogAccordionItem({
+  entry,
+  isCurrent,
+  showTopBorder,
+}: {
+  entry: ChangelogEntry;
+  isCurrent: boolean;
+  showTopBorder: boolean;
+}) {
+  const [open, setOpen] = useState(isCurrent);
+
+  return (
+    <div className={showTopBorder ? 'border-t border-border/50' : ''}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-muted/40 transition-colors"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <div className={cn(
+            "flex-shrink-0 h-8 w-8 rounded-lg flex items-center justify-center text-xs font-bold",
+            isCurrent
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted text-muted-foreground border border-border"
+          )}>
+            v{entry.version}
+          </div>
+          <div className="min-w-0">
+            <p className={cn("text-sm font-semibold truncate", isCurrent ? "text-foreground" : "text-foreground/80")}>
+              {entry.title}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {entry.date}
+              {isCurrent && <span className="ml-2 text-xs font-medium text-primary">Current version</span>}
+            </p>
+          </div>
+        </div>
+        {open ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
+      </button>
+      {open && (
+        <div className="px-5 pb-5 space-y-4">
+          {entry.sections.map((section) => (
+            <div key={section.title}>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                {section.title}
+              </p>
+              <ul className="space-y-1.5">
+                {section.items.map((item, i) => (
+                  <li key={i} className="text-sm text-foreground/80 flex gap-2">
+                    <span className="text-primary mt-0.5 shrink-0">•</span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function SaveFooter({ onSave, showSavedToast }: { onSave: () => void, showSavedToast: boolean }) {
   return (

@@ -91,7 +91,7 @@ function CommandPalette() {
   const [query, setQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
-  const { materials, products, processingSends, ledgerEntries, customers, suppliers, processors } = useERPStore();
+  const { materials, products, processingSends, vouchers, customers, suppliers, processors } = useERPStore();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -135,8 +135,8 @@ function CommandPalette() {
     ...processingSends.filter(s => s.remarks && s.remarks.toLowerCase().includes(query.toLowerCase())).map(s => ({
       id: s.id, type: 'Job Work', label: s.remarks, path: '/job-work', icon: Briefcase
     })),
-    ...ledgerEntries.filter(e => e.referenceNo?.toLowerCase().includes(query.toLowerCase()) || e.description?.toLowerCase().includes(query.toLowerCase())).map(e => ({
-      id: e.id, type: 'Ledger', label: `${e.referenceNo || 'Entry'} - ${e.description}`, path: '/ledgers', icon: Wallet
+    ...vouchers.filter(v => v.voucherNo.toLowerCase().includes(query.toLowerCase()) || v.narration?.toLowerCase().includes(query.toLowerCase())).map(v => ({
+      id: v.id, type: 'Voucher', label: `${v.voucherNo} - ${v.narration || 'Voucher'}`, path: '/accounting/general-ledger', icon: Wallet
     }))
   ].slice(0, 10);
 
@@ -217,7 +217,7 @@ function CommandPalette() {
 function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const { ledgerEntries, materials } = useERPStore();
+  const { vouchers, materials } = useERPStore();
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -245,7 +245,7 @@ function NotificationBell() {
 
   const recentActivity = [
     ...alerts,
-    ...ledgerEntries.map(e => ({ id: e.id, date: e.date, type: 'Ledger', desc: `Ledger ${e.type} - ${formatCurrency(e.amount)}`, status: 'Completed' }))
+    ...vouchers.map(v => ({ id: v.id, date: v.date, type: 'Voucher', desc: `${v.voucherNo} - ${v.narration || v.type}`, status: v.status === 'Cancelled' ? 'Warning' : 'Completed' }))
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 15);
 
   const unreadCount = recentActivity.filter(a => !readIds.has(a.id)).length;
@@ -374,14 +374,17 @@ export function DashboardLayout() {
           requiredModule: "Accounting",
           subItems: [
             { label: "Chart of Accounts", path: "/accounting/chart-of-accounts" },
-            { label: "Cashbook", path: "/accounting/cashbook" },
-            { label: "Journal Vouchers", path: "/accounting/journal-vouchers" },
+            { label: "Cash Payment Voucher", path: "/accounting/cash-payment" },
+            { label: "Bank Payment Voucher", path: "/accounting/bank-payment" },
+            { label: "Cash Receipt Voucher", path: "/accounting/cash-receipt" },
+            { label: "Bank Receipt Voucher", path: "/accounting/bank-receipt" },
+            { label: "Journal Voucher", path: "/accounting/journal-voucher" },
+            { label: "Cash Book", path: "/accounting/cashbook" },
             { label: "General Ledger", path: "/accounting/general-ledger" },
             { label: "Trial Balance", path: "/accounting/trial-balance" },
             { label: "Profit & Loss", path: "/accounting/profit-loss" },
             { label: "Balance Sheet", path: "/accounting/balance-sheet" },
             { label: "Cash Flow", path: "/accounting/cash-flow" },
-            { label: "Opening Balance", path: "/accounting/opening-balance" },
           ]
         },
         { icon: BarChart3, label: "Reports", path: "/reports", requiredModule: "Reports" },

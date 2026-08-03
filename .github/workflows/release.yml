@@ -65,9 +65,68 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           npm_config_python: ${{ steps.setup-python.outputs.python-path }}
+          # Code signing — see CODE_SIGNING.md. Two supported paths:
+          # 1) PFX cert via CSC_LINK/CSC_KEY_PASSWORD (electron-builder built-in)
+          # 2) Azure Trusted Signing via azureSignOptions injected below from
+          #    AZURE_SIGNING_* secrets. Both are optional: if neither is set,
+          #    electron-builder skips signing (unsigned build, SmartScreen warns).
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          AZURE_SIGNING_ENDPOINT: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          AZURE_SIGNING_ACCOUNT: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          AZURE_SIGNING_PROFILE: ${{ secrets.AZURE_SIGNING_PROFILE }}
+          AZURE_SIGNING_CERT: ${{ secrets.AZURE_SIGNING_CERT }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        shell: bash
         # Run electron-builder directly (not via npm script) so --publish always
-        # is passed to the builder, not to vite build.
-        run: npx electron-builder --win --publish always
+        # is passed to the builder, not to vite build. When the Azure Trusted
+        # Signing endpoint secret is set, inject the azureSignOptions block via
+        # CLI overrides so no credentials are committed to the repo. All four
+        # Azure values are required together — fail fast rather than silently
+        # producing a broken/unsigned build.
+        run: |
+          set -euo pipefail
+          ARGS=(--win --publish always)
+          if [ -n "${AZURE_SIGNING_ENDPOINT:-}" ]; then
+            if [ -z "${AZURE_SIGNING_ACCOUNT:-}" ] || [ -z "${AZURE_SIGNING_PROFILE:-}" ] || [ -z "${AZURE_SIGNING_CERT:-}" ]; then
+              echo "❌ AZURE_SIGNING_ENDPOINT is set but AZURE_SIGNING_ACCOUNT / AZURE_SIGNING_PROFILE / AZURE_SIGNING_CERT are missing."
+              echo "   Add all four secrets (see CODE_SIGNING.md) or remove the endpoint secret."
+              exit 1
+            fi
+            ARGS+=(
+              "-c.win.azureSignOptions.endpoint=${AZURE_SIGNING_ENDPOINT}"
+              "-c.win.azureSignOptions.trustedSigningAccountName=${AZURE_SIGNING_ACCOUNT}"
+              "-c.win.azureSignOptions.certificateProfileName=${AZURE_SIGNING_PROFILE}"
+              "-c.win.azureSignOptions.certificateName=${AZURE_SIGNING_CERT}"
+            )
+            echo "Code signing: Azure Trusted Signing configured."
+          elif [ -n "${CSC_LINK:-}" ]; then
+            echo "Code signing: PFX certificate configured via CSC_LINK."
+          else
+            echo "Code signing: none configured — building unsigned (SmartScreen will warn)."
+          fi
+          npx electron-builder "${ARGS[@]}"
+
+      - name: Verify installer signature
+        # verify-signature.cjs auto-discovers the newest 'Manufacturing ERP Setup *.exe'
+        # in dist-electron, so this never breaks on a version bump. When signing is
+        # configured, a non-Valid result fails the job; unsigned builds are informational.
+        # Note: these env vars must be redeclared here — step env does not persist
+        # between steps in GitHub Actions.
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          AZURE_SIGNING_ENDPOINT: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+        shell: bash
+        run: |
+          set +e
+          node scripts/verify-signature.cjs dist-electron
+          code=$?
+          if [ -n "${CSC_LINK:-}" ] || [ -n "${AZURE_SIGNING_ENDPOINT:-}" ]; then
+            exit $code
+          fi
+          echo "Unsigned build by design — signature check informational."
 
       - name: Set professional release notes on the release
         # electron-builder may overwrite the release body with its own default

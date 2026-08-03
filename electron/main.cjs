@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { autoUpdater } = require('electron-updater');
 const db = require('./database.cjs');
+const { detectLegacyInstall } = require('./legacy-install-detector.cjs');
 
 const createWindow = () => {
   const mainWindow = new BrowserWindow({
@@ -341,6 +342,20 @@ app.whenReady().then(() => {
     try {
       setImmediate(() => autoUpdater.quitAndInstall(false, true));
       return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // ─── Update Migration Notice (legacy per-machine install detection) ──
+  // v1.0.2 and earlier installed per-machine (C:\Program Files\...). Users
+  // still on that copy see a duplicate app after updating to the per-user
+  // build. The renderer asks for the install state so it can show an
+  // in-app notice guiding them to uninstall the old copy.
+  ipcMain.handle('migration:checkLegacyInstall', async () => {
+    try {
+      const data = detectLegacyInstall();
+      return { success: true, data };
     } catch (error) {
       return { success: false, error: error.message };
     }

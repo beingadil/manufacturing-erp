@@ -8,6 +8,7 @@ import { DataTable, Column } from "../components/DataTable";
 import { MaterialService } from '../services/MaterialService';
 import { toast } from 'sonner';
 import { SafeDeleteDialog } from '../components/common/SafeDeleteDialog';
+import { InlineEditInput } from '../components/common/InlineEditInput';
 
 export function RawMaterials() {
   const { materials, categories, purchases, processingSends, processingReceipts, batches, addRawMaterial, removeModuleItem } = useERPStore();
@@ -165,12 +166,11 @@ export function RawMaterials() {
           </div>
           <div>
             <div className="font-semibold text-foreground" onClick={(e) => e.stopPropagation()}>
-              <input 
-                key={`mat-name-${item.id}-${item.name}`}
-                type="text" 
-                defaultValue={item.name}
+              <InlineEditInput
+                value={item.name}
+                onCommit={(v) => handleEditInline(item.id, 'name', v)}
                 className="bg-transparent border-none p-0 h-auto font-semibold focus:ring-1 focus:ring-primary rounded"
-                onBlur={(e) => handleEditInline(item.id, 'name', e.target.value)}
+                ariaLabel={`Rename material ${item.name}`}
               />
             </div>
             {item.description && <div className="text-xs text-muted-foreground">{item.description}</div>}

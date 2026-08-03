@@ -8,11 +8,13 @@ import { v4 as uuidv4 } from 'uuid';
 import { databaseMiddleware } from './databaseMiddleware';
 import { 
   MaterialCategory, RawMaterial, Processor, Supplier, Customer, 
-  Purchase, ProcessingSend, ProcessingReceipt, Product, Sale, LedgerEntry,
+  Purchase, ProcessingSend, ProcessingReceipt, Product, Sale,
   Batch, InventoryMovement, ProcessorBill,
   AccountSubtype, Account, Voucher, JournalEntry, AccountType,
   CompanySettings, DocumentSettings
 } from '../types/erp';
+import { migrateERPState } from './erpMigration';
+import { getSystemAccountBySubtype } from '../lib/accounting/accountClassification';
 
 export interface ERPState {
   inventoryThreshold: number;
@@ -35,7 +37,6 @@ export interface ERPState {
   processorBills: ProcessorBill[];
   products: Product[];
   sales: Sale[];
-  ledgerEntries: LedgerEntry[];
   batches: Batch[];
   inventoryMovements: InventoryMovement[];
   
@@ -87,6 +88,7 @@ export interface ERPState {
   addVoucher: (voucher: Omit<Voucher, 'id' | 'voucherNo' | 'createdAt'>, entries: Omit<JournalEntry, 'id' | 'voucherId'>[]) => string;
   updateVoucher: (voucherId: string, voucherData: Partial<Voucher>, newEntries: Omit<JournalEntry, 'id' | 'voucherId'>[]) => void;
   deleteVoucher: (voucherId: string) => void;
+  cancelVoucher: (voucherId: string, reason?: string) => void;
   wipeAllData: () => void;
 }
 
@@ -125,7 +127,6 @@ export const useERPStore = create<ERPState>()(
       processorBills: [],
       products: [],
       sales: [],
-      ledgerEntries: [],
       batches: [],
       inventoryMovements: [],
       
@@ -158,7 +159,6 @@ export const useERPStore = create<ERPState>()(
           processorBills: [],
           products: [],
           sales: [],
-          ledgerEntries: [],
           batches: [],
           inventoryMovements: [],
           accountSubtypes: [],
@@ -250,10 +250,9 @@ export const useERPStore = create<ERPState>()(
         const id = uuidv4();
         const state = get();
         
-        // Auto-generate voucher number with yearly reset
-        const prefix = DocumentNumberingService.getVoucherPrefix(voucherData.type);
-        const yearCount = DocumentNumberingService.countByType(state.vouchers, voucherData.type);
-        const voucherNo = DocumentNumberingService.generateVoucherNumber(prefix, yearCount);
+        // Auto-generate voucher number — max-based, scoped to the voucher's own
+        // date year, gap-free even after deletions (spec: numbering audit)
+        const voucherNo = DocumentNumberingService.nextVoucherNumber(state.vouchers, voucherData.type, voucherData.date);
         
         const newVoucher: Voucher = {
           ...voucherData,
@@ -282,19 +281,34 @@ export const useERPStore = create<ERPState>()(
         const existingVoucher = state.vouchers.find(v => v.id === voucherId);
         if (!existingVoucher) return state;
 
+        // If the voucher's date moved to a different year (yearly reset ON),
+        // re-scope its number into the new year's sequence. Same-year edits
+        // keep the existing number.
+        const nextDate = voucherData.date || existingVoucher.date;
+        const renumber = DocumentNumberingService.isYearlyResetEnabled()
+          && nextDate.slice(0, 4) !== existingVoucher.date.slice(0, 4);
+        const nextVoucherNo = renumber
+          ? DocumentNumberingService.nextVoucherNumber(
+              state.vouchers.filter(v => v.id !== voucherId),
+              existingVoucher.type,
+              nextDate
+            )
+          : existingVoucher.voucherNo;
+
         const updatedVouchers = state.vouchers.map(v => {
           if (v.id === voucherId) {
             const auditEntry = {
               id: uuidv4(),
               modifiedAt: new Date().toISOString(),
               action: 'Updated' as const,
-              reason: 'User Edit',
+              reason: renumber ? 'Date moved to another year — renumbered' : 'User Edit',
               previousValues: { ...v, versionHistory: undefined },
-              updatedValues: { ...voucherData }
+              updatedValues: renumber ? { ...voucherData, voucherNo: nextVoucherNo } : { ...voucherData }
             };
             return {
               ...v,
               ...voucherData,
+              ...(renumber ? { voucherNo: nextVoucherNo } : {}),
               versionHistory: [...(v.versionHistory || []), auditEntry]
             };
           }
@@ -320,6 +334,29 @@ export const useERPStore = create<ERPState>()(
         };
       }),
 
+      cancelVoucher: (voucherId, reason) => set((state) => {
+        const voucher = state.vouchers.find(v => v.id === voucherId);
+        if (!voucher) return state;
+
+        return {
+          vouchers: state.vouchers.map(v => {
+            if (v.id !== voucherId) return v;
+            const auditEntry = {
+              id: uuidv4(),
+              modifiedAt: new Date().toISOString(),
+              action: 'Cancelled' as const,
+              reason: reason || 'Voided by user',
+              previousValues: { ...v, versionHistory: undefined },
+            };
+            return {
+              ...v,
+              status: 'Cancelled' as const,
+              versionHistory: [...(v.versionHistory || []), auditEntry]
+            };
+          })
+        };
+      }),
+
       addCategory: (data) => {
         const id = uuidv4();
         set((state) => ({ categories: [{ ...data, id }, ...state.categories] }));
@@ -336,6 +373,8 @@ export const useERPStore = create<ERPState>()(
           const accountSubtype = state.accountSubtypes.find(s => s.name === 'Accounts Payable');
           const sameTypeCount = state.accounts.filter(a => a.type === 'Liabilities').length;
           const code = DocumentNumberingService.generateAccountCode('Liabilities', sameTypeCount);
+          // Nest under the system AP control account (spec §15)
+          const control = state.accounts.find(a => a.subtypeId === accountSubtype?.id && a.isSystem);
           const account: Account = {
             id: uuidv4(),
             code,
@@ -346,7 +385,8 @@ export const useERPStore = create<ERPState>()(
             openingBalanceType: 'Credit',
             status: 'Active',
             isSystem: false,
-            linkedEntityId: id
+            linkedEntityId: id,
+            parentId: control?.id
           };
 
           return { 
@@ -363,6 +403,8 @@ export const useERPStore = create<ERPState>()(
           const accountSubtype = state.accountSubtypes.find(s => s.name === 'Accounts Payable');
           const sameTypeCount = state.accounts.filter(a => a.type === 'Liabilities').length;
           const code = DocumentNumberingService.generateAccountCode('Liabilities', sameTypeCount);
+          // Nest under the system AP control account (spec §15)
+          const control = state.accounts.find(a => a.subtypeId === accountSubtype?.id && a.isSystem);
           const account: Account = {
             id: uuidv4(),
             code,
@@ -373,7 +415,8 @@ export const useERPStore = create<ERPState>()(
             openingBalanceType: 'Credit',
             status: 'Active',
             isSystem: false,
-            linkedEntityId: id
+            linkedEntityId: id,
+            parentId: control?.id
           };
 
           return { 
@@ -390,6 +433,8 @@ export const useERPStore = create<ERPState>()(
           const accountSubtype = state.accountSubtypes.find(s => s.name === 'Accounts Receivable');
           const sameTypeCount = state.accounts.filter(a => a.type === 'Assets').length;
           const code = DocumentNumberingService.generateAccountCode('Assets', sameTypeCount);
+          // Nest under the system AR control account (spec §15)
+          const control = state.accounts.find(a => a.subtypeId === accountSubtype?.id && a.isSystem);
           const account: Account = {
             id: uuidv4(),
             code,
@@ -400,7 +445,8 @@ export const useERPStore = create<ERPState>()(
             openingBalanceType: 'Debit',
             status: 'Active',
             isSystem: false,
-            linkedEntityId: id
+            linkedEntityId: id,
+            parentId: control?.id
           };
 
           return { 
@@ -424,7 +470,7 @@ export const useERPStore = create<ERPState>()(
       },
 
       addPurchase: (data) => set((state) => {
-        const purchaseNo = DocumentNumberingService.generateDocumentNumber('PO', state.purchases.length);
+        const purchaseNo = DocumentNumberingService.nextDocumentNumber(state.purchases, 'purchaseNo', 'PO', data.date);
         const weightInKg = UnitConversionService.convertToKg(data.weight, data.weightUnit);
         const calculatedPcs = UnitConversionService.calculatePcsFromWeight(data.weight, data.weightUnit, data.weightPerPiece);
         const amount = data.weight * data.ratePerUnit;
@@ -482,30 +528,17 @@ export const useERPStore = create<ERPState>()(
           s.id === data.supplierId ? { ...s, balancePayable: s.balancePayable + amount } : s
         );
 
-        const ledgerEntry: LedgerEntry = {
-          id: uuidv4(),
-          date: data.date,
-          partyId: data.supplierId,
-          partyType: 'Supplier',
-          type: 'Credit',
-          amount: amount,
-          referenceNo: purchaseNo,
-          description: `Purchase of ${data.weight} ${data.weightUnit}`
-        };
-
-        // Automatic Voucher Generation
-        const purchaseAccount = state.accounts.find(a => a.name === 'Purchases' && a.isSystem);
+        // Automatic Voucher Generation (spec §25 — resolve accounts by subtype, never by name)
+        const purchaseAccount = getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Purchases');
         const payableAccount = state.accounts.find(a => a.linkedEntityId === data.supplierId) 
-          || state.accounts.find(a => a.name === 'Accounts Payable' && a.isSystem);
+          || getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Accounts Payable');
         
         let updatedVouchers = state.vouchers;
         let updatedJournalEntries = state.journalEntries;
 
         if (purchaseAccount && payableAccount) {
           const voucherId = uuidv4();
-          const prefix = DocumentNumberingService.getVoucherPrefix('Purchase Voucher');
-          const yearCount = DocumentNumberingService.countByType(state.vouchers, 'Purchase Voucher');
-          const voucherNo = DocumentNumberingService.generateVoucherNumber(prefix, yearCount);
+          const voucherNo = DocumentNumberingService.nextVoucherNumber(state.vouchers, 'Purchase Voucher', data.date);
           
           const newVoucher: Voucher = {
             id: voucherId,
@@ -554,14 +587,13 @@ export const useERPStore = create<ERPState>()(
           inventoryMovements: [movement, ...(state.inventoryMovements || [])],
           materials: updatedMaterials,
           suppliers: updatedSuppliers,
-          ledgerEntries: [ledgerEntry, ...state.ledgerEntries],
           vouchers: updatedVouchers,
           journalEntries: updatedJournalEntries
         };
       }),
 
       addProcessingSend: (data, adjustSendIds) => set((state) => {
-        const dispatchNo = DocumentNumberingService.generateDocumentNumber('DSP', state.processingSends.length);
+        const dispatchNo = DocumentNumberingService.nextDocumentNumber(state.processingSends, 'dispatchNo', 'DSP', data.date);
         const newSendId = uuidv4();
         
         const newSend: ProcessingSend = {
@@ -630,7 +662,7 @@ export const useERPStore = create<ERPState>()(
       }),
 
       addProcessingReceipt: (data) => set((state) => {
-        const receiveNo = DocumentNumberingService.generateDocumentNumber('REC', state.processingReceipts.length);
+        const receiveNo = DocumentNumberingService.nextDocumentNumber(state.processingReceipts, 'receiveNo', 'REC', data.date);
         const send = state.processingSends.find(s => s.id === data.sendId);
         if (!send) return state;
 
@@ -686,7 +718,7 @@ export const useERPStore = create<ERPState>()(
       }),
 
       addProcessorBill: (data) => set((state) => {
-        const billNo = DocumentNumberingService.generateDocumentNumber('BILL', state.processorBills.length);
+        const billNo = DocumentNumberingService.nextDocumentNumber(state.processorBills, 'billNo', 'BILL', data.date);
         const receiptsToBill = state.processingReceipts.filter(r => data.receiptIds.includes(r.id));
         const totalAmount = receiptsToBill.reduce((sum, r) => sum + r.billAmount, 0);
 
@@ -709,30 +741,17 @@ export const useERPStore = create<ERPState>()(
           p.id === data.processorId ? { ...p, balancePayable: p.balancePayable + totalAmount } : p
         );
 
-        const ledgerEntry: LedgerEntry = {
-          id: uuidv4(),
-          date: data.date,
-          partyId: data.processorId,
-          partyType: 'Processor',
-          type: 'Credit',
-          amount: totalAmount,
-          referenceNo: billNo,
-          description: `Processing Bill for ${receiptsToBill.length} receipts`
-        };
-
-        // Automatic Voucher Generation
-        const processingExpenseAccount = state.accounts.find(a => a.name === 'Processing Expense' && a.isSystem);
+        // Automatic Voucher Generation (spec §25 — resolve accounts by subtype, never by name)
+        const processingExpenseAccount = getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Processing Expense');
         const payableAccount = state.accounts.find(a => a.linkedEntityId === data.processorId)
-          || state.accounts.find(a => a.name === 'Accounts Payable' && a.isSystem);
+          || getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Accounts Payable');
         
         let updatedVouchers = state.vouchers;
         let updatedJournalEntries = state.journalEntries;
 
         if (processingExpenseAccount && payableAccount) {
           const voucherId = uuidv4();
-          const prefix = DocumentNumberingService.getVoucherPrefix('Journal Voucher');
-          const yearCount = DocumentNumberingService.countByType(state.vouchers, 'Journal Voucher');
-          const voucherNo = DocumentNumberingService.generateVoucherNumber(prefix, yearCount);
+          const voucherNo = DocumentNumberingService.nextVoucherNumber(state.vouchers, 'Journal Voucher', data.date);
           
           const newVoucher: Voucher = {
             id: voucherId,
@@ -779,14 +798,13 @@ export const useERPStore = create<ERPState>()(
           processorBills: [newBill, ...state.processorBills],
           processingReceipts: updatedReceipts,
           processors: updatedProcessors,
-          ledgerEntries: [ledgerEntry, ...state.ledgerEntries],
           vouchers: updatedVouchers,
           journalEntries: updatedJournalEntries
         };
       }),
 
       addSale: (data) => set((state) => {
-        const invoiceNo = DocumentNumberingService.generateDocumentNumber('INV', state.sales.length);
+        const invoiceNo = DocumentNumberingService.nextDocumentNumber(state.sales, 'invoiceNo', 'INV', data.date);
         const totalAmount = data.pcsSold * data.pricePerPiece;
         
         const saleId = uuidv4();
@@ -824,33 +842,20 @@ export const useERPStore = create<ERPState>()(
         const updatedCustomers = state.customers.map(c => 
           c.id === data.customerId ? { ...c, balanceReceivable: c.balanceReceivable + totalAmount } : c
         );
-
-        const ledgerEntry: LedgerEntry = {
-          id: uuidv4(),
-          date: data.date,
-          partyId: data.customerId,
-          partyType: 'Customer',
-          type: 'Debit',
-          amount: totalAmount,
-          referenceNo: invoiceNo,
-          description: `Sale Invoice for ${data.pcsSold} PCS`
-        };
         
         const nextMovements = movement ? [movement, ...(state.inventoryMovements || [])] : (state.inventoryMovements || []);
 
-        // Automatic Voucher Generation
+        // Automatic Voucher Generation (spec §25 — resolve accounts by subtype, never by name)
         const receivableAccount = state.accounts.find(a => a.linkedEntityId === data.customerId)
-          || state.accounts.find(a => a.name === 'Accounts Receivable' && a.isSystem);
-        const salesAccount = state.accounts.find(a => a.name === 'Sales Revenue' && a.isSystem);
+          || getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Accounts Receivable');
+        const salesAccount = getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Sales');
         
         let updatedVouchers = state.vouchers;
         let updatedJournalEntries = state.journalEntries;
 
         if (receivableAccount && salesAccount) {
           const voucherId = uuidv4();
-          const prefix = DocumentNumberingService.getVoucherPrefix('Sales Voucher');
-          const yearCount = DocumentNumberingService.countByType(state.vouchers, 'Sales Voucher');
-          const voucherNo = DocumentNumberingService.generateVoucherNumber(prefix, yearCount);
+          const voucherNo = DocumentNumberingService.nextVoucherNumber(state.vouchers, 'Sales Voucher', data.date);
           
           const newVoucher: Voucher = {
             id: voucherId,
@@ -897,7 +902,6 @@ export const useERPStore = create<ERPState>()(
           sales: [newSale, ...state.sales],
           materials: updatedMaterials,
           customers: updatedCustomers,
-          ledgerEntries: [ledgerEntry, ...state.ledgerEntries],
           inventoryMovements: nextMovements,
           vouchers: updatedVouchers,
           journalEntries: updatedJournalEntries
@@ -906,18 +910,15 @@ export const useERPStore = create<ERPState>()(
     })),
     {
       name: 'erp-storage',
-      version: 2,
+      version: 3,
       // skipHydration:true prevents Zustand from calling getItem() during store creation
       // (DB isn't initialized yet at that point). Instead, bootstrap() in main.tsx
-      // manually rehydrates the store after DB init by reading key_value_store directly.
+      // manually rehydrates the store after DB init by reading key_value_store directly
+      // (running migrateERPState there).
       skipHydration: true,
       migrate: (persisted: any, version: number) => {
-        if (version < 2) {
-          return {
-            ...persisted,
-            inventoryMovements: persisted.inventoryMovements || [],
-            batches: persisted.batches || [],
-          };
+        if (version < 3) {
+          return migrateERPState(persisted);
         }
         return persisted as ERPState;
       },

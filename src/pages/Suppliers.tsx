@@ -2,28 +2,75 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useERPStore } from "../store/useERPStore";
 import { formatCurrency, cn } from "../lib/utils";
-import { Plus, Truck, X } from "lucide-react";
+import { Plus, Truck, X, Pencil } from "lucide-react";
 import { DataTable, Column } from "../components/DataTable";
+import { PartyLedgerModal } from "../components/PartyLedgerModal";
+import { toast } from "sonner";
 
 export function Suppliers() {
-  const { suppliers, addSupplier } = useERPStore();
+  const { suppliers, addSupplier, updateSupplier } = useERPStore();
   const navigate = useNavigate();
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [newSupplierName, setNewSupplierName] = useState("");
-  const [newSupplierContact, setNewSupplierContact] = useState("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [ledgerParty, setLedgerParty] = useState<{ id: string; name: string; kind: 'Supplier' } | null>(null);
+  const [editingSupplier, setEditingSupplier] = useState<any | null>(null);
+  const [name, setName] = useState("");
+  const [contactPerson, setContactPerson] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [address, setAddress] = useState("");
+  const [ntn, setNtn] = useState("");
+  const [notes, setNotes] = useState("");
 
-  const handleAddSupplier = (e: React.FormEvent) => {
+  const openEditModal = (supplier: any) => {
+    setEditingSupplier(supplier);
+    setName(supplier.name);
+    setContactPerson(supplier.contactPerson || "");
+    setPhone(supplier.phone || "");
+    setEmail(supplier.email || "");
+    setAddress(supplier.address || "");
+    setNtn(supplier.ntn || "");
+    setNotes(supplier.notes || "");
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditingSupplier(null);
+    setName("");
+    setContactPerson("");
+    setPhone("");
+    setEmail("");
+    setAddress("");
+    setNtn("");
+    setNotes("");
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newSupplierName.trim()) return;
-    
-    addSupplier({
-      name: newSupplierName,
-      phone: newSupplierContact
-    });
-    
-    setIsAddModalOpen(false);
-    setNewSupplierName("");
-    setNewSupplierContact("");
+    if (!name.trim()) return;
+
+    const data = {
+      name,
+      contactPerson,
+      phone,
+      email,
+      address,
+      ntn,
+      notes
+    };
+
+    try {
+      if (editingSupplier) {
+        updateSupplier(editingSupplier.id, data);
+        toast.success("Supplier updated successfully");
+      } else {
+        addSupplier(data);
+        toast.success("Supplier created successfully");
+      }
+      closeModal();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to save supplier");
+    }
   };
 
   const columns: Column<typeof suppliers[0]>[] = [
@@ -34,11 +81,15 @@ export function Suppliers() {
       render: (item) => (
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground"><Truck className="h-4 w-4" /></div>
-          <span className="font-medium text-foreground">{item.name}</span>
+          <div>
+            <span className="font-medium text-foreground">{item.name}</span>
+            {item.contactPerson && <div className="text-xs text-muted-foreground">{item.contactPerson}</div>}
+          </div>
         </div>
       )
     },
     { key: "phone", label: "Contact", sortable: true, render: (item) => <span className="text-muted-foreground">{item.phone || '-'}</span> },
+    { key: "ntn", label: "NTN", sortable: true, render: (item) => <span className="font-mono text-xs text-muted-foreground">{item.ntn || '—'}</span> },
     {
       key: "balancePayable",
       label: "Balance Payable",
@@ -56,7 +107,10 @@ export function Suppliers() {
       align: "right",
       render: (item) => (
         <div className="flex justify-end items-center gap-2">
-          <button onClick={() => navigate(`/ledgers?tab=Supplier&id=${item.id}`)} className="px-3 py-1.5 text-xs font-semibold text-foreground/80 bg-card border border-border rounded-md hover:bg-muted/40">Ledger</button>
+          <button onClick={() => openEditModal(item)} className="p-1.5 text-muted-foreground/80 hover:text-primary transition-colors" title="Edit Supplier">
+            <Pencil className="h-4 w-4" />
+          </button>
+          <button onClick={() => setLedgerParty({ id: item.id, name: item.name, kind: 'Supplier' })} className="px-3 py-1.5 text-xs font-semibold text-primary bg-primary/10 border border-primary/20 rounded-md hover:bg-primary/20 transition-all">View Ledger</button>
           <button onClick={() => navigate(`/ledgers?tab=Supplier&id=${item.id}&action=pay`)} className="px-3 py-1.5 text-xs font-semibold text-foreground bg-card border border-border rounded-md hover:bg-muted/40">Pay</button>
         </div>
       )
@@ -71,7 +125,7 @@ export function Suppliers() {
           <p className="text-sm text-muted-foreground mt-1">Manage vendors and accounts payable.</p>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => setIsAddModalOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
+          <button onClick={() => setIsModalOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
             <Plus className="h-4 w-4" /> Create New
           </button>
         </div>
@@ -80,27 +134,36 @@ export function Suppliers() {
       <DataTable
         data={suppliers}
         columns={columns}
-        searchKeys={["name", "phone"]}
+        searchKeys={["name", "phone", "ntn", "contactPerson"]}
         searchPlaceholder="Search suppliers..."
         persistKey="suppliers-table"
         defaultSortKey="name"
       />
 
-      {isAddModalOpen && (
+      {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-card rounded-2xl shadow-xl w-full max-w-md">
             <div className="px-6 py-4 border-b flex justify-between">
-              <h3 className="text-lg font-bold">Add Supplier</h3>
-              <button onClick={() => setIsAddModalOpen(false)}><X className="h-5 w-5 text-muted-foreground/80" /></button>
+              <h3 className="text-lg font-bold">{editingSupplier ? 'Edit Supplier' : 'Add Supplier'}</h3>
+              <button onClick={closeModal}><X className="h-5 w-5 text-muted-foreground/80" /></button>
             </div>
-            <form onSubmit={handleAddSupplier} className="p-6 pb-64 space-y-4">
-              <input type="text" required value={newSupplierName} onChange={e => setNewSupplierName(e.target.value)} className="w-full rounded-xl border p-3 text-sm" placeholder="Supplier Name *" />
-              <input type="text" value={newSupplierContact} onChange={e => setNewSupplierContact(e.target.value)} className="w-full rounded-xl border p-3 text-sm" placeholder="Contact Details" />
-              <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">Add Supplier</button>
+            <form onSubmit={handleSubmit} className="p-6 pb-64 space-y-4">
+              <input type="text" required value={name} onChange={e => setName(e.target.value)} className="w-full rounded-xl border p-3 text-sm" placeholder="Supplier Name *" />
+              <input type="text" value={contactPerson} onChange={e => setContactPerson(e.target.value)} className="w-full rounded-xl border p-3 text-sm" placeholder="Contact Person" />
+              <div className="grid grid-cols-2 gap-3">
+                <input type="text" value={phone} onChange={e => setPhone(e.target.value)} className="w-full rounded-xl border p-3 text-sm" placeholder="Phone" />
+                <input type="text" value={ntn} onChange={e => setNtn(e.target.value)} className="w-full rounded-xl border p-3 text-sm" placeholder="NTN Number" />
+              </div>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full rounded-xl border p-3 text-sm" placeholder="Email" />
+              <textarea value={address} onChange={e => setAddress(e.target.value)} rows={2} className="w-full rounded-xl border p-3 text-sm" placeholder="Address" />
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="w-full rounded-xl border p-3 text-sm" placeholder="Notes" />
+              <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">{editingSupplier ? 'Save Changes' : 'Add Supplier'}</button>
             </form>
           </div>
         </div>
       )}
+
+      {ledgerParty && <PartyLedgerModal party={ledgerParty} onClose={() => setLedgerParty(null)} />}
     </div>
   );
 }

@@ -1,4 +1,5 @@
-import { Account, Voucher, JournalEntry } from '../../types/erp';
+import { Account, Voucher, JournalEntry, AccountSubtype } from '../../types/erp';
+import { getCashBankAccounts } from '../accounting/accountClassification';
 
 export interface CashBookRow {
   date: string;
@@ -30,30 +31,9 @@ export interface CashPosition {
 
 export class CashBookEngine {
   /**
-   * Identify cash/bank account IDs from the accounts list.
-   */
-  static getCashBankAccountIds(accounts: Account[]): string[] {
-    return accounts
-      .filter(a => {
-        const name = a.name.toLowerCase();
-        return name.includes('cash') || name.includes('bank');
-      })
-      .map(a => a.id);
-  }
-
-  /**
-   * Identify cash/bank accounts from the accounts list.
-   */
-  static getCashBankAccounts(accounts: Account[]): Account[] {
-    return accounts.filter(a => {
-      const name = a.name.toLowerCase();
-      return name.includes('cash') || name.includes('bank');
-    });
-  }
-
-  /**
    * Calculate the opening balance for a set of cash/bank accounts
    * as of a specific date (before any transactions on that date).
+   * Only Posted vouchers count — cancelled vouchers never affect cash (spec §14).
    */
   static calculateOpeningBalance(
     cashAccountIds: string[],
@@ -79,9 +59,12 @@ export class CashBookEngine {
     const relevantEntries = asOfDate
       ? journalEntries.filter(je => {
           const voucher = vouchers.find(v => v.id === je.voucherId);
-          return cashAccountIds.includes(je.accountId) && voucher && voucher.date < asOfDate;
+          return cashAccountIds.includes(je.accountId) && voucher && voucher.status === 'Posted' && voucher.date < asOfDate;
         })
-      : journalEntries.filter(je => cashAccountIds.includes(je.accountId));
+      : journalEntries.filter(je => {
+          const voucher = vouchers.find(v => v.id === je.voucherId);
+          return cashAccountIds.includes(je.accountId) && voucher && voucher.status === 'Posted';
+        });
 
     relevantEntries.forEach(je => {
       balance += je.debit - je.credit;
@@ -106,8 +89,11 @@ export class CashBookEngine {
       cashAccountIds, accounts, journalEntries, vouchers, dateFrom
     );
 
-    // Filter entries in date range
-    let entries = journalEntries.filter(je => cashAccountIds.includes(je.accountId));
+    // Filter entries in date range (Posted only — cancelled excluded, spec §14)
+    let entries = journalEntries.filter(je => {
+      const v = vouchers.find(v => v.id === je.voucherId);
+      return cashAccountIds.includes(je.accountId) && v && v.status === 'Posted';
+    });
 
     if (dateFrom) {
       entries = entries.filter(je => {
@@ -195,13 +181,15 @@ export class CashBookEngine {
 
   /**
    * Get the cash position for the dashboard (today's data).
+   * Cash/bank accounts are resolved by subtype (spec §25), never by name.
    */
   static getCashPosition(
     accounts: Account[],
     journalEntries: JournalEntry[],
-    vouchers: Voucher[]
+    vouchers: Voucher[],
+    accountSubtypes: AccountSubtype[]
   ): CashPosition {
-    const cashAccountIds = this.getCashBankAccountIds(accounts);
+    const cashAccountIds = getCashBankAccounts(accounts, accountSubtypes).map(a => a.id);
     const today = new Date().toISOString().split('T')[0];
     const summary = this.getDailySummary(
       today, cashAccountIds, accounts, journalEntries, vouchers

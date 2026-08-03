@@ -11,7 +11,7 @@ import { Plus, Trash2, CheckCircle2, Info, Send, RotateCcw, X } from 'lucide-rea
 import { AddAccountModal } from './AddAccountModal';
 import { AccountType } from '../types/erp';
 
-type CashbookEntryType = 'Payment' | 'Receipt' | 'Contra' | 'Journal';
+type CashbookEntryType = 'Payment' | 'Receipt' | 'Journal';
 type RowType = 'supplier' | 'customer' | 'processor' | 'expense' | 'income' | 'cash' | 'account';
 
 interface EntryRow {
@@ -28,6 +28,8 @@ interface CashbookVoucherFormProps {
   defaultAccountId?: string;
   /** Entry type to open with when creating a fresh voucher (defaults to Payment). */
   defaultEntryType?: CashbookEntryType;
+  /** Constrain the header ledger to Cash-only or Bank-only accounts (voucher pages). */
+  ledgerKind?: 'cash' | 'bank';
   /** sourceModule tag written onto created vouchers (defaults to 'Cashbook'). */
   sourceModule?: string;
   onSaved?: () => void;
@@ -48,13 +50,6 @@ const ENTRY_TYPE_META: { value: CashbookEntryType; label: string; icon: string; 
     accentText: 'text-emerald-600 dark:text-emerald-400',
     accentBtn: 'bg-emerald-600 hover:bg-emerald-500',
     accentChipActive: 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800',
-  },
-  {
-    value: 'Contra', label: 'Contra', icon: '🔄',
-    activeClass: 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800',
-    accentText: 'text-amber-600 dark:text-amber-400',
-    accentBtn: 'bg-amber-600 hover:bg-amber-500',
-    accentChipActive: 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800',
   },
   {
     value: 'Journal', label: 'Journal', icon: '📝',
@@ -78,18 +73,16 @@ const ROW_TYPES: Record<CashbookEntryType, { value: RowType; label: string }[]> 
     { value: 'income', label: 'Income' },
     { value: 'account', label: 'Ledger Account' },
   ],
-  Contra: [{ value: 'cash', label: 'Bank/Cash' }],
   Journal: [{ value: 'account', label: 'Ledger Account' }],
 };
 
 const DEFAULT_ROW_TYPE: Record<CashbookEntryType, RowType> = {
   Payment: 'supplier',
   Receipt: 'customer',
-  Contra: 'cash',
   Journal: 'account',
 };
 
-export function CashbookVoucherForm({ editVoucherId, defaultAccountId, defaultEntryType, sourceModule, onSaved, onCancel }: CashbookVoucherFormProps) {
+export function CashbookVoucherForm({ editVoucherId, defaultAccountId, defaultEntryType, ledgerKind, sourceModule, onSaved, onCancel }: CashbookVoucherFormProps) {
   const { accounts, suppliers, customers, processors, accountSubtypes, vouchers, journalEntries } = useERPStore();
 
   const initialType = defaultEntryType || 'Payment';
@@ -118,14 +111,17 @@ export function CashbookVoucherForm({ editVoucherId, defaultAccountId, defaultEn
     setCashAccountId('');
   };
 
-  // Cash & Bank accounts
+  // Cash & Bank accounts (optionally constrained to one kind by the voucher page)
   const cashAccounts = useMemo(() =>
     accounts.filter(a => {
       const sub = accountSubtypes?.find(s => s.id === a.subtypeId);
-      return sub?.name === 'Cash' || sub?.name === 'Bank' ||
-        a.name.toLowerCase().includes('cash') || a.name.toLowerCase().includes('bank');
+      const isCash = sub?.name === 'Cash' || (!sub && a.name.toLowerCase().includes('cash'));
+      const isBank = sub?.name === 'Bank' || (!sub && a.name.toLowerCase().includes('bank'));
+      if (ledgerKind === 'cash') return isCash;
+      if (ledgerKind === 'bank') return isBank;
+      return isCash || isBank;
     }),
-    [accounts, accountSubtypes]
+    [accounts, accountSubtypes, ledgerKind]
   );
 
   const isCashOrBank = (acc: any): boolean => {
@@ -137,7 +133,6 @@ export function CashbookVoucherForm({ editVoucherId, defaultAccountId, defaultEn
 
   // Resolve voucher type from the entry type + ledger subtype
   const voucherType = useMemo(() => {
-    if (entryType === 'Contra') return 'Contra Voucher';
     if (entryType === 'Journal') return 'Journal Voucher';
     const cashAcc = accounts.find(a => a.id === cashAccountId);
     const sub = accountSubtypes?.find(s => s.id === cashAcc?.subtypeId);
@@ -149,13 +144,13 @@ export function CashbookVoucherForm({ editVoucherId, defaultAccountId, defaultEn
   const isEditing = !!editVoucherId;
   const editingVoucher = isEditing ? vouchers.find(v => v.id === editVoucherId) : undefined;
 
-  // Voucher number: existing when editing, next preview otherwise
+  // Voucher number: existing when editing, next preview otherwise.
+  // Uses the same max-based, date-year-scoped allocator as addVoucher so the
+  // preview always matches the number actually saved (was off-by-one before).
   const voucherNo = useMemo(() => {
     if (editingVoucher) return editingVoucher.voucherNo;
-    const prefix = DocumentNumberingService.getVoucherPrefix(voucherType);
-    const count = DocumentNumberingService.countByType(vouchers, voucherType);
-    return DocumentNumberingService.generateVoucherNumber(prefix, count + 1);
-  }, [editingVoucher, vouchers, voucherType]);
+    return DocumentNumberingService.nextVoucherNumber(vouchers, voucherType, date);
+  }, [editingVoucher, vouchers, voucherType, date]);
 
   // Pre-fill from an existing voucher (edit mode)
   useEffect(() => {
@@ -165,14 +160,13 @@ export function CashbookVoucherForm({ editVoucherId, defaultAccountId, defaultEn
     const jes = journalEntries.filter(je => je.voucherId === editVoucherId);
 
     let et: CashbookEntryType = 'Journal';
-    if (v.type === 'Cash Receipt' || v.type === 'Bank Receipt' || v.type === 'Receipt Voucher') et = 'Receipt';
-    else if (v.type === 'Cash Payment' || v.type === 'Bank Payment' || v.type === 'Payment Voucher') et = 'Payment';
-    else if (v.type === 'Contra Voucher') et = 'Contra';
+    if (v.type === 'Cash Receipt' || v.type === 'Bank Receipt') et = 'Receipt';
+    else if (v.type === 'Cash Payment' || v.type === 'Bank Payment') et = 'Payment';
     setEntryType(et);
     setDate(v.date);
     setNarration(v.narration || '');
 
-    // Header ledger = the cash side (credit for payment/contra/journal, debit for receipt)
+    // Header ledger = the cash side (credit for payment/journal, debit for receipt)
     const headerJe = et === 'Receipt'
       ? jes.find(je => je.debit > 0)
       : jes.find(je => je.credit > 0);
@@ -390,9 +384,7 @@ export function CashbookVoucherForm({ editVoucherId, defaultAccountId, defaultEn
     ? 'Cash/Bank (Credit — paying from)'
     : entryType === 'Receipt'
       ? 'Cash/Bank (Debit — receiving into)'
-      : entryType === 'Contra'
-        ? 'Transfer From (Credit)'
-        : 'Credit Side Account';
+      : 'Credit Side Account';
 
   return (
     <>
@@ -509,7 +501,7 @@ export function CashbookVoucherForm({ editVoucherId, defaultAccountId, defaultEn
               <tr className="bg-muted/30 border-b border-border/50 [&>th:first-child]:rounded-tl-xl [&>th:last-child]:rounded-tr-xl">
                 <th className="px-4 py-3.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-10">#</th>
                 <th className="px-4 py-3.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  {entryType === 'Payment' ? 'Debit Account / Vendor' : entryType === 'Receipt' ? 'Credit Account / Party' : entryType === 'Contra' ? 'Transfer To (Debit)' : 'Debit Account'}
+                  {entryType === 'Payment' ? 'Debit Account / Vendor' : entryType === 'Receipt' ? 'Credit Account / Party' : 'Debit Account'}
                 </th>
                 <th className="px-4 py-3.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-40">Invoice Ref</th>
                 <th className="px-4 py-3.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Description</th>
@@ -629,13 +621,13 @@ export function CashbookVoucherForm({ editVoucherId, defaultAccountId, defaultEn
                 ? 'e.g. Payment to suppliers & expenses for the month'
                 : entryType === 'Receipt'
                   ? 'e.g. Cash received against invoices & other income'
-                  : 'e.g. Transfer between cash and bank accounts'}
+                  : 'e.g. Depreciation, accruals and other adjustments'}
               className="w-full rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary resize-none"
             />
           </div>
           <div className="col-span-12 lg:col-span-4 bg-card border border-border/50 rounded-xl p-5 shadow-sm space-y-3">
             <div className="flex justify-between text-sm text-muted-foreground">
-              <span>{entryType === 'Receipt' ? 'Subtotal Receipts' : entryType === 'Contra' ? 'Subtotal Transfers' : 'Subtotal Debits'}</span>
+              <span>{entryType === 'Receipt' ? 'Subtotal Receipts' : 'Subtotal Debits'}</span>
               <span className="font-medium">PKR {total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
             <div className="flex justify-between text-sm text-muted-foreground">

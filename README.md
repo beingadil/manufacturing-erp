@@ -38,6 +38,19 @@ An enterprise-grade, offline-first manufacturing ERP tailored for metal utensils
    npm run build
    ```
 
+## Code Signing
+Windows SmartScreen will warn users about an "unknown publisher" until the installer is signed. See [`CODE_SIGNING.md`](CODE_SIGNING.md) for the full guide — Azure Trusted Signing (recommended), public CA certs, and a self-signed cert for local pipeline testing.
+
+## Documentation
+
+Reusable guides live in [`docs/`](docs/) and ship with the repo:
+
+- [`docs/DATABASE_ARCHITECTURE.md`](docs/DATABASE_ARCHITECTURE.md) — persistence layer, SQLite bridging, and boot sequence.
+- [`docs/SQLITE_SCHEMA.md`](docs/SQLITE_SCHEMA.md) — normalized tables, relationships, and the migration engine.
+- [`docs/DESIGN.md`](docs/DESIGN.md) — visual design system (colors, typography, motion).
+- [`docs/PRODUCTION_CHECKLIST.md`](docs/PRODUCTION_CHECKLIST.md) — release-readiness checklist.
+- [`docs/RELEASING.md`](docs/RELEASING.md) — step-by-step release process so users get auto-updates.
+
 ## Production Readiness
 This project has been fully audited, benchmarked, and certified for enterprise production use. 
 - Passed stress tests of 230,000+ operational records.

@@ -4,14 +4,34 @@ import { useLocation } from "react-router-dom";
 import { useERPStore } from "../store/useERPStore";
 import { cn } from "../lib/utils";
 import { SearchableSelect } from "../components/SearchableSelect";
-import { Calculator, BookText, Receipt, Landmark, Wallet, Plus, Search, Filter, Database, Folder, FolderOpen, Eye, Edit, Trash2, Printer } from "lucide-react";
-import { Account, AccountSubtype, AccountType, Voucher, JournalEntry } from "../types/erp";
-import { CreateVoucherModal } from "../components/CreateVoucherModal";
-import { CashbookEntryModal } from "../components/CashbookEntryModal";
+import { Calculator, Plus, Search, Folder, FolderOpen, Edit, Trash2, Printer, CalendarRange } from "lucide-react";
+import { Account, AccountType, JournalEntry, Voucher } from "../types/erp";
 import { AddAccountModal } from "../components/AddAccountModal";
-import { Cashbook } from "../components/Cashbook";
-import { OpeningBalance } from "./finance/OpeningBalance";
-import { generateVoucherPDF, generateLedgerStatementPDF } from "../lib/documentGenerators";
+import { generateLedgerStatementPDF } from "../lib/documentGenerators";
+import { getCashBankAccounts } from "../lib/accounting/accountClassification";
+import { AccountingEngine } from "../lib/accounting/AccountingEngine";
+
+/**
+ * Shared report helper (spec §14, §24): returns only journal entries whose
+ * voucher is Posted and falls inside the optional date window. Cancelled and
+ * deleted vouchers never affect any report.
+ */
+function activeEntries(
+  journalEntries: JournalEntry[],
+  vouchers: Voucher[],
+  dateFrom?: string,
+  dateTo?: string
+): JournalEntry[] {
+  const active = vouchers.filter(v => v.status === 'Posted');
+  const dates = new Map(active.map(v => [v.id, v.date]));
+  return journalEntries.filter(je => {
+    const d = dates.get(je.voucherId);
+    if (!d) return false;
+    if (dateFrom && d < dateFrom) return false;
+    if (dateTo && d > dateTo) return false;
+    return true;
+  });
+}
 
 export function Accounting() {
   const location = useLocation();
@@ -22,9 +42,6 @@ export function Accounting() {
     <div className="space-y-6 flex flex-col h-[calc(100vh-6rem)]">
       <div className="bg-card rounded-xl border border-border/50 shadow-sm flex-1 flex flex-col overflow-hidden">
         {activeTab === 'chart-of-accounts' && <ChartOfAccounts />}
-        {activeTab === 'cashbook' && <Cashbook />}
-        {activeTab === 'journal-vouchers' && <JournalVouchers />}
-        {activeTab === 'opening-balance' && <OpeningBalance />}
         {activeTab === 'general-ledger' && <GeneralLedger />}
         {activeTab === 'trial-balance' && <TrialBalance />}
         {activeTab === 'profit-loss' && <ProfitAndLoss />}
@@ -40,48 +57,32 @@ export function Accounting() {
 function GeneralLedger() {
   const { accounts, vouchers, journalEntries, suppliers, customers, processors, accountSubtypes } = useERPStore();
   const [selectedAccountId, setSelectedAccountId] = useState<string>(accounts[0]?.id || "");
-  const [dateRange, setDateRange] = useState("this-month");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const account = accounts.find(a => a.id === selectedAccountId);
-  
-  const entries = journalEntries
-    .filter(je => je.accountId === selectedAccountId)
-    .map(je => {
-      const voucher = vouchers.find(v => v.id === je.voucherId);
-      return {
-        ...je,
-        voucher,
-        date: voucher?.date || new Date().toISOString()
-      };
-    })
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  let runningBalance = account ? (account.openingBalanceType === 'Debit' ? account.openingBalance : -account.openingBalance) : 0;
-  if (account && (account.type === 'Liabilities' || account.type === 'Equity' || account.type === 'Revenue' || account.type === 'Other Income')) {
-      runningBalance = account.openingBalanceType === 'Credit' ? account.openingBalance : -account.openingBalance;
-  }
-
-  const processedEntries = entries.map(entry => {
-    let increase = 0;
-    if (account && (account.type === 'Assets' || account.type === 'Expenses' || account.type === 'Cost of Goods Sold' || account.type === 'Other Expenses')) {
-       runningBalance += entry.debit - entry.credit;
-    } else {
-       runningBalance += entry.credit - entry.debit;
-    }
-    return { ...entry, runningBalance };
-  });
+  // Single engine source for ledger rows + running balance (spec §24, §14)
+  const { rows: processedEntries, openingBalance } = AccountingEngine.getLedger(
+    selectedAccountId,
+    accounts,
+    journalEntries,
+    vouchers,
+    dateFrom || undefined,
+    dateTo || undefined
+  );
 
   const handlePrintLedger = () => {
     if (!account) return;
     const transactions = processedEntries.map(e => ({
-      date: new Date(e.date).toLocaleDateString(),
+      date: new Date(e.voucher?.date || new Date().toISOString()).toLocaleDateString(),
       referenceNo: e.voucher?.voucherNo || '-',
       description: e.narration || '-',
       debit: e.debit,
       credit: e.credit,
       balance: e.runningBalance
     }));
-    generateLedgerStatementPDF(account.name, 'Account', transactions, runningBalance);
+    generateLedgerStatementPDF(account.name, 'Account', transactions, processedEntries[processedEntries.length - 1]?.runningBalance ?? openingBalance);
   };
 
   return (
@@ -100,6 +101,21 @@ function GeneralLedger() {
             <Printer className="h-4 w-4" />
             Print Ledger
           </button>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={e => setDateFrom(e.target.value)}
+            className="px-3 py-2 rounded-lg border border-border bg-background text-sm"
+            title="Date From"
+          />
+          <span className="text-muted-foreground text-sm">to</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={e => setDateTo(e.target.value)}
+            className="px-3 py-2 rounded-lg border border-border bg-background text-sm"
+            title="Date To"
+          />
           <div className="w-full sm:w-80">
             <SearchableSelect 
               options={accounts.map(a => {
@@ -143,14 +159,14 @@ function GeneralLedger() {
             {account && (
               <tr className="bg-muted/10">
                 <td className="py-3 px-6 text-sm text-foreground" colSpan={3}>Opening Balance</td>
-                <td className="py-3 px-6 text-sm text-right text-foreground">{account.openingBalanceType === 'Debit' ? account.openingBalance.toLocaleString() : ''}</td>
-                <td className="py-3 px-6 text-sm text-right text-foreground">{account.openingBalanceType === 'Credit' ? account.openingBalance.toLocaleString() : ''}</td>
-                <td className="py-3 px-6 text-sm text-right font-medium text-foreground">{account.openingBalance.toLocaleString()} {account.openingBalanceType === 'Debit' ? 'Dr' : 'Cr'}</td>
+                <td className="py-3 px-6 text-sm text-right text-foreground">{openingBalance >= 0 ? openingBalance.toLocaleString() : ''}</td>
+                <td className="py-3 px-6 text-sm text-right text-foreground">{openingBalance < 0 ? Math.abs(openingBalance).toLocaleString() : ''}</td>
+                <td className="py-3 px-6 text-sm text-right font-medium text-foreground">{Math.abs(openingBalance).toLocaleString()} {openingBalance >= 0 ? (account.type === 'Assets' || account.type === 'Expenses' || account.type === 'Cost of Goods Sold' || account.type === 'Other Expenses' ? 'Dr' : 'Cr') : (account.type === 'Assets' || account.type === 'Expenses' || account.type === 'Cost of Goods Sold' || account.type === 'Other Expenses' ? 'Cr' : 'Dr')}</td>
               </tr>
             )}
             {processedEntries.map((entry) => (
               <tr key={entry.id} className="hover:bg-muted/20 transition-colors">
-                <td className="py-3 px-6 text-sm text-foreground whitespace-nowrap">{new Date(entry.date).toLocaleDateString()}</td>
+                <td className="py-3 px-6 text-sm text-foreground whitespace-nowrap">{new Date(entry.voucher?.date || new Date().toISOString()).toLocaleDateString()}</td>
                 <td className="py-3 px-6 text-sm font-medium text-foreground">{entry.voucher?.voucherNo}</td>
                 <td className="py-3 px-6 text-sm text-muted-foreground">{entry.voucher?.narration}</td>
                 <td className="py-3 px-6 text-sm text-right text-foreground">{entry.debit > 0 ? entry.debit.toLocaleString() : ''}</td>
@@ -173,14 +189,17 @@ function GeneralLedger() {
 }
 
 function BalanceSheet() {
-  const { accounts, journalEntries } = useERPStore();
-  
+  const { accounts, journalEntries, vouchers } = useERPStore();
+  const [asOfDate, setAsOfDate] = useState('');
+
+  const active = activeEntries(journalEntries, vouchers, undefined, asOfDate || undefined);
+
   // Calculate balances
   const balances = accounts.map(account => {
     let totalDebit = account.openingBalanceType === 'Debit' ? account.openingBalance : 0;
     let totalCredit = account.openingBalanceType === 'Credit' ? account.openingBalance : 0;
     
-    const entries = journalEntries.filter(je => je.accountId === account.id);
+    const entries = active.filter(je => je.accountId === account.id);
     entries.forEach(entry => {
       totalDebit += entry.debit;
       totalCredit += entry.credit;
@@ -221,6 +240,16 @@ function BalanceSheet() {
           <p className="text-sm text-muted-foreground">Statement of financial position</p>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="flex items-center gap-2 bg-muted/20 border border-border/50 rounded-lg px-3 py-2">
+            <CalendarRange className="h-4 w-4 text-muted-foreground" />
+            <input
+              type="date"
+              value={asOfDate}
+              onChange={e => setAsOfDate(e.target.value)}
+              className="bg-transparent text-sm text-foreground focus:outline-none"
+              title="As of date"
+            />
+          </div>
           <button className="flex items-center gap-2 bg-muted text-foreground px-4 py-2 rounded-lg hover:bg-muted/80 transition-colors text-sm font-medium whitespace-nowrap border border-border/50">
             Export
           </button>
@@ -231,7 +260,7 @@ function BalanceSheet() {
         <div className="w-full max-w-4xl bg-card border border-border/50 rounded-xl p-8 shadow-sm my-auto">
           <div className="text-center mb-8 pb-6 border-b border-border/50">
             <h2 className="text-2xl font-bold text-foreground">Balance Sheet</h2>
-            <p className="text-muted-foreground mt-1">As of {new Date().toLocaleDateString()}</p>
+            <p className="text-muted-foreground mt-1">As of {asOfDate ? new Date(asOfDate).toLocaleDateString() : new Date().toLocaleDateString()}</p>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -293,155 +322,6 @@ function BalanceSheet() {
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function JournalVouchers() {
-  const { vouchers, journalEntries, accounts } = useERPStore();
-  const [search, setSearch] = useState("");
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editVoucherId, setEditVoucherId] = useState<string | undefined>();
-
-  const filteredVouchers = vouchers.filter(v => 
-    v.voucherNo.toLowerCase().includes(search.toLowerCase()) || 
-    v.narration.toLowerCase().includes(search.toLowerCase()) ||
-    v.referenceNo?.toLowerCase().includes(search.toLowerCase())
-  );
-
-  return (
-    <div className="flex-1 flex flex-col h-full">
-      <div className="p-6 border-b border-border/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">Vouchers</h2>
-          <p className="text-sm text-muted-foreground">Manage journal and transaction vouchers</p>
-        </div>
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Search vouchers..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-muted/40 border border-border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-colors"
-            />
-          </div>
-          <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium whitespace-nowrap">
-            <Plus className="h-4 w-4" />
-            Create JV
-          </button>
-        </div>
-      </div>
-      
-      <div className="flex-1 overflow-auto">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="border-b border-border/50 bg-muted/30">
-              <th className="py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Date</th>
-              <th className="py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Voucher No</th>
-              <th className="py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Type</th>
-              <th className="py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Reference</th>
-              <th className="py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Amount</th>
-              <th className="py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
-              <th className="py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/50">
-            {filteredVouchers.map((voucher) => (
-              <React.Fragment key={voucher.id}>
-                <tr className="hover:bg-muted/20 transition-colors group">
-                  <td className="py-3 px-6 text-sm text-foreground whitespace-nowrap">{new Date(voucher.date).toLocaleDateString()}</td>
-                  <td className="py-3 px-6 text-sm font-medium text-foreground">{voucher.voucherNo}</td>
-                  <td className="py-3 px-6 text-sm text-muted-foreground">{voucher.type}</td>
-                  <td className="py-3 px-6 text-sm text-muted-foreground">{voucher.referenceNo || '-'}</td>
-                  <td className="py-3 px-6 text-sm font-medium text-foreground">PKR {voucher.totalDebit.toLocaleString()}</td>
-                  <td className="py-3 px-6">
-                    <span className={cn(
-                      "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
-                      voucher.status === 'Posted' ? "bg-success/10 text-success" :
-                      voucher.status === 'Draft' ? "bg-warning/10 text-warning" :
-                      "bg-destructive/10 text-destructive"
-                    )}>
-                      {voucher.status}
-                    </span>
-                  </td>
-                  <td className="py-3 px-6 text-right space-x-2">
-                    <button 
-                      className="text-muted-foreground hover:text-primary transition-colors" 
-                      title="Print Voucher"
-                      onClick={() => generateVoucherPDF(voucher, journalEntries.filter(je => je.voucherId === voucher.id), accounts, [])}
-                    >
-                      <Printer className="h-4 w-4 inline" />
-                    </button>
-                    <button className="text-muted-foreground hover:text-primary transition-colors" title="View details">
-                      <Eye className="h-4 w-4 inline" />
-                    </button>
-                    <button 
-                      className="text-muted-foreground hover:text-primary transition-colors"
-                      title="Edit voucher"
-                      onClick={() => setEditVoucherId(voucher.id)}
-                    >
-                      <Edit className="h-4 w-4 inline" />
-                    </button>
-                  </td>
-                </tr>
-                {/* Embedded Journal Entries (Simple View) */}
-                <tr className="bg-muted/5 border-b border-border/50">
-                  <td colSpan={7} className="px-6 py-2 pb-4">
-                    <div className="pl-6 border-l-2 border-primary/20">
-                      <p className="text-xs text-muted-foreground italic mb-2">{voucher.narration}</p>
-                      <table className="w-full max-w-2xl text-xs text-left">
-                        <thead>
-                          <tr className="text-muted-foreground">
-                            <th className="font-medium pb-1 w-1/2">Account</th>
-                            <th className="font-medium pb-1 text-right w-1/4">Debit</th>
-                            <th className="font-medium pb-1 text-right w-1/4">Credit</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border/20">
-                          {journalEntries.filter(je => je.voucherId === voucher.id).map((entry) => {
-                            const account = accounts.find(a => a.id === entry.accountId);
-                            return (
-                              <tr key={entry.id}>
-                                <td className="py-1 text-foreground">{account?.name || 'Unknown Account'} {account && <span className="text-muted-foreground opacity-70">({account.code})</span>}</td>
-                                <td className="py-1 text-right text-foreground">{entry.debit > 0 ? entry.debit.toLocaleString() : ''}</td>
-                                <td className="py-1 text-right text-foreground">{entry.credit > 0 ? entry.credit.toLocaleString() : ''}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </td>
-                </tr>
-              </React.Fragment>
-            ))}
-            
-            {filteredVouchers.length === 0 && (
-              <tr>
-                <td colSpan={7} className="py-8 text-center text-muted-foreground text-sm">
-                  No vouchers found.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-      <CreateVoucherModal 
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSave={() => setIsModalOpen(false)}
-      />
-
-      {editVoucherId && (
-        <CashbookEntryModal 
-          isOpen={true}
-          onClose={() => setEditVoucherId(undefined)}
-          onSave={() => setEditVoucherId(undefined)}
-          editVoucherId={editVoucherId}
-        />
-      )}
     </div>
   );
 }
@@ -615,46 +495,17 @@ function ChartOfAccounts() {
 }
 
 function TrialBalance() {
-  const { accounts, journalEntries } = useERPStore();
-  
-  // Calculate balances
-  const balances = accounts.map(account => {
-    let totalDebit = account.openingBalanceType === 'Debit' ? account.openingBalance : 0;
-    let totalCredit = account.openingBalanceType === 'Credit' ? account.openingBalance : 0;
-    
-    const entries = journalEntries.filter(je => je.accountId === account.id);
-    entries.forEach(entry => {
-      totalDebit += entry.debit;
-      totalCredit += entry.credit;
-    });
-    
-    // Net balance
-    let balance = 0;
-    let balanceType = 'Debit';
-    
-    if (account.type === 'Assets' || account.type === 'Expenses' || account.type === 'Cost of Goods Sold') {
-      balance = totalDebit - totalCredit;
-      balanceType = balance >= 0 ? 'Debit' : 'Credit';
-      balance = Math.abs(balance);
-    } else {
-      balance = totalCredit - totalDebit;
-      balanceType = balance >= 0 ? 'Credit' : 'Debit';
-      balance = Math.abs(balance);
-    }
-    
-    return {
-      ...account,
-      totalDebit,
-      totalCredit,
-      balance,
-      balanceType
-    };
-  }).filter(b => b.totalDebit > 0 || b.totalCredit > 0 || b.balance > 0);
+  const { accounts, journalEntries, vouchers, accountSubtypes } = useERPStore();
+  const [asOfDate, setAsOfDate] = useState('');
 
-  const grandTotalDebit = balances.reduce((sum, b) => sum + (b.balanceType === 'Debit' ? b.balance : 0), 0);
-  const grandTotalCredit = balances.reduce((sum, b) => sum + (b.balanceType === 'Credit' ? b.balance : 0), 0);
-  
-  const isBalanced = grandTotalDebit === grandTotalCredit;
+  // Single engine source (spec §19, §24)
+  const tb = AccountingEngine.getTrialBalance(
+    accounts, accountSubtypes, journalEntries, vouchers, asOfDate || undefined
+  );
+  const balances = tb.rows;
+  const grandTotalDebit = tb.totalDebit;
+  const grandTotalCredit = tb.totalCredit;
+  const isBalanced = tb.balanced;
 
   return (
     <div className="flex-1 flex flex-col h-full">
@@ -664,6 +515,16 @@ function TrialBalance() {
           <p className="text-sm text-muted-foreground">Verify the equality of debits and credits</p>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="flex items-center gap-2 bg-muted/20 border border-border/50 rounded-lg px-3 py-2">
+            <CalendarRange className="h-4 w-4 text-muted-foreground" />
+            <input
+              type="date"
+              value={asOfDate}
+              onChange={e => setAsOfDate(e.target.value)}
+              className="bg-transparent text-sm text-foreground focus:outline-none"
+              title="As of date"
+            />
+          </div>
           <button className="flex items-center gap-2 bg-muted text-foreground px-4 py-2 rounded-lg hover:bg-muted/80 transition-colors text-sm font-medium whitespace-nowrap border border-border/50">
             Export
           </button>
@@ -682,12 +543,12 @@ function TrialBalance() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
-              {balances.map((account) => (
-                <tr key={account.id} className="hover:bg-muted/20 transition-colors group">
-                  <td className="py-2.5 px-6 text-sm font-mono text-muted-foreground">{account.code}</td>
-                  <td className="py-2.5 px-6 text-sm font-medium text-foreground">{account.name}</td>
-                  <td className="py-2.5 px-6 text-sm text-foreground text-right">{account.balanceType === 'Debit' && account.balance > 0 ? account.balance.toLocaleString() : '-'}</td>
-                  <td className="py-2.5 px-6 text-sm text-foreground text-right">{account.balanceType === 'Credit' && account.balance > 0 ? account.balance.toLocaleString() : '-'}</td>
+              {balances.map((row) => (
+                <tr key={row.account.id} className="hover:bg-muted/20 transition-colors group">
+                  <td className="py-2.5 px-6 text-sm font-mono text-muted-foreground">{row.account.code}</td>
+                  <td className="py-2.5 px-6 text-sm font-medium text-foreground">{row.account.name}</td>
+                  <td className="py-2.5 px-6 text-sm text-foreground text-right">{row.debit > 0 ? row.debit.toLocaleString() : '-'}</td>
+                  <td className="py-2.5 px-6 text-sm text-foreground text-right">{row.credit > 0 ? row.credit.toLocaleString() : '-'}</td>
                 </tr>
               ))}
               
@@ -725,14 +586,18 @@ function TrialBalance() {
 }
 
 function ProfitAndLoss() {
-  const { accounts, journalEntries } = useERPStore();
-  
+  const { accounts, journalEntries, vouchers } = useERPStore();
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
+  const active = activeEntries(journalEntries, vouchers, dateFrom || undefined, dateTo || undefined);
+
   // Calculate balances
   const balances = accounts.map(account => {
     let totalDebit = account.openingBalanceType === 'Debit' ? account.openingBalance : 0;
     let totalCredit = account.openingBalanceType === 'Credit' ? account.openingBalance : 0;
     
-    const entries = journalEntries.filter(je => je.accountId === account.id);
+    const entries = active.filter(je => je.accountId === account.id);
     entries.forEach(entry => {
       totalDebit += entry.debit;
       totalCredit += entry.credit;
@@ -792,6 +657,21 @@ function ProfitAndLoss() {
           <p className="text-sm text-muted-foreground">Statement of comprehensive income</p>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={e => setDateFrom(e.target.value)}
+            className="px-3 py-2 rounded-lg border border-border bg-background text-sm"
+            title="Date From"
+          />
+          <span className="text-muted-foreground text-sm">to</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={e => setDateTo(e.target.value)}
+            className="px-3 py-2 rounded-lg border border-border bg-background text-sm"
+            title="Date To"
+          />
           <button className="flex items-center gap-2 bg-muted text-foreground px-4 py-2 rounded-lg hover:bg-muted/80 transition-colors text-sm font-medium whitespace-nowrap border border-border/50">
             Export
           </button>
@@ -830,10 +710,14 @@ function ProfitAndLoss() {
 }
 
 function CashFlow() {
-  const { accounts, journalEntries } = useERPStore();
-  
-  // Find cash & bank accounts
-  const cashAccounts = accounts.filter(a => a.subtypeId === accounts.find(sub => sub.name === 'Cash')?.id || a.subtypeId === accounts.find(sub => sub.name === 'Bank')?.id || a.name.toLowerCase().includes('cash') || a.name.toLowerCase().includes('bank'));
+  const { accounts, journalEntries, vouchers, accountSubtypes } = useERPStore();
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
+  const active = activeEntries(journalEntries, vouchers, dateFrom || undefined, dateTo || undefined);
+
+  // Find cash & bank accounts by subtype (spec §25) — never by name
+  const cashAccounts = getCashBankAccounts(accounts, accountSubtypes);
   const cashAccountIds = cashAccounts.map(a => a.id);
   
   let openingCash = 0;
@@ -847,11 +731,11 @@ function CashFlow() {
   let financingCashFlow = 0; // from Liabilities, Equity
   
   // Group by voucher
-  const entriesByVoucher = journalEntries.reduce((acc, je) => {
+  const entriesByVoucher = active.reduce((acc, je) => {
     if (!acc[je.voucherId]) acc[je.voucherId] = [];
     acc[je.voucherId].push(je);
     return acc;
-  }, {} as Record<string, typeof journalEntries>);
+  }, {} as Record<string, typeof active>);
 
   Object.values(entriesByVoucher).forEach(entries => {
     const cashEntries = entries.filter(je => cashAccountIds.includes(je.accountId));
@@ -888,6 +772,23 @@ function CashFlow() {
         <div>
           <h2 className="text-lg font-semibold text-foreground">Cash Flow Statement</h2>
           <p className="text-sm text-muted-foreground">Inflows and outflows of cash</p>
+        </div>
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={e => setDateFrom(e.target.value)}
+            className="px-3 py-2 rounded-lg border border-border bg-background text-sm"
+            title="Date From"
+          />
+          <span className="text-muted-foreground text-sm">to</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={e => setDateTo(e.target.value)}
+            className="px-3 py-2 rounded-lg border border-border bg-background text-sm"
+            title="Date To"
+          />
         </div>
       </div>
       <div className="flex-1 overflow-auto p-6 flex justify-center">
@@ -941,82 +842,4 @@ function CashFlow() {
   );
 }
 
-function SystemIntegrity() {
-  const { vouchers, journalEntries, accounts } = useERPStore();
-
-  const issues: { type: 'error' | 'warning', message: string, detail?: string }[] = [];
-
-  // Check 1: Vouchers total debit vs credit
-  vouchers.forEach(v => {
-    if (Math.abs(v.totalDebit - v.totalCredit) > 0.01) {
-      issues.push({ type: 'error', message: `Voucher ${v.voucherNo} is out of balance.`, detail: `Debit: ${v.totalDebit}, Credit: ${v.totalCredit}` });
-    }
-  });
-
-  // Check 2: Sum of journal entries per voucher matches voucher totals
-  const entriesByVoucher = journalEntries.reduce((acc, je) => {
-    if (!acc[je.voucherId]) acc[je.voucherId] = [];
-    acc[je.voucherId].push(je);
-    return acc;
-  }, {} as Record<string, typeof journalEntries>);
-
-  vouchers.forEach(v => {
-    const entries = entriesByVoucher[v.id] || [];
-    const sumDebit = entries.reduce((s, e) => s + e.debit, 0);
-    const sumCredit = entries.reduce((s, e) => s + e.credit, 0);
-    
-    if (Math.abs(sumDebit - v.totalDebit) > 0.01 || Math.abs(sumCredit - v.totalCredit) > 0.01) {
-      issues.push({ type: 'error', message: `Voucher ${v.voucherNo} entries do not match voucher header totals.`, detail: `Header (Dr/Cr): ${v.totalDebit}/${v.totalCredit}, Entries sum: ${sumDebit}/${sumCredit}` });
-    }
-  });
-
-  // Check 3: Journal Entries referencing invalid accounts
-  journalEntries.forEach(je => {
-    if (!accounts.find(a => a.id === je.accountId)) {
-      issues.push({ type: 'error', message: `Journal entry references invalid account ID: ${je.accountId}` });
-    }
-  });
-
-  return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">
-      <div className="p-6 border-b border-border/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">System Integrity & Validation</h2>
-          <p className="text-sm text-muted-foreground">Continuous check of accounting invariants and double-entry rules</p>
-        </div>
-      </div>
-      
-      <div className="flex-1 overflow-auto p-6">
-        {issues.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full p-12 text-center">
-            <div className="h-16 w-16 bg-success/10 text-emerald-500 rounded-full flex items-center justify-center mb-4">
-              <Database className="h-8 w-8" />
-            </div>
-            <h3 className="text-xl font-bold text-foreground mb-2">All Systems Operational</h3>
-            <p className="text-muted-foreground max-w-md">The double-entry accounting engine is perfectly balanced. All vouchers, ledgers, and accounts are in sync.</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="p-4 bg-destructive/10 border border-rose-500/20 rounded-xl mb-6">
-              <h3 className="text-destructive font-semibold mb-1">Integrity Issues Detected</h3>
-              <p className="text-sm text-rose-600/80">Found {issues.length} inconsistency issues in the accounting ledger.</p>
-            </div>
-            
-            {issues.map((issue, idx) => (
-              <div key={idx} className="p-4 border border-border/50 rounded-xl bg-card flex gap-4 items-start">
-                <div className={cn("p-2 rounded-lg shrink-0", issue.type === 'error' ? "bg-destructive/10 text-rose-500" : "bg-warning/10 text-amber-500")}>
-                  <Database className="h-5 w-5" />
-                </div>
-                <div>
-                  <h4 className="font-medium text-foreground">{issue.message}</h4>
-                  {issue.detail && <p className="text-sm text-muted-foreground mt-1 font-mono bg-muted/30 p-2 rounded">{issue.detail}</p>}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
