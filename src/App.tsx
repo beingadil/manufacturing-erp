@@ -23,7 +23,12 @@ import { Customers } from './pages/Customers';
 import { Reports } from './pages/Reports';
 import Categories from './pages/Categories';
 import { Accounting } from './pages/Accounting';
-import { FinanceLayout } from './pages/finance/FinanceLayout';
+import { CashPaymentVoucher } from './pages/finance/CashPaymentVoucher';
+import { BankPaymentVoucher } from './pages/finance/BankPaymentVoucher';
+import { CashReceiptVoucher } from './pages/finance/CashReceiptVoucher';
+import { BankReceiptVoucher } from './pages/finance/BankReceiptVoucher';
+import { JournalVoucher } from './pages/finance/JournalVoucher';
+import { CashBookPage } from './pages/finance/CashBookPage';
 import { SystemHealthDashboard } from './pages/SystemHealth';
 import { AuthProvider } from './contexts/AuthContext';
 import { RouteGuard } from './components/common/RouteGuard';
@@ -32,6 +37,7 @@ import { UserManagement } from './pages/UserManagement';
 import { useSettingsStore } from './store/useSettingsStore';
 import { Toaster } from '@/components/ui/sonner';
 import UpdateManager from '@/components/UpdateManager';
+import UpdateMigrationNotice from '@/components/UpdateMigrationNotice';
 
 export default function App() {
   const theme = useSettingsStore(state => state.theme);
@@ -130,10 +136,14 @@ export default function App() {
           <Route path="reports" element={<RouteGuard requireModule="Reports" requireAction="View"><Reports /></RouteGuard>} />
           <Route path="accounting" element={<Navigate to="/accounting/chart-of-accounts" replace />} />
           <Route path="accounting/chart-of-accounts" element={<RouteGuard requireModule="Accounting" requireAction="View"><Accounting /></RouteGuard>} />
-          <Route path="accounting/cashbook" element={<RouteGuard requireModule="Accounting" requireAction="View"><FinanceLayout /></RouteGuard>} />
-          <Route path="accounting/finance" element={<RouteGuard requireModule="Accounting" requireAction="View"><FinanceLayout /></RouteGuard>} />
-          <Route path="accounting/journal-vouchers" element={<RouteGuard requireModule="Accounting" requireAction="View"><Accounting /></RouteGuard>} />
-          <Route path="accounting/opening-balance" element={<RouteGuard requireModule="Accounting" requireAction="View"><Accounting /></RouteGuard>} />
+          <Route path="accounting/cash-payment" element={<RouteGuard requireModule="Accounting" requireAction="View"><CashPaymentVoucher /></RouteGuard>} />
+          <Route path="accounting/bank-payment" element={<RouteGuard requireModule="Accounting" requireAction="View"><BankPaymentVoucher /></RouteGuard>} />
+          <Route path="accounting/cash-receipt" element={<RouteGuard requireModule="Accounting" requireAction="View"><CashReceiptVoucher /></RouteGuard>} />
+          <Route path="accounting/bank-receipt" element={<RouteGuard requireModule="Accounting" requireAction="View"><BankReceiptVoucher /></RouteGuard>} />
+          <Route path="accounting/journal-voucher" element={<RouteGuard requireModule="Accounting" requireAction="View"><JournalVoucher /></RouteGuard>} />
+          <Route path="accounting/cashbook" element={<RouteGuard requireModule="Accounting" requireAction="View"><CashBookPage /></RouteGuard>} />
+          <Route path="accounting/journal-vouchers" element={<Navigate to="/accounting/journal-voucher" replace />} />
+          <Route path="accounting/opening-balance" element={<Navigate to="/accounting/chart-of-accounts" replace />} />
           <Route path="accounting/general-ledger" element={<RouteGuard requireModule="Accounting" requireAction="View"><Accounting /></RouteGuard>} />
           <Route path="accounting/trial-balance" element={<RouteGuard requireModule="Accounting" requireAction="View"><Accounting /></RouteGuard>} />
           <Route path="accounting/profit-loss" element={<RouteGuard requireModule="Accounting" requireAction="View"><Accounting /></RouteGuard>} />
@@ -150,6 +160,7 @@ export default function App() {
       </HashRouter>
       <Toaster position="top-right" richColors />
       <UpdateManager />
+      <UpdateMigrationNotice />
     </AuthProvider>
   );
 }

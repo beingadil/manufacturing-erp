@@ -47,15 +47,31 @@ scripts/updateReportsList.mjs
 scripts/test-unified-backup.cjs
 scripts/test-update-data-survival.cjs
 scripts/test-release-notes.sh
+scripts/test-legacy-install.cjs
 
 # Production-unnecessary files
 ELECTRON_MIGRATION_GUIDE.md
-docs/
 electron/persistenceTest.cjs
 scripts/persistence-smoke-test.sh
 src/pages/SamplePage.tsx
 src/services/.keep
 src/electron/tests/
+
+# Docs — reusable guides ship with the repo; dated/speculative material stays private
+# (FINAL_AUDIT, IMPLEMENTATION_SUMMARY, benchmark_report, server_side_architecture, prd, superpowers/plans)
+docs/*
+!docs/
+!docs/DATABASE_ARCHITECTURE.md
+!docs/DESIGN.md
+!docs/PRODUCTION_CHECKLIST.md
+!docs/RELEASING.md
+!docs/SQLITE_SCHEMA.md
+
+# Code-signing — private keys must NEVER be committed
+certs/
+*.pfx
+*.p12
+*.cer
 
 # Test artifacts
 playwright-report

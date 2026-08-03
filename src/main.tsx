@@ -42,8 +42,11 @@ async function bootstrap() {
           const persistedState = parsed.state || parsed;
           if (persistedState && typeof persistedState === 'object') {
             const { useERPStore } = await import('./store/useERPStore');
-            useERPStore.setState(persistedState);
-            Logger.info('Startup', 'ERP state rehydrated from SQLite key_value_store');
+            const { migrateERPState } = await import('./store/erpMigration');
+            // Apply persist v3 migration: legacy voucher-type remap, AR/AP
+            // control-account nesting, and legacy ledgerEntries trail removal.
+            useERPStore.setState(migrateERPState(persistedState));
+            Logger.info('Startup', 'ERP state rehydrated from SQLite key_value_store (v3 migration applied)');
           }
         } else {
           Logger.info('Startup', 'No persisted ERP state found (first launch)');

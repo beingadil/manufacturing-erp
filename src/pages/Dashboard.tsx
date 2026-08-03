@@ -11,7 +11,7 @@ import { CashBookEngine } from '../lib/finance/CashBookEngine';
 
 export function Dashboard() {
   const { profile, isAdmin, dataPolicies } = useAuth();
-  const { materials, processors, suppliers, customers, processingSends, processingReceipts, sales, purchases, products, accounts, journalEntries, vouchers } = useERPStore();
+  const { materials, processors, suppliers, customers, processingSends, processingReceipts, sales, purchases, products, accounts, journalEntries, vouchers, accountSubtypes } = useERPStore();
   const navigate = useNavigate();
   const secureSales = filterFinancialData(sales, profile, isAdmin, dataPolicies);
   const securePurchases = filterFinancialData(purchases, profile, isAdmin, dataPolicies);
@@ -27,10 +27,10 @@ export function Dashboard() {
   const totalSalesRevenue = secureSales.reduce((acc: number, s: any) => acc + s.totalAmount, 0);
   const totalPurchasesCost = purchases.reduce((acc, p) => acc + p.amount, 0);
 
-  // Use CashBookEngine for all cash position calculations
+  // Use CashBookEngine for all cash position calculations (subtype-based, spec §25)
   const cashPosition = useMemo(() =>
-    CashBookEngine.getCashPosition(accounts, journalEntries, vouchers),
-    [accounts, journalEntries, vouchers]
+    CashBookEngine.getCashPosition(accounts, journalEntries, vouchers, accountSubtypes),
+    [accounts, journalEntries, vouchers, accountSubtypes]
   );
 
 

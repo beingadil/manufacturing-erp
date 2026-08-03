@@ -8,6 +8,7 @@ import { DataTable, Column } from "../components/DataTable";
 import { CategoryService } from '../services/CategoryService';
 import { toast } from 'sonner';
 import { SafeDeleteDialog } from '../components/common/SafeDeleteDialog';
+import { InlineEditInput } from '../components/common/InlineEditInput';
 import { Cloud, RefreshCw } from 'lucide-react';
 
 export default function Categories() {
@@ -95,24 +96,22 @@ export default function Categories() {
           <div className="bg-indigo-500/10 p-2 rounded-lg">
             <Tags className="w-5 h-5 text-primary" />
           </div>
-          <input
-            key={`cat-name-${item.id}-${item.name}`}
-            type="text"
+          <InlineEditInput
+            value={item.name}
+            onCommit={(v) => handleEditInline(item.id, 'name', v)}
             className="font-medium text-foreground bg-transparent border-none p-0 focus:ring-1 focus:ring-primary rounded"
-            defaultValue={item.name}
-            onBlur={(e) => handleEditInline(item.id, 'name', e.target.value)}
+            ariaLabel={`Rename category ${item.name}`}
           />
         </div>
       )
     },
     { key: "description", label: "Description", sortable: true, render: (item) => (
-      <input
-        key={`cat-desc-${item.id}-${item.description || ''}`}
-        type="text"
+      <InlineEditInput
+        value={item.description || ''}
+        onCommit={(v) => handleEditInline(item.id, 'description', v)}
         className="text-muted-foreground bg-transparent border-none p-0 focus:ring-1 focus:ring-primary rounded w-full"
-        defaultValue={item.description || ''}
         placeholder="Add description..."
-        onBlur={(e) => handleEditInline(item.id, 'description', e.target.value)}
+        ariaLabel={`Edit description for ${item.name}`}
       />
     ) },
     {

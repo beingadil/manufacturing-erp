@@ -54,9 +54,16 @@ export function DataIntegrityTab() {
       }
     });
 
-    // 2. Trial Balance Check
-    const allDebits = state.ledgerEntries.filter(e => e.type === 'Debit').reduce((sum, e) => sum + e.amount, 0);
-    const allCredits = state.ledgerEntries.filter(e => e.type === 'Credit').reduce((sum, e) => sum + e.amount, 0);
+    // 2. Trial Balance Check (from the authoritative journal entries trail)
+    const activeVoucherIds = new Set(
+      state.vouchers.filter(v => v.status !== 'Cancelled' && v.status !== 'Deleted').map(v => v.id)
+    );
+    const allDebits = state.journalEntries
+      .filter(e => activeVoucherIds.has(e.voucherId))
+      .reduce((sum, e) => sum + (e.debit || 0), 0);
+    const allCredits = state.journalEntries
+      .filter(e => activeVoucherIds.has(e.voucherId))
+      .reduce((sum, e) => sum + (e.credit || 0), 0);
     if (Math.abs(allDebits - allCredits) > 0.01) {
       foundIssues.push({
         id: 'tb-mismatch',

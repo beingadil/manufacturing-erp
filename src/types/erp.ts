@@ -179,18 +179,6 @@ export interface Sale {
   totalAmount: number;
 }
 
-export interface LedgerEntry {
-  id: string;
-  date: string;
-  partyId: string;
-  partyType: "Processor" | "Supplier" | "Customer";
-  type: "Debit" | "Credit";
-  amount: number;
-  referenceNo: string;
-  description: string;
-  voucherId?: string; // Links back to the source voucher
-}
-
 // -- Accounting System --
 
 export type AccountType = 
@@ -228,12 +216,8 @@ export interface Account {
 
 export type VoucherType = 
   | "Journal Voucher" 
-  | "Receipt Voucher" 
-  | "Payment Voucher" 
   | "Purchase Voucher" 
   | "Sales Voucher" 
-  | "Contra Voucher" 
-  | "Opening Balance"
   | "Bank Payment"
   | "Bank Receipt"
   | "Cash Payment"
@@ -246,8 +230,7 @@ export type SourceModule =
   | "Processing" 
   | "Cashbook" 
   | "Manual" 
-  | "Inventory Adjustment"
-  | "Opening Balance";
+  | "Inventory Adjustment";
 
 export interface VoucherAudit {
   id: string;

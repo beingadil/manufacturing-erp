@@ -143,11 +143,6 @@ function createAllTables() {
       FOREIGN KEY (voucherId) REFERENCES vouchers(id) ON DELETE CASCADE,
       FOREIGN KEY (accountId) REFERENCES accounts(id) ON DELETE RESTRICT
     );
-    CREATE TABLE IF NOT EXISTS ledgerEntries (
-      id TEXT PRIMARY KEY, date TEXT NOT NULL, partyId TEXT, partyType TEXT,
-      type TEXT, amount REAL DEFAULT 0, referenceNo TEXT, description TEXT, voucherId TEXT,
-      FOREIGN KEY (voucherId) REFERENCES vouchers(id) ON DELETE CASCADE
-    );
     CREATE TABLE IF NOT EXISTS batches (
       id TEXT PRIMARY KEY, batchNo TEXT NOT NULL UNIQUE, purchaseId TEXT,
       supplierId TEXT, materialId TEXT, date TEXT, weight REAL DEFAULT 0,
@@ -193,8 +188,6 @@ function createAllTables() {
     CREATE INDEX IF NOT EXISTS idx_vouchers_date ON vouchers(type);
     CREATE INDEX IF NOT EXISTS idx_journalEntries_voucherId ON journalEntries(voucherId);
     CREATE INDEX IF NOT EXISTS idx_journalEntries_accountId ON journalEntries(accountId);
-    CREATE INDEX IF NOT EXISTS idx_ledgerEntries_partyId ON ledgerEntries(partyId);
-    CREATE INDEX IF NOT EXISTS idx_ledgerEntries_voucherId ON ledgerEntries(voucherId);
     CREATE INDEX IF NOT EXISTS idx_batches_purchaseId ON batches(purchaseId);
     CREATE INDEX IF NOT EXISTS idx_batches_materialId ON batches(materialId);
     CREATE INDEX IF NOT EXISTS idx_inventoryMovements_materialId ON inventoryMovements(materialId);
@@ -381,7 +374,7 @@ function importBackupFromPath(sourcePath) {
 const BACKUP_TABLES = [
   'categories', 'materials', 'processors', 'suppliers', 'customers', 'products',
   'purchases', 'processingSends', 'processingReceipts', 'processorBills', 'sales',
-  'accountSubtypes', 'accounts', 'vouchers', 'journalEntries', 'ledgerEntries',
+  'accountSubtypes', 'accounts', 'vouchers', 'journalEntries',
   'batches', 'inventoryMovements', 'key_value_store',
 ];
 

@@ -47,9 +47,6 @@ export const createCRUDActions = (
         updatedJournalEntries = state.journalEntries.filter(je => je.voucherId !== voucher.id);
       }
 
-      // 6. Remove legacy ledger entries
-      const updatedLedgerEntries = state.ledgerEntries.filter(le => le.referenceNo !== purchase.purchaseNo);
-
       return {
         ...state,
         purchases: state.purchases.filter(p => p.id !== id),
@@ -58,8 +55,7 @@ export const createCRUDActions = (
         inventoryMovements: updatedInventoryMovements,
         suppliers: updatedSuppliers,
         vouchers: updatedVouchers,
-        journalEntries: updatedJournalEntries,
-        ledgerEntries: updatedLedgerEntries
+        journalEntries: updatedJournalEntries
       };
     });
   },
@@ -172,8 +168,6 @@ export const createCRUDActions = (
         updatedJournalEntries = state.journalEntries.filter(je => je.voucherId !== voucher.id);
       }
 
-      const updatedLedgerEntries = state.ledgerEntries.filter(le => le.referenceNo !== sale.invoiceNo);
-
       return {
         ...state,
         sales: state.sales.filter(s => s.id !== id),
@@ -181,8 +175,7 @@ export const createCRUDActions = (
         customers: updatedCustomers,
         inventoryMovements: updatedInventoryMovements,
         vouchers: updatedVouchers,
-        journalEntries: updatedJournalEntries,
-        ledgerEntries: updatedLedgerEntries
+        journalEntries: updatedJournalEntries
       };
     });
   },
@@ -415,8 +408,7 @@ export const createCRUDActions = (
         processingReceipts: updatedReceipts,
         processors: updatedProcessors,
         vouchers: updatedVouchers,
-        journalEntries: updatedJournalEntries,
-        ledgerEntries: state.ledgerEntries.filter(le => le.referenceNo !== bill.billNo)
+        journalEntries: updatedJournalEntries
       };
     });
   },

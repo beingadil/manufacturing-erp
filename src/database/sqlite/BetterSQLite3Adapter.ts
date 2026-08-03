@@ -22,6 +22,17 @@ declare global {
       onUpdateStatus: (callback: (status: any) => void) => void;
       checkForUpdates: () => Promise<{ success: boolean; error?: string }>;
       installUpdate: () => Promise<{ success: boolean; error?: string }>;
+      checkLegacyInstall: () => Promise<{
+        success: boolean;
+        data?: {
+          runningFromLegacy: boolean;
+          legacyInstallPaths: string[];
+          currentExePath: string;
+          currentDir: string;
+          isWindows: boolean;
+        };
+        error?: string;
+      }>;
     };
   }
 }

@@ -93,6 +93,8 @@ export function Ledgers() {
           date: voucher?.date || new Date().toISOString()
         };
       })
+      // Cancelled vouchers never affect ledgers (spec §14)
+      .filter(e => e.voucher?.status === 'Posted')
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
       
     let runningBalance = activeAccount.openingBalanceType === 'Debit' ? activeAccount.openingBalance : -activeAccount.openingBalance;
@@ -145,8 +147,8 @@ export function Ledgers() {
           <p className="text-sm text-muted-foreground mt-1">View financial and goods statements across the Chart of Accounts.</p>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate("/accounting/journal-vouchers")} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
-            Create Journal Entry
+          <button onClick={() => navigate("/accounting/journal-voucher")} className="inline-flex items-center gap-2 rounded-lg bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/90">
+            New Journal Voucher
           </button>
         </div>
       </div>
