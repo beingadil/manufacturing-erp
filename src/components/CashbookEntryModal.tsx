@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { X } from 'lucide-react';
-import { CashbookVoucherForm } from './CashbookVoucherForm';
+import { CashbookVoucherForm, VoucherFormMode } from './CashbookVoucherForm';
+import { useERPStore } from '../store/useERPStore';
 
 interface Props {
   isOpen: boolean;
@@ -10,7 +11,25 @@ interface Props {
   editVoucherId?: string;
 }
 
+/** Resolve the purpose-specific form mode from the voucher being edited. */
+function resolveMode(voucherType: string | undefined): VoucherFormMode {
+  switch (voucherType) {
+    case 'Cash Payment': return 'cash-payment';
+    case 'Bank Payment': return 'bank-payment';
+    case 'Cash Receipt': return 'cash-receipt';
+    case 'Bank Receipt': return 'bank-receipt';
+    default: return 'journal';
+  }
+}
+
 export function CashbookEntryModal({ isOpen, onClose, onSave, defaultAccountId, editVoucherId }: Props) {
+  const { vouchers } = useERPStore();
+
+  const mode = useMemo<VoucherFormMode>(() => {
+    if (!editVoucherId) return 'journal';
+    return resolveMode(vouchers.find(v => v.id === editVoucherId)?.type);
+  }, [editVoucherId, vouchers]);
+
   if (!isOpen) return null;
 
   return (
@@ -23,7 +42,7 @@ export function CashbookEntryModal({ isOpen, onClose, onSave, defaultAccountId, 
               {editVoucherId ? 'Update Voucher' : 'New Cashbook Entry'}
             </h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Record payments, receipts, contra transfers, or journal entries
+              The system auto-posts the balanced double entry for you
             </p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-muted rounded-full transition-colors">
@@ -34,6 +53,8 @@ export function CashbookEntryModal({ isOpen, onClose, onSave, defaultAccountId, 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6">
           <CashbookVoucherForm
+            key={`${mode}-${editVoucherId || 'new'}`}
+            mode={mode}
             editVoucherId={editVoucherId}
             defaultAccountId={defaultAccountId}
             onSaved={onSave}

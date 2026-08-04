@@ -22,11 +22,15 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     version: '1.0.6',
     date: '2026-08-03',
-    title: 'Accounting redesign & View Ledger drill-down',
+    title: 'Purpose-specific voucher forms & accounting redesign',
     sections: [
       {
         title: '🚀 Features',
         items: [
+          'Purpose-specific voucher forms — Cash Payment, Bank Payment, Cash Receipt, and Bank Receipt each have their own simple entry form (no tabs, no manual debit/credit lines). Cash pages auto-select Cash in Hand; bank pages show bank accounts only.',
+          'Live “Accounting Effect” preview on every simple voucher — you see the generated DR/CR double entry (and a Balanced badge) before saving.',
+          'Sub-ledger cascade — picking an Accounts Receivable / Accounts Payable control account reveals only its linked customers / suppliers, and posting is forced to the party child account.',
+          'Journal Voucher keeps the full multi-line debit/credit table with totals, difference, and balanced-only posting.',
           'Complete accounting redesign — a single source of truth (Voucher → Journal Entries → AccountingEngine → reports) powers every report.',
           'Five canonical voucher types with dedicated pages: Cash Payment, Bank Payment, Cash Receipt, Bank Receipt, and Journal Voucher — each list-first, defaulting to today, with date/account/party/voucher filters.',
           'New Cash Book page with single-date opening → receipts − payments → closing reconciliation.',
