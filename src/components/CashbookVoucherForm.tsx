@@ -7,190 +7,226 @@ import { DocumentNumberingService } from '../lib/business/DocumentNumberingServi
 import { ErrorManagement } from '../lib/validation';
 import { cn } from '../lib/utils';
 import { v4 as uuidv4 } from 'uuid';
-import { Plus, Trash2, CheckCircle2, Info, Send, RotateCcw, X } from 'lucide-react';
-import { AddAccountModal } from './AddAccountModal';
-import { AccountType } from '../types/erp';
+import { Plus, Trash2, CheckCircle2, Info, Send, RotateCcw, X, Banknote, Landmark, BookOpen } from 'lucide-react';
+import { getCashAccounts, getBankAccounts } from '../lib/accounting/accountClassification';
+import type { VoucherType } from '../types/erp';
 
-type CashbookEntryType = 'Payment' | 'Receipt' | 'Journal';
-type RowType = 'supplier' | 'customer' | 'processor' | 'expense' | 'income' | 'cash' | 'account';
+/**
+ * Purpose-specific voucher form (spec §4–8).
+ *
+ * Each voucher page has its OWN form mode — no Payment/Receipt/Journal tabs,
+ * no manual debit/credit lines for simple transactions. The system knows the
+ * ledger side automatically:
+ *
+ *   Cash Payment   → Credit = Cash in Hand (auto)
+ *   Bank Payment   → Credit = selected Bank account
+ *   Cash Receipt   → Debit  = Cash in Hand (auto)
+ *   Bank Receipt   → Debit  = selected Bank account
+ *   Journal        → full multi-line Debit/Credit table (manual entries)
+ *
+ * Simple modes show an "Accounting Effect" preview (spec §14) so the user can
+ * trust the generated double entry before saving. "+ Add Another Entry" is
+ * progressive disclosure for split allocations — never the default screen.
+ */
+export type VoucherFormMode = 'cash-payment' | 'bank-payment' | 'cash-receipt' | 'bank-receipt' | 'journal';
 
-interface EntryRow {
+type RowType = 'supplier' | 'customer' | 'processor' | 'expense' | 'income' | 'account';
+
+interface CounterpartyRow {
   uid: string;
   type: RowType;
+  /** Party id (linked sub-ledger) for party types, or final account id for 'account'. */
   counterpartyId: string;
-  invoiceRef: string;
-  description: string;
+  /** Set when the account picker selected a control account (AR/AP) with children. */
+  parentAccountId?: string;
   amount: number | '';
 }
 
+interface JournalRow {
+  uid: string;
+  accountId: string;
+  debit: number | '';
+  credit: number | '';
+}
+
 interface CashbookVoucherFormProps {
+  mode: VoucherFormMode;
   editVoucherId?: string;
   defaultAccountId?: string;
-  /** Entry type to open with when creating a fresh voucher (defaults to Payment). */
-  defaultEntryType?: CashbookEntryType;
-  /** Constrain the header ledger to Cash-only or Bank-only accounts (voucher pages). */
-  ledgerKind?: 'cash' | 'bank';
   /** sourceModule tag written onto created vouchers (defaults to 'Cashbook'). */
   sourceModule?: string;
   onSaved?: () => void;
   onCancel?: () => void;
 }
 
-const ENTRY_TYPE_META: { value: CashbookEntryType; label: string; icon: string; activeClass: string; accentText: string; accentBtn: string; accentChipActive: string }[] = [
-  {
-    value: 'Payment', label: 'Payment', icon: '💳',
-    activeClass: 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-800',
-    accentText: 'text-rose-600 dark:text-rose-400',
+const MODE_META: Record<VoucherFormMode, {
+  voucherType: VoucherType;
+  title: string;
+  saveLabel: string;
+  accentBtn: string;
+  accentText: string;
+  soft: string;
+  icon: React.ReactNode;
+}> = {
+  'cash-payment': {
+    voucherType: 'Cash Payment',
+    title: 'New Cash Payment Voucher',
+    saveLabel: 'Save Payment',
     accentBtn: 'bg-rose-600 hover:bg-rose-500',
-    accentChipActive: 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-800',
+    accentText: 'text-rose-600 dark:text-rose-400',
+    soft: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-800',
+    icon: <Banknote className="h-5 w-5" />,
   },
-  {
-    value: 'Receipt', label: 'Receipt', icon: '💰',
-    activeClass: 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800',
-    accentText: 'text-emerald-600 dark:text-emerald-400',
+  'bank-payment': {
+    voucherType: 'Bank Payment',
+    title: 'New Bank Payment Voucher',
+    saveLabel: 'Save Payment',
+    accentBtn: 'bg-amber-600 hover:bg-amber-500',
+    accentText: 'text-amber-600 dark:text-amber-400',
+    soft: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800',
+    icon: <Landmark className="h-5 w-5" />,
+  },
+  'cash-receipt': {
+    voucherType: 'Cash Receipt',
+    title: 'New Cash Receipt Voucher',
+    saveLabel: 'Save Receipt',
     accentBtn: 'bg-emerald-600 hover:bg-emerald-500',
-    accentChipActive: 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800',
+    accentText: 'text-emerald-600 dark:text-emerald-400',
+    soft: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800',
+    icon: <Banknote className="h-5 w-5" />,
   },
-  {
-    value: 'Journal', label: 'Journal', icon: '📝',
-    activeClass: 'bg-sky-50 text-sky-700 border-sky-300 dark:bg-sky-950/30 dark:text-sky-400 dark:border-sky-800',
-    accentText: 'text-sky-600 dark:text-sky-400',
+  'bank-receipt': {
+    voucherType: 'Bank Receipt',
+    title: 'New Bank Receipt Voucher',
+    saveLabel: 'Save Receipt',
     accentBtn: 'bg-sky-600 hover:bg-sky-500',
-    accentChipActive: 'bg-sky-50 text-sky-700 border-sky-300 dark:bg-sky-950/30 dark:text-sky-400 dark:border-sky-800',
+    accentText: 'text-sky-600 dark:text-sky-400',
+    soft: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/30 dark:text-sky-400 dark:border-sky-800',
+    icon: <Landmark className="h-5 w-5" />,
   },
-];
+  journal: {
+    voucherType: 'Journal Voucher',
+    title: 'New Journal Voucher',
+    saveLabel: 'Post Journal Voucher',
+    accentBtn: 'bg-sky-600 hover:bg-sky-500',
+    accentText: 'text-sky-600 dark:text-sky-400',
+    soft: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/30 dark:text-sky-400 dark:border-sky-800',
+    icon: <BookOpen className="h-5 w-5" />,
+  },
+};
 
-const ROW_TYPES: Record<CashbookEntryType, { value: RowType; label: string }[]> = {
-  Payment: [
+/** Counterparty kinds per ledger direction (simple modes only). */
+const ROW_TYPES: Record<'payment' | 'receipt', { value: RowType; label: string }[]> = {
+  payment: [
     { value: 'supplier', label: 'Supplier' },
     { value: 'processor', label: 'Processor' },
     { value: 'expense', label: 'Expense' },
     { value: 'account', label: 'Ledger Account' },
   ],
-  Receipt: [
+  receipt: [
     { value: 'customer', label: 'Customer' },
     { value: 'supplier', label: 'Supplier' },
     { value: 'income', label: 'Income' },
     { value: 'account', label: 'Ledger Account' },
   ],
-  Journal: [{ value: 'account', label: 'Ledger Account' }],
 };
 
-const DEFAULT_ROW_TYPE: Record<CashbookEntryType, RowType> = {
-  Payment: 'supplier',
-  Receipt: 'customer',
-  Journal: 'account',
-};
-
-export function CashbookVoucherForm({ editVoucherId, defaultAccountId, defaultEntryType, ledgerKind, sourceModule, onSaved, onCancel }: CashbookVoucherFormProps) {
+export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sourceModule, onSaved, onCancel }: CashbookVoucherFormProps) {
   const { accounts, suppliers, customers, processors, accountSubtypes, vouchers, journalEntries } = useERPStore();
 
-  const initialType = defaultEntryType || 'Payment';
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [entryType, setEntryType] = useState<CashbookEntryType>(initialType);
-  const [cashAccountId, setCashAccountId] = useState(defaultAccountId || '');
-  const [rows, setRows] = useState<EntryRow[]>([newRow(DEFAULT_ROW_TYPE[initialType])]);
-  const [narration, setNarration] = useState('');
-  const [isAddAccountModalOpen, setIsAddAccountModalOpen] = useState(false);
-  const [addAccountTypeFilter, setAddAccountTypeFilter] = useState<{ type?: AccountType; subtypeName?: string } | undefined>();
+  const isJournal = mode === 'journal';
+  const direction: 'payment' | 'receipt' = mode.endsWith('payment') ? 'payment' : 'receipt';
+  /** Simple-mode rows are DEBIT for payments, CREDIT for receipts; the ledger is the opposite side. */
+  const rowsAreDebit = direction === 'payment';
+  const isCashMode = mode === 'cash-payment' || mode === 'cash-receipt';
 
-  function newRow(type: RowType): EntryRow {
-    return { uid: uuidv4(), type, counterpartyId: '', invoiceRef: '', description: '', amount: '' };
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [ledgerAccountId, setLedgerAccountId] = useState(defaultAccountId || '');
+  const [referenceNo, setReferenceNo] = useState('');
+  const [narration, setNarration] = useState('');
+  const [counterpartyRows, setCounterpartyRows] = useState<CounterpartyRow[]>([newCounterpartyRow(direction === 'payment' ? 'supplier' : 'customer')]);
+  const [journalRows, setJournalRows] = useState<JournalRow[]>([newJournalRow()]);
+
+  function newCounterpartyRow(type: RowType): CounterpartyRow {
+    return { uid: uuidv4(), type, counterpartyId: '', amount: '' };
+  }
+  function newJournalRow(): JournalRow {
+    return { uid: uuidv4(), accountId: '', debit: '', credit: '' };
   }
 
-  const updateRow = (uid: string, patch: Partial<EntryRow>) =>
-    setRows(prev => prev.map(r => (r.uid === uid ? { ...r, ...patch } : r)));
+  const updateCounterparty = (uid: string, patch: Partial<CounterpartyRow>) =>
+    setCounterpartyRows(prev => prev.map(r => (r.uid === uid ? { ...r, ...patch } : r)));
+  const updateJournal = (uid: string, patch: Partial<JournalRow>) =>
+    setJournalRows(prev => prev.map(r => (r.uid === uid ? { ...r, ...patch } : r)));
 
-  const removeRow = (uid: string) =>
-    setRows(prev => (prev.length === 1 ? prev : prev.filter(r => r.uid !== uid)));
+  // ── Ledger side ────────────────────────────────────────────────────────────
+  // Cash modes: only accounts classified with the 'Cash' subtype (spec §5, §10).
+  // Bank modes: only accounts classified with the 'Bank' subtype. No name matching.
+  const ledgerAccounts = useMemo(() => {
+    if (isCashMode) return getCashAccounts(accounts, accountSubtypes);
+    return getBankAccounts(accounts, accountSubtypes);
+  }, [accounts, accountSubtypes, isCashMode]);
 
-  // Reset form to a fresh single row whenever the entry type changes
-  const switchEntryType = (type: CashbookEntryType) => {
-    setEntryType(type);
-    setRows([newRow(DEFAULT_ROW_TYPE[type])]);
-    setCashAccountId('');
-  };
+  // Auto-default the ledger: system cash account (Cash in Hand) for cash modes,
+  // first bank account for bank modes — exactly the spec's "cash in hand default".
+  useEffect(() => {
+    if (editVoucherId || ledgerAccountId) return;
+    const preferred = ledgerAccounts.find(a => a.isSystem) || ledgerAccounts[0];
+    if (preferred) setLedgerAccountId(preferred.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ledgerAccounts.length, editVoucherId]);
 
-  // Cash & Bank accounts (optionally constrained to one kind by the voucher page)
-  const cashAccounts = useMemo(() =>
-    accounts.filter(a => {
-      const sub = accountSubtypes?.find(s => s.id === a.subtypeId);
-      const isCash = sub?.name === 'Cash' || (!sub && a.name.toLowerCase().includes('cash'));
-      const isBank = sub?.name === 'Bank' || (!sub && a.name.toLowerCase().includes('bank'));
-      if (ledgerKind === 'cash') return isCash;
-      if (ledgerKind === 'bank') return isBank;
-      return isCash || isBank;
-    }),
-    [accounts, accountSubtypes, ledgerKind]
-  );
-
-  const isCashOrBank = (acc: any): boolean => {
-    if (!acc) return false;
-    const sub = accountSubtypes?.find(s => s.id === acc.subtypeId);
-    return sub?.name === 'Cash' || sub?.name === 'Bank' ||
-      acc.name?.toLowerCase().includes('cash') || acc.name?.toLowerCase().includes('bank');
-  };
-
-  // Resolve voucher type from the entry type + ledger subtype
-  const voucherType = useMemo(() => {
-    if (entryType === 'Journal') return 'Journal Voucher';
-    const cashAcc = accounts.find(a => a.id === cashAccountId);
-    const sub = accountSubtypes?.find(s => s.id === cashAcc?.subtypeId);
-    const isCash = sub?.name === 'Cash' || (!sub && (cashAcc?.name.toLowerCase().includes('cash') ?? false));
-    if (entryType === 'Payment') return isCash ? 'Cash Payment' : 'Bank Payment';
-    return isCash ? 'Cash Receipt' : 'Bank Receipt';
-  }, [entryType, cashAccountId, accounts, accountSubtypes]);
-
+  const meta = MODE_META[mode];
   const isEditing = !!editVoucherId;
   const editingVoucher = isEditing ? vouchers.find(v => v.id === editVoucherId) : undefined;
 
-  // Voucher number: existing when editing, next preview otherwise.
-  // Uses the same max-based, date-year-scoped allocator as addVoucher so the
-  // preview always matches the number actually saved (was off-by-one before).
   const voucherNo = useMemo(() => {
     if (editingVoucher) return editingVoucher.voucherNo;
-    return DocumentNumberingService.nextVoucherNumber(vouchers, voucherType, date);
-  }, [editingVoucher, vouchers, voucherType, date]);
+    return DocumentNumberingService.nextVoucherNumber(vouchers, meta.voucherType, date);
+  }, [editingVoucher, vouchers, meta.voucherType, date]);
 
-  // Pre-fill from an existing voucher (edit mode)
+  // ── Pre-fill from an existing voucher (edit mode) ──────────────────────────
   useEffect(() => {
     if (!editVoucherId) return;
     const v = vouchers.find(x => x.id === editVoucherId);
     if (!v) return;
     const jes = journalEntries.filter(je => je.voucherId === editVoucherId);
 
-    let et: CashbookEntryType = 'Journal';
-    if (v.type === 'Cash Receipt' || v.type === 'Bank Receipt') et = 'Receipt';
-    else if (v.type === 'Cash Payment' || v.type === 'Bank Payment') et = 'Payment';
-    setEntryType(et);
     setDate(v.date);
     setNarration(v.narration || '');
+    setReferenceNo(v.referenceNo || '');
 
-    // Header ledger = the cash side (credit for payment/journal, debit for receipt)
-    const headerJe = et === 'Receipt'
-      ? jes.find(je => je.debit > 0)
-      : jes.find(je => je.credit > 0);
-    setCashAccountId(headerJe?.accountId || '');
+    if (isJournal) {
+      setJournalRows(jes.map(je => ({
+        uid: uuidv4(),
+        accountId: je.accountId,
+        debit: je.debit > 0 ? je.debit : '',
+        credit: je.credit > 0 ? je.credit : '',
+      })));
+      return;
+    }
 
-    // Remaining lines become rows (carry the voucher's reference into the first line so edits don't wipe it)
-    const rowJes = jes.filter(je => je !== headerJe);
+    // Simple modes: ledger side = the cash/bank line (credit for payment, debit for receipt)
+    const ledgerJe = rowsAreDebit
+      ? jes.find(je => je.credit > 0)
+      : jes.find(je => je.debit > 0);
+    setLedgerAccountId(ledgerJe?.accountId || '');
+
+    const rowJes = jes.filter(je => je !== ledgerJe);
     if (rowJes.length > 0) {
-      setRows(rowJes.map((je, i) => {
+      setCounterpartyRows(rowJes.map(je => {
         const acc = accounts.find(a => a.id === je.accountId);
-        const type = inferRowType(acc);
         return {
           uid: uuidv4(),
-          type,
+          type: inferRowType(acc),
           counterpartyId: acc?.linkedEntityId || je.accountId,
-          invoiceRef: i === 0 && v.referenceNo ? v.referenceNo : '',
-          description: je.narration || '',
-          amount: je.debit > 0 ? je.debit : je.credit,
+          amount: rowsAreDebit ? je.debit : je.credit,
         };
       }));
     } else {
-      setRows([newRow(DEFAULT_ROW_TYPE[et])]);
+      setCounterpartyRows([newCounterpartyRow(direction === 'payment' ? 'supplier' : 'customer')]);
     }
-    // Pre-fill runs once per editVoucherId; store values are read fresh at save time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editVoucherId]);
 
   const inferRowType = (acc: any): RowType => {
@@ -202,8 +238,23 @@ export function CashbookVoucherForm({ editVoucherId, defaultAccountId, defaultEn
     }
     if (acc.type === 'Expenses' || acc.type === 'Cost of Goods Sold' || acc.type === 'Other Expenses') return 'expense';
     if (acc.type === 'Revenue' || acc.type === 'Other Income') return 'income';
-    if (isCashOrBank(acc)) return 'cash';
     return 'account';
+  };
+
+  // ── Counterparty helpers ───────────────────────────────────────────────────
+  const partyName = (accountId?: string) => {
+    if (!accountId) return '';
+    const acc = accounts.find(a => a.id === accountId);
+    if (!acc) return '';
+    if (acc.linkedEntityId) {
+      const sup = suppliers.find(s => s.id === acc.linkedEntityId);
+      if (sup) return `${sup.name}`;
+      const cus = customers.find(c => c.id === acc.linkedEntityId);
+      if (cus) return `${cus.name}`;
+      const proc = processors.find(p => p.id === acc.linkedEntityId);
+      if (proc) return `${proc.name}`;
+    }
+    return acc.name;
   };
 
   const entityOptionsFor = (type: RowType) => {
@@ -216,15 +267,6 @@ export function CashbookVoucherForm({ editVoucherId, defaultAccountId, defaultEn
     if (type === 'processor') {
       return processors.map(p => ({ id: p.id, label: p.name, secondaryLabel: `Balance: PKR ${(p.balancePayable || 0).toLocaleString()}` }));
     }
-    if (type === 'cash') {
-      return cashAccounts
-        .filter(a => a.id !== cashAccountId)
-        .map(a => ({
-          id: a.id,
-          label: `${a.code} — ${a.name}`,
-          secondaryLabel: `Balance: ${a.openingBalanceType === 'Debit' ? 'Dr' : 'Cr'} ${a.openingBalance.toLocaleString()}`,
-        }));
-    }
     return [];
   };
 
@@ -234,49 +276,105 @@ export function CashbookVoucherForm({ editVoucherId, defaultAccountId, defaultEn
     return undefined;
   };
 
-  const resolveRowAccount = (row: EntryRow): string | null => {
+  /**
+   * Resolve a counterparty row to its posting account id.
+   * Party rows resolve through their linked sub-ledger account. 'Account' rows
+   * post to the picked account — but if a control account (AR/AP) was selected,
+   * the posting MUST be the chosen sub-ledger child, never the control account
+   * itself (that would bypass party balances and break sub-ledger reconciliation).
+   */
+  const resolveRowAccount = (row: CounterpartyRow): string | null => {
     if (row.type === 'supplier' || row.type === 'customer' || row.type === 'processor') {
       return accounts.find(a => a.linkedEntityId === row.counterpartyId)?.id || null;
     }
+    if (row.parentAccountId) return row.counterpartyId || null;
     return row.counterpartyId || null;
   };
 
-  // Header ledger options: cash/bank for Payment/Receipt/Contra, all accounts for Journal
-  const headerOptions = useMemo(() => {
-    if (entryType === 'Journal') {
-      return accounts.map(a => ({
-        id: a.id,
-        label: `${a.code} — ${a.name}`,
-        secondaryLabel: a.type,
-      }));
-    }
-    return cashAccounts.map(a => ({
-      id: a.id,
-      label: `${a.code} — ${a.name}`,
-      secondaryLabel: `Balance: ${a.openingBalanceType === 'Debit' ? 'Dr' : 'Cr'} ${a.openingBalance.toLocaleString()}`,
-    }));
-  }, [entryType, accounts, cashAccounts]);
+  // ── Totals & validity (simple modes) ──────────────────────────────────────
+  const total = counterpartyRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+  const touchedRows = counterpartyRows.filter(r => r.counterpartyId || Number(r.amount) > 0);
+  const completedRows = counterpartyRows.filter(r => {
+    const accId = resolveRowAccount(r);
+    return accId && (Number(r.amount) || 0) > 0;
+  });
+  const isValidSimple =
+    !!date &&
+    !!ledgerAccountId &&
+    completedRows.length > 0 &&
+    touchedRows.every(r => resolveRowAccount(r) && (Number(r.amount) || 0) > 0);
 
-  const total = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
-  const touchedRows = rows.filter(r => r.counterpartyId || r.amount || r.invoiceRef || r.description);
-  const completedRows = rows.filter(r => r.counterpartyId && (Number(r.amount) || 0) > 0);
-  const isValid = !!date && !!cashAccountId && narration.trim() !== '' && completedRows.length > 0 &&
-    touchedRows.every(r => r.counterpartyId && (Number(r.amount) || 0) > 0);
+  // ── Totals & validity (journal) ───────────────────────────────────────────
+  const filledJournal = journalRows.filter(r => r.accountId && (Number(r.debit) > 0 || Number(r.credit) > 0));
+  const totalDebit = filledJournal.reduce((s, r) => s + (Number(r.debit) || 0), 0);
+  const totalCredit = filledJournal.reduce((s, r) => s + (Number(r.credit) || 0), 0);
+  const difference = totalDebit - totalCredit;
+  const isBalancedJournal = filledJournal.length >= 2 && Math.abs(difference) < 0.01;
+  const touchedJournal = journalRows.filter(r => r.accountId || Number(r.debit) > 0 || Number(r.credit) > 0);
+  const isValidJournal = !!date && isBalancedJournal && touchedJournal.every(r => r.accountId);
 
+  const isValid = isJournal ? isValidJournal : isValidSimple;
+
+  // ── Accounting Effect preview (spec §14) ──────────────────────────────────
+  const effectLines = useMemo(() => {
+    if (isJournal) return [];
+    const lines: { label: string; debit: number; credit: number }[] = [];
+    counterpartyRows.forEach(row => {
+      const amt = Number(row.amount) || 0;
+      if (amt <= 0) return;
+      const accId = resolveRowAccount(row);
+      lines.push({
+        label: accId ? (partyName(accId) || 'Account') : 'Select an account',
+        debit: rowsAreDebit ? amt : 0,
+        credit: rowsAreDebit ? 0 : amt,
+      });
+    });
+    const ledgerAcc = accounts.find(a => a.id === ledgerAccountId);
+    lines.push({
+      label: ledgerAcc ? ledgerAcc.name : isCashMode ? 'Cash in Hand' : 'Bank account',
+      debit: rowsAreDebit ? 0 : total,
+      credit: rowsAreDebit ? total : 0,
+    });
+    return lines;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [counterpartyRows, ledgerAccountId, accounts, rowsAreDebit, total, isJournal]);
+
+  // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isValid) return;
 
-    // Aggregate per entity so cross-line overpayment is caught too
+    if (isJournal) {
+      const entries = filledJournal.map(r => ({
+        accountId: r.accountId,
+        debit: Number(r.debit) || 0,
+        credit: Number(r.credit) || 0,
+        narration,
+      }));
+      ErrorManagement.safeExecuteSync(() => {
+        if (isEditing) {
+          AccountingService.updateVoucher(editVoucherId, { date, referenceNo: referenceNo || undefined, narration }, entries as any);
+        } else {
+          AccountingService.createVoucher({
+            date, type: meta.voucherType, referenceNo: referenceNo || undefined, sourceModule: sourceModule || 'Manual', narration,
+          }, entries as any);
+        }
+        alert(`Journal Voucher ${voucherNo} posted!`);
+        if (onSaved) onSaved();
+      }, 'Journal Voucher');
+      return;
+    }
+
+    // Simple modes: overpayment guards against party balances
     const supplierTotals = new Map<string, number>();
     const customerTotals = new Map<string, number>();
-    rows.forEach(r => {
+    counterpartyRows.forEach(r => {
       const amt = Number(r.amount) || 0;
       if (amt <= 0 || !r.counterpartyId) return;
-      if (entryType === 'Payment' && (r.type === 'supplier' || r.type === 'processor')) {
+      if (rowsAreDebit && (r.type === 'supplier' || r.type === 'processor')) {
         supplierTotals.set(r.counterpartyId, (supplierTotals.get(r.counterpartyId) || 0) + amt);
       }
-      if (entryType === 'Receipt' && r.type === 'customer') {
+      if (!rowsAreDebit && r.type === 'customer') {
         customerTotals.set(r.counterpartyId, (customerTotals.get(r.counterpartyId) || 0) + amt);
       }
     });
@@ -301,9 +399,7 @@ export function CashbookVoucherForm({ editVoucherId, defaultAccountId, defaultEn
     }
 
     const entries: { accountId: string; debit: number; credit: number; narration: string }[] = [];
-    const rowsAreDebit = entryType !== 'Receipt'; // payment/contra/journal rows debit; receipt rows credit
-
-    for (const row of rows) {
+    for (const row of counterpartyRows) {
       const amt = Number(row.amount) || 0;
       const isTouched = !!row.counterpartyId || amt > 0;
       if (!isTouched) continue;
@@ -313,109 +409,69 @@ export function CashbookVoucherForm({ editVoucherId, defaultAccountId, defaultEn
         return;
       }
       if (amt <= 0) continue;
-
       entries.push({
         accountId: accId,
         debit: rowsAreDebit ? amt : 0,
         credit: rowsAreDebit ? 0 : amt,
-        narration: row.description || narration,
+        narration,
       });
     }
 
-    // Header ledger side — one line for the whole voucher
+    // Ledger side — one line for the whole voucher
     entries.push({
-      accountId: cashAccountId,
+      accountId: ledgerAccountId,
       debit: rowsAreDebit ? 0 : total,
       credit: rowsAreDebit ? total : 0,
       narration,
     });
 
-    const referenceNo = rows.map(r => r.invoiceRef).filter(Boolean).join(', ');
-
     ErrorManagement.safeExecuteSync(() => {
       if (isEditing) {
-        AccountingService.updateVoucher(editVoucherId, {
-          date,
-          referenceNo: referenceNo || undefined,
-          narration,
-        }, entries as any);
+        AccountingService.updateVoucher(editVoucherId, { date, referenceNo: referenceNo || undefined, narration }, entries as any);
       } else {
         AccountingService.createVoucher({
-          date,
-          type: voucherType as any,
-          referenceNo: referenceNo || undefined,
-          sourceModule: sourceModule || 'Cashbook',
-          narration,
+          date, type: meta.voucherType, referenceNo: referenceNo || undefined, sourceModule: sourceModule || 'Cashbook', narration,
         }, entries as any);
       }
 
       // Update entity balances only when creating (edits already applied them)
       if (!isEditing) {
-        rows.forEach(row => {
+        counterpartyRows.forEach(row => {
           const amt = Number(row.amount) || 0;
-          if (entryType === 'Payment' && (row.type === 'supplier' || row.type === 'processor')) {
+          if (rowsAreDebit && (row.type === 'supplier' || row.type === 'processor')) {
             const sup = suppliers.find(s => s.id === row.counterpartyId);
             if (sup) useERPStore.getState().updateSupplier(sup.id, { balancePayable: Math.max(0, sup.balancePayable - amt) });
             const proc = processors.find(p => p.id === row.counterpartyId);
             if (proc) useERPStore.getState().updateProcessor(proc.id, { balancePayable: Math.max(0, proc.balancePayable - amt) });
           }
-          if (entryType === 'Receipt' && row.type === 'customer') {
+          if (!rowsAreDebit && row.type === 'customer') {
             const cus = customers.find(c => c.id === row.counterpartyId);
             if (cus) useERPStore.getState().updateCustomer(cus.id, { balanceReceivable: Math.max(0, cus.balanceReceivable - amt) });
           }
         });
       }
 
-      alert(`${entryType} Voucher ${voucherNo} saved!`);
+      alert(`${meta.voucherType} ${voucherNo} saved!`);
       if (onSaved) onSaved();
-    }, `${entryType} Voucher`);
+    }, meta.voucherType);
   };
 
   const resetForm = () => {
-    setRows([newRow(DEFAULT_ROW_TYPE[entryType])]);
+    setCounterpartyRows([newCounterpartyRow(direction === 'payment' ? 'supplier' : 'customer')]);
+    setJournalRows([newJournalRow()]);
     setNarration('');
-    setCashAccountId('');
+    setReferenceNo('');
+    setLedgerAccountId('');
     setDate(new Date().toISOString().split('T')[0]);
   };
 
-  const meta = ENTRY_TYPE_META.find(m => m.value === entryType)!;
-  const rowTypes = ROW_TYPES[entryType];
-  const ledgerLabel = entryType === 'Payment'
-    ? 'Cash/Bank (Credit — paying from)'
-    : entryType === 'Receipt'
-      ? 'Cash/Bank (Debit — receiving into)'
-      : 'Credit Side Account';
+  const ledgerLabel = rowsAreDebit ? 'Paid From' : 'Received Into';
+  const ledgerHint = rowsAreDebit ? 'Credit — source of the payment' : 'Debit — account receiving the money';
 
   return (
     <>
-      {/* Entry type switcher — locked while editing (updateVoucher keeps the voucher type) */}
-      <div className="mb-6">
-        <label className="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-          Transaction Type{isEditing ? ' (fixed for this voucher)' : ''}
-        </label>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {ENTRY_TYPE_META.map(t => (
-            <button
-              key={t.value}
-              type="button"
-              disabled={isEditing}
-              onClick={() => switchEntryType(t.value)}
-              className={cn(
-                "px-4 py-3 text-sm font-semibold rounded-xl border-2 transition-all text-center",
-                entryType === t.value ? t.activeClass : "bg-background border-border text-muted-foreground hover:border-muted-foreground/30",
-                isEditing && entryType !== t.value && "opacity-40 cursor-not-allowed"
-              )}
-            >
-              <div className="text-lg mb-0.5">{t.icon}</div>
-              {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* noValidate: isValid() already enforces ledger, narration & row completeness */}
       <form id="cashbook-voucher-form" onSubmit={handleSave} noValidate>
-        {/* Header Bento Grid */}
+        {/* Header card */}
         <div className="grid grid-cols-12 gap-4 mb-6">
           <div className="col-span-12 lg:col-span-8 bg-card border border-border/50 rounded-xl p-5 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1.5">
@@ -434,215 +490,327 @@ export function CashbookVoucherForm({ editVoucherId, defaultAccountId, defaultEn
                 type="text"
                 readOnly
                 value={voucherNo}
-                className={cn("w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm font-mono font-bold", meta.accentText)}
+                className={cn('w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm font-mono font-bold', meta.accentText)}
               />
             </div>
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">{ledgerLabel}</label>
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    onClick={() => { setAddAccountTypeFilter(undefined); setIsAddAccountModalOpen(true); }}
-                    className="text-[10px] flex items-center gap-0.5 text-primary hover:underline font-medium"
-                  >
-                    <Plus className="h-3 w-3" /> Account
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setAddAccountTypeFilter({ type: 'Assets', subtypeName: 'Bank' }); setIsAddAccountModalOpen(true); }}
-                    className="text-[10px] flex items-center gap-0.5 text-primary hover:underline font-medium"
-                  >
-                    <Plus className="h-3 w-3" /> Bank
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setAddAccountTypeFilter({ type: 'Assets', subtypeName: 'Cash' }); setIsAddAccountModalOpen(true); }}
-                    className="text-[10px] flex items-center gap-0.5 text-primary hover:underline font-medium"
-                  >
-                    <Plus className="h-3 w-3" /> Cash
-                  </button>
+            {!isJournal ? (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">{ledgerLabel}</label>
+                  {isCashMode ? (
+                    <span className="text-[10px] text-muted-foreground/70 font-medium">Cash in Hand default</span>
+                  ) : null}
                 </div>
+                <SearchableSelect
+                  options={ledgerAccounts.map(a => ({
+                    id: a.id,
+                    label: `${a.code} — ${a.name}`,
+                    secondaryLabel: `Balance: ${a.openingBalanceType === 'Debit' ? 'Dr' : 'Cr'} ${a.openingBalance.toLocaleString()}`,
+                  }))}
+                  value={ledgerAccountId}
+                  onChange={setLedgerAccountId}
+                  placeholder={isCashMode ? 'Select cash account...' : 'Select bank account...'}
+                  required
+                />
               </div>
-              <SearchableSelect
-                options={headerOptions}
-                value={cashAccountId}
-                onChange={setCashAccountId}
-                placeholder={entryType === 'Journal' ? 'Select credit side account...' : 'Select cash or bank account...'}
-                required
-              />
-            </div>
+            ) : (
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">Narration</label>
+                <textarea
+                  value={narration}
+                  onChange={e => setNarration(e.target.value)}
+                  rows={1}
+                  placeholder="e.g. Monthly depreciation"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary resize-none"
+                />
+              </div>
+            )}
           </div>
 
-          {/* Total Voucher Balance card */}
+          {/* Total card */}
           <div className="col-span-12 lg:col-span-4 bg-primary text-primary-foreground rounded-xl p-5 shadow-sm flex flex-col justify-between">
             <div>
-              <p className="text-[11px] uppercase tracking-widest opacity-60 font-medium">Total Voucher Balance</p>
-              <h4 className="text-3xl font-bold mt-2 font-mono">PKR {total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h4>
+              <p className="text-[11px] uppercase tracking-widest opacity-60 font-medium">
+                {isJournal ? 'Journal Totals' : 'Total Voucher Amount'}
+              </p>
+              <h4 className="text-3xl font-bold mt-2 font-mono">
+                PKR {(isJournal ? totalDebit : total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </h4>
             </div>
-            {total > 0 ? (
+            {isJournal ? (
+              isBalancedJournal ? (
+                <div className="flex items-center gap-2 text-sm text-emerald-400 mt-4">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Balanced — ready to post
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-sm text-white/60 mt-4">
+                  <Info className="h-4 w-4" />
+                  Difference: PKR {difference.toLocaleString()}
+                </div>
+              )
+            ) : total > 0 ? (
               <div className="flex items-center gap-2 text-sm text-emerald-400 mt-4">
                 <CheckCircle2 className="h-4 w-4" />
-                Voucher is balanced and ready
+                Ready to save
               </div>
             ) : (
               <div className="flex items-center gap-2 text-sm text-white/60 mt-4">
                 <Info className="h-4 w-4" />
-                Add entry lines below
+                Enter an amount
               </div>
             )}
           </div>
         </div>
 
-        {/* Dynamic Entry Table */}
-        <div className="bg-card border border-border/50 rounded-xl shadow-sm">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-muted/30 border-b border-border/50 [&>th:first-child]:rounded-tl-xl [&>th:last-child]:rounded-tr-xl">
-                <th className="px-4 py-3.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-10">#</th>
-                <th className="px-4 py-3.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  {entryType === 'Payment' ? 'Debit Account / Vendor' : entryType === 'Receipt' ? 'Credit Account / Party' : 'Debit Account'}
-                </th>
-                <th className="px-4 py-3.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-40">Invoice Ref</th>
-                <th className="px-4 py-3.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Description</th>
-                <th className="px-4 py-3.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider text-right w-44">Amount</th>
-                <th className="px-4 py-3.5 w-12"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/50">
-              {rows.map((row, idx) => (
-                <tr key={row.uid} className="group hover:bg-muted/10 transition-colors">
-                  <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground align-top pt-5">
-                    {String(idx + 1).padStart(2, '0')}
-                  </td>
-                  <td className="px-4 py-3 align-top w-64">
-                    {rowTypes.length > 1 ? (
+        {isJournal ? (
+          /* ── JOURNAL VOUCHER: full multi-line debit/credit (spec §8) ─────── */
+          <div className="bg-card border border-border/50 rounded-xl shadow-sm">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-muted/30 border-b border-border/50 [&>th:first-child]:rounded-tl-xl [&>th:last-child]:rounded-tr-xl">
+                  <th className="px-4 py-3.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-10">#</th>
+                  <th className="px-4 py-3.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Account</th>
+                  <th className="px-4 py-3.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider text-right w-44">Debit</th>
+                  <th className="px-4 py-3.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider text-right w-44">Credit</th>
+                  <th className="px-4 py-3.5 w-12"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/50">
+                {journalRows.map((row, idx) => (
+                  <tr key={row.uid} className="group hover:bg-muted/10 transition-colors">
+                    <td className="px-4 py-3 text-xs font-mono text-muted-foreground align-top pt-5">{String(idx + 1).padStart(2, '0')}</td>
+                    <td className="px-4 py-3 align-top">
+                      <SearchableAccountTree
+                        value={row.accountId}
+                        onChange={id => updateJournal(row.uid, { accountId: id })}
+                        placeholder="Select account..."
+                        required
+                      />
+                    </td>
+                    <td className="px-4 py-3 align-top">
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={row.debit}
+                        onChange={e => updateJournal(row.uid, { debit: e.target.value ? Number(e.target.value) : '' })}
+                        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-right font-bold text-success focus:border-primary focus:ring-1 focus:ring-primary"
+                        placeholder="0.00"
+                      />
+                    </td>
+                    <td className="px-4 py-3 align-top">
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={row.credit}
+                        onChange={e => updateJournal(row.uid, { credit: e.target.value ? Number(e.target.value) : '' })}
+                        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-right font-bold text-destructive focus:border-primary focus:ring-1 focus:ring-primary"
+                        placeholder="0.00"
+                      />
+                    </td>
+                    <td className="px-4 py-3 align-top text-right">
+                      <button
+                        type="button"
+                        onClick={() => setJournalRows(prev => (prev.length === 1 ? prev : prev.filter(r => r.uid !== row.uid)))}
+                        disabled={journalRows.length === 1}
+                        className="text-muted-foreground hover:text-red-600 disabled:opacity-30 p-1"
+                        title="Remove line"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="px-4 py-3 border-t border-border/50 bg-muted/10">
+              <button
+                type="button"
+                onClick={() => setJournalRows(prev => [...prev, newJournalRow()])}
+                className="flex items-center gap-2 text-sm text-primary font-semibold hover:underline"
+              >
+                <Plus className="h-4 w-4" /> Add Another Entry
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* ── SIMPLE MODES: counterparty rows (progressive disclosure) ────── */
+          <>
+            <div className="bg-card border border-border/50 rounded-xl shadow-sm">
+              <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">
+                    {rowsAreDebit ? 'Payment To' : 'Received From'}
+                  </label>
+                  <p className="text-xs text-muted-foreground/70 mt-0.5">
+                    {rowsAreDebit ? 'Who or what is this payment for?' : 'Who or what is this money from?'}
+                  </p>
+                </div>
+                <span className="text-[10px] text-muted-foreground/60 font-medium">{ledgerHint}</span>
+              </div>
+
+              <div className="divide-y divide-border/50">
+                {counterpartyRows.map((row, idx) => (
+                  <div key={row.uid} className="px-5 py-4 grid grid-cols-12 gap-3 items-start group">
+                    <div className="col-span-12 sm:col-span-2">
                       <select
                         value={row.type}
-                        onChange={e => updateRow(row.uid, { type: e.target.value as RowType, counterpartyId: '' })}
-                        className="w-full rounded-lg border border-border bg-background px-2 py-1.5 mb-1.5 text-xs font-medium text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary"
+                        onChange={e => updateCounterparty(row.uid, { type: e.target.value as RowType, counterpartyId: '', parentAccountId: undefined })}
+                        className="w-full rounded-lg border border-border bg-background px-2.5 py-2 text-sm text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary"
                       >
-                        {rowTypes.map(t => (
+                        {ROW_TYPES[direction].map(t => (
                           <option key={t.value} value={t.value}>{t.label}</option>
                         ))}
                       </select>
-                    ) : (
-                      <div className="mb-1.5" />
-                    )}
-                    {row.type === 'supplier' || row.type === 'customer' || row.type === 'processor' || row.type === 'cash' ? (
-                      <SearchableSelect
-                        options={entityOptionsFor(row.type)}
-                        value={row.counterpartyId}
-                        onChange={id => updateRow(row.uid, { counterpartyId: id })}
-                        placeholder={row.type === 'cash' ? 'Select destination account...' : `Search ${row.type}...`}
-                        required
-                      />
-                    ) : (
-                      <SearchableAccountTree
-                        value={row.counterpartyId}
-                        onChange={id => updateRow(row.uid, { counterpartyId: id })}
-                        allowedTypes={accountTypesFor(row.type)}
-                        placeholder={`Select ${row.type} account...`}
-                        required
-                      />
-                    )}
-                  </td>
-                  <td className="px-4 py-3 align-top">
-                    <input
-                      type="text"
-                      value={row.invoiceRef}
-                      onChange={e => updateRow(row.uid, { invoiceRef: e.target.value })}
-                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono text-foreground focus:border-primary focus:ring-1 focus:ring-primary"
-                      placeholder="INV-001"
-                    />
-                  </td>
-                  <td className="px-4 py-3 align-top">
-                    <input
-                      type="text"
-                      value={row.description}
-                      onChange={e => updateRow(row.uid, { description: e.target.value })}
-                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary"
-                      placeholder="e.g. Oct freight charges"
-                    />
-                  </td>
-                  <td className="px-4 py-3 align-top">
-                    <div className="flex items-center justify-end gap-1.5">
+                    </div>
+                    <div className="col-span-12 sm:col-span-5">
+                      {row.type === 'supplier' || row.type === 'customer' || row.type === 'processor' ? (
+                        <SearchableSelect
+                          options={entityOptionsFor(row.type)}
+                          value={row.counterpartyId}
+                          onChange={id => updateCounterparty(row.uid, { counterpartyId: id })}
+                          placeholder={`Search ${row.type}...`}
+                          required
+                        />
+                      ) : (
+                        <>
+                          <SearchableAccountTree
+                            value={row.parentAccountId || row.counterpartyId}
+                            onChange={id => {
+                              const acc = accounts.find(a => a.id === id);
+                              const hasChildren = acc ? accounts.some(a => a.parentId === acc.id) : false;
+                              if (hasChildren) updateCounterparty(row.uid, { parentAccountId: id, counterpartyId: '' });
+                              else updateCounterparty(row.uid, { counterpartyId: id, parentAccountId: undefined });
+                            }}
+                            allowedTypes={accountTypesFor(row.type)}
+                            // Allow control accounts (AR/AP) to be picked so the sub-ledger
+                            // cascade can reveal only the linked parties (spec §9).
+                            allowParents
+                            placeholder={row.type === 'expense' ? 'Select expense account...' : row.type === 'income' ? 'Select income account...' : 'Select account...'}
+                            required
+                          />
+                          {row.parentAccountId && (
+                            <div className="mt-2">
+                              <SearchableSelect
+                                options={accounts
+                                  .filter(a => a.parentId === row.parentAccountId)
+                                  .map(a => ({ id: a.id, label: partyName(a.id) || a.name, secondaryLabel: `${a.code} — ${a.name}` }))}
+                                value={row.counterpartyId}
+                                onChange={id => updateCounterparty(row.uid, { counterpartyId: id })}
+                                placeholder="Select sub-ledger (party)..."
+                                required
+                              />
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    <div className="col-span-12 sm:col-span-4 flex items-center justify-end gap-1.5">
                       <span className="text-xs text-muted-foreground">PKR</span>
                       <input
                         type="number"
                         min="0.01"
                         step="0.01"
                         value={row.amount}
-                        onChange={e => updateRow(row.uid, { amount: e.target.value ? Number(e.target.value) : '' })}
-                        className="w-28 rounded-lg border border-border bg-background px-3 py-2 text-sm text-right font-bold text-foreground focus:border-primary focus:ring-1 focus:ring-primary"
+                        onChange={e => updateCounterparty(row.uid, { amount: e.target.value ? Number(e.target.value) : '' })}
+                        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-right font-bold text-foreground focus:border-primary focus:ring-1 focus:ring-primary"
                         placeholder="0.00"
                       />
                     </div>
-                  </td>
-                  <td className="px-4 py-3 align-top text-right">
-                    <button
-                      type="button"
-                      onClick={() => removeRow(row.uid)}
-                      disabled={rows.length === 1}
-                      className="text-muted-foreground hover:text-red-600 disabled:opacity-30 opacity-0 group-hover:opacity-100 transition-opacity p-1"
-                      title="Remove line"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="px-4 py-3 border-t border-border/50 bg-muted/10">
-            <button
-              type="button"
-              onClick={() => setRows(prev => [...prev, newRow(rowTypes.length === 1 ? rowTypes[0].value : DEFAULT_ROW_TYPE[entryType])])}
-              className="flex items-center gap-2 text-sm text-primary font-semibold hover:underline"
-            >
-              <Plus className="h-4 w-4" />
-              Add Another Entry
-            </button>
-          </div>
-        </div>
+                    <div className="col-span-12 sm:col-span-1 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setCounterpartyRows(prev => (prev.length === 1 ? prev : prev.filter(r => r.uid !== row.uid)))}
+                        disabled={counterpartyRows.length === 1}
+                        className="text-muted-foreground hover:text-red-600 disabled:opacity-30 p-1"
+                        title="Remove line"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                    {idx === counterpartyRows.length - 1 && (
+                      <div className="col-span-12 mt-2">
+                        <button
+                          type="button"
+                          onClick={() => setCounterpartyRows(prev => [...prev, newCounterpartyRow(row.type)])}
+                          className="flex items-center gap-2 text-sm text-primary font-semibold hover:underline"
+                        >
+                          <Plus className="h-4 w-4" /> Add Another Entry
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
 
-        {/* Footer: Notes + Totals */}
-        <div className="mt-4 grid grid-cols-12 gap-4">
-          <div className="col-span-12 lg:col-span-8 bg-card border border-border/50 rounded-xl p-5 shadow-sm">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-2">
-              Notes / Narration
-            </label>
-            <textarea
-              required
-              value={narration}
-              onChange={e => setNarration(e.target.value)}
-              rows={3}
-              placeholder={entryType === 'Payment'
-                ? 'e.g. Payment to suppliers & expenses for the month'
-                : entryType === 'Receipt'
-                  ? 'e.g. Cash received against invoices & other income'
-                  : 'e.g. Depreciation, accruals and other adjustments'}
-              className="w-full rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary resize-none"
-            />
-          </div>
-          <div className="col-span-12 lg:col-span-4 bg-card border border-border/50 rounded-xl p-5 shadow-sm space-y-3">
-            <div className="flex justify-between text-sm text-muted-foreground">
-              <span>{entryType === 'Receipt' ? 'Subtotal Receipts' : 'Subtotal Debits'}</span>
-              <span className="font-medium">PKR {total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            {/* Reference + Narration */}
+            <div className="mt-4 grid grid-cols-12 gap-4">
+              <div className="col-span-12 sm:col-span-4 bg-card border border-border/50 rounded-xl p-5 shadow-sm">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-2">Invoice / Reference</label>
+                <input
+                  type="text"
+                  value={referenceNo}
+                  onChange={e => setReferenceNo(e.target.value)}
+                  placeholder="INV-001 (optional)"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm font-mono text-foreground focus:border-primary focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <div className="col-span-12 sm:col-span-8 bg-card border border-border/50 rounded-xl p-5 shadow-sm">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-2">Description / Narration</label>
+                <textarea
+                  value={narration}
+                  onChange={e => setNarration(e.target.value)}
+                  rows={2}
+                  placeholder={rowsAreDebit ? 'e.g. Payment against invoice #104' : 'e.g. Cash received against invoice #104'}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary resize-none"
+                />
+              </div>
             </div>
-            <div className="flex justify-between text-sm text-muted-foreground">
-              <span>Lines</span>
-              <span className="font-medium">{completedRows.length}</span>
+
+            {/* Accounting Effect preview (spec §14) */}
+            <div className="mt-4 bg-card border border-border/50 rounded-xl shadow-sm overflow-hidden">
+              <div className="px-5 py-3 bg-muted/30 border-b border-border/50 flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Accounting Effect</span>
+                <span className={cn(
+                  'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium',
+                  total > 0 && completedRows.length > 0 ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'
+                )}>
+                  <CheckCircle2 className="h-3 w-3" />
+                  {total > 0 && completedRows.length > 0 ? 'Balanced double entry' : 'Waiting for entry'}
+                </span>
+              </div>
+              <div className="divide-y divide-border/50">
+                {effectLines.length === 0 && (
+                  <div className="px-5 py-6 text-center text-sm text-muted-foreground">
+                    The auto-generated journal entry will appear here.
+                  </div>
+                )}
+                {effectLines.map((line, i) => (
+                  <div key={i} className="px-5 py-2.5 grid grid-cols-12 gap-3 items-center text-sm">
+                    <div className="col-span-12 sm:col-span-6 flex items-center gap-2">
+                      {line.debit > 0 ? (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-success/10 text-success uppercase">Dr</span>
+                      ) : (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-destructive/10 text-destructive uppercase">Cr</span>
+                      )}
+                      <span className="font-medium text-foreground truncate">{line.label}</span>
+                    </div>
+                    <div className="col-span-6 sm:col-span-3 text-right font-mono text-success">{line.debit > 0 ? line.debit.toLocaleString() : ''}</div>
+                    <div className="col-span-6 sm:col-span-3 text-right font-mono text-destructive">{line.credit > 0 ? line.credit.toLocaleString() : ''}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="px-5 py-3 bg-muted/20 border-t border-border/50 grid grid-cols-12 gap-3 items-center text-sm font-semibold">
+                <div className="col-span-12 sm:col-span-6 text-muted-foreground uppercase tracking-wider text-xs">Total</div>
+                <div className="col-span-6 sm:col-span-3 text-right font-mono text-success">{total > 0 ? total.toLocaleString() : ''}</div>
+                <div className="col-span-6 sm:col-span-3 text-right font-mono text-destructive">{total > 0 ? total.toLocaleString() : ''}</div>
+              </div>
             </div>
-            <div className="h-px bg-border/50"></div>
-            <div className="flex justify-between items-end">
-              <span className="text-xs font-bold uppercase tracking-wider">Net {entryType}</span>
-              <span className={cn("text-2xl font-bold font-mono", total > 0 ? meta.accentText : "text-foreground")}>
-                PKR {total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </span>
-            </div>
-          </div>
-        </div>
+          </>
+        )}
 
         {/* Actions */}
         <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-border/50">
@@ -652,8 +820,7 @@ export function CashbookVoucherForm({ editVoucherId, defaultAccountId, defaultEn
               onClick={onCancel}
               className="flex items-center gap-2 px-5 py-2.5 bg-card border border-border text-foreground font-semibold rounded-xl hover:bg-muted/50 transition-all active:scale-95 text-sm"
             >
-              <X className="h-4 w-4" />
-              Cancel
+              <X className="h-4 w-4" /> Cancel
             </button>
           )}
           <button
@@ -661,30 +828,22 @@ export function CashbookVoucherForm({ editVoucherId, defaultAccountId, defaultEn
             onClick={resetForm}
             className="flex items-center gap-2 px-5 py-2.5 bg-card border border-border text-foreground font-semibold rounded-xl hover:bg-muted/50 transition-all active:scale-95 text-sm"
           >
-            <RotateCcw className="h-4 w-4" />
-            Reset
+            <RotateCcw className="h-4 w-4" /> Reset
           </button>
           <button
             type="submit"
             form="cashbook-voucher-form"
             disabled={!isValid}
             className={cn(
-              "flex items-center gap-2 px-6 py-2.5 text-white font-semibold rounded-xl shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-sm",
+              'flex items-center gap-2 px-6 py-2.5 text-white font-semibold rounded-xl shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-sm',
               meta.accentBtn
             )}
           >
             <Send className="h-4 w-4" />
-            {isEditing ? 'Update' : 'Post'} {entryType}
+            {isEditing ? 'Update' : meta.saveLabel}
           </button>
         </div>
       </form>
-
-      <AddAccountModal
-        isOpen={isAddAccountModalOpen}
-        onClose={() => setIsAddAccountModalOpen(false)}
-        onSave={() => setIsAddAccountModalOpen(false)}
-        quickAddType={addAccountTypeFilter}
-      />
     </>
   );
 }

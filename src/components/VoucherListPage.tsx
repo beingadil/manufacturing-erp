@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useERPStore } from '../store/useERPStore';
-import { Voucher, JournalEntry } from '../types/erp';
+import { Voucher } from '../types/erp';
 import { Search, Plus, Eye, Pencil, XCircle, Trash2, FileText, CheckCircle2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { VoucherDetailModal } from './VoucherDetailModal';
@@ -22,11 +22,32 @@ const ACCENT_BTN: Record<string, string> = {
   amber: 'bg-amber-600 hover:bg-amber-500',
 };
 
-const ACCENT_TEXT: Record<string, string> = {
-  rose: 'text-rose-600 dark:text-rose-400',
-  emerald: 'text-emerald-600 dark:text-emerald-400',
-  sky: 'text-sky-600 dark:text-sky-400',
-  amber: 'text-amber-600 dark:text-amber-400',
+const ACCENT_SOFT: Record<string, string> = {
+  rose: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-800',
+  emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800',
+  sky: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/30 dark:text-sky-400 dark:border-sky-800',
+  amber: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800',
+};
+
+const ACCENT_BAR: Record<string, string> = {
+  rose: 'from-rose-600 to-rose-400',
+  emerald: 'from-emerald-600 to-emerald-400',
+  sky: 'from-sky-600 to-sky-400',
+  amber: 'from-amber-600 to-amber-400',
+};
+
+const ACCENT_HEAD: Record<string, string> = {
+  rose: 'text-rose-700 dark:text-rose-300',
+  emerald: 'text-emerald-700 dark:text-emerald-300',
+  sky: 'text-sky-700 dark:text-sky-300',
+  amber: 'text-amber-700 dark:text-amber-300',
+};
+
+const VOUCHER_ICON: Record<string, any> = {
+  rose: '💳',
+  emerald: '💰',
+  sky: '🏦',
+  amber: '📝',
 };
 
 export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPageProps) {
@@ -43,17 +64,18 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
 
   const matchedTypes = useMemo(() => {
     switch (kind) {
-      case 'Cash Payment': return ['Cash Payment'];
-      case 'Bank Payment': return ['Bank Payment'];
-      case 'Cash Receipt': return ['Cash Receipt'];
-      case 'Bank Receipt': return ['Bank Receipt'];
-      case 'Journal Voucher': return ['Journal Voucher'];
+      case 'cash-payment': return ['Cash Payment'];
+      case 'bank-payment': return ['Bank Payment'];
+      case 'cash-receipt': return ['Cash Receipt'];
+      case 'bank-receipt': return ['Bank Receipt'];
+      case 'journal': return ['Journal Voucher'];
+      default: return [];
     }
   }, [kind]);
 
   // For JV page, exclude system-posted vouchers (Purchase/Sales/Processing) — spec §16
   const excludedModules = useMemo(() =>
-    kind === 'Journal Voucher' ? new Set(['Purchase', 'Sales', 'Processing']) : new Set<string>(),
+    kind === 'journal' ? new Set(['Purchase', 'Sales', 'Processing']) : new Set<string>(),
     [kind]
   );
 
@@ -99,17 +121,31 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
     }
   };
 
+  const totals = useMemo(() => {
+    const debit = filteredVouchers.reduce((s, v) => s + (v.totalDebit || 0), 0);
+    const credit = filteredVouchers.reduce((s, v) => s + (v.totalCredit || 0), 0);
+    return { debit, credit };
+  }, [filteredVouchers]);
+
   return (
     <div className="flex-1 flex flex-col h-full bg-card">
+      {/* Accent banner */}
+      <div className={cn('shrink-0 h-1.5 bg-gradient-to-r', ACCENT_BAR[accent])} />
+
       {/* Header */}
       <div className="p-6 border-b border-border/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">{title}</h2>
-          <p className="text-sm text-muted-foreground">{subtitle}</p>
+        <div className="flex items-center gap-3">
+          <div className={cn('flex h-11 w-11 items-center justify-center rounded-xl text-2xl border shadow-sm', ACCENT_SOFT[accent])}>
+            {VOUCHER_ICON[accent]}
+          </div>
+          <div>
+            <h2 className={cn('text-xl font-bold', ACCENT_HEAD[accent])}>{title}</h2>
+            <p className="text-sm text-muted-foreground">{subtitle}</p>
+          </div>
         </div>
         <button
           onClick={() => { setEditVoucherId(undefined); setIsEditorOpen(true); }}
-          className={cn('flex items-center gap-2 px-4 py-2 rounded-lg text-white font-semibold shadow-sm transition-all active:scale-95 text-sm', ACCENT_BTN[accent])}
+          className={cn('flex items-center gap-2 px-4 py-2.5 rounded-lg text-white font-semibold shadow-sm transition-all active:scale-95 text-sm', ACCENT_BTN[accent])}
         >
           <Plus className="h-4 w-4" />
           New Voucher
@@ -159,6 +195,33 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
         </span>
       </div>
 
+      {/* Stat chips */}
+      <div className="px-4 py-3 border-b border-border/50 flex flex-wrap items-center gap-3 shrink-0 bg-card">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="text-muted-foreground/70 font-medium uppercase tracking-wider">Showing</span>
+          <span className="font-mono font-semibold text-foreground">{filteredVouchers.length}</span>
+          <span>in selected range</span>
+        </div>
+        <div className="h-4 w-px bg-border/60" />
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-muted-foreground/70 uppercase tracking-wider">Total Debit</span>
+          <span className="font-mono font-semibold text-success">PKR {totals.debit.toLocaleString()}</span>
+        </div>
+        <div className="h-4 w-px bg-border/60" />
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-muted-foreground/70 uppercase tracking-wider">Total Credit</span>
+          <span className="font-mono font-semibold text-destructive">PKR {totals.credit.toLocaleString()}</span>
+        </div>
+        <div className="ml-auto">
+          <button
+            onClick={() => { setDateFrom(''); setDateTo(''); }}
+            className="text-xs text-muted-foreground hover:text-primary font-medium transition-colors"
+          >
+            Clear date range
+          </button>
+        </div>
+      </div>
+
       {/* List */}
       <div className="flex-1 overflow-auto">
         <table className="w-full text-left border-collapse">
@@ -206,22 +269,42 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
                     </span>
                   </td>
                   <td className="py-3 px-6 text-right whitespace-nowrap">
-                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="p-1.5 hover:bg-muted rounded text-muted-foreground hover:text-primary transition-colors" title="View" onClick={() => setViewVoucherId(v.id)}>
-                        <Eye className="h-4 w-4" />
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground border border-border/60 transition-all active:scale-95"
+                        title="View voucher details"
+                        onClick={() => setViewVoucherId(v.id)}
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        View
                       </button>
                       {v.status === 'Posted' && (
                         <>
-                          <button className="p-1.5 hover:bg-muted rounded text-muted-foreground hover:text-primary transition-colors" title="Edit" onClick={() => { setEditVoucherId(v.id); setIsEditorOpen(true); }}>
-                            <Pencil className="h-4 w-4" />
+                          <button
+                            className={cn('inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-card text-muted-foreground hover:text-foreground border border-border/60 hover:border-primary/40 transition-all active:scale-95')}
+                            title="Edit voucher"
+                            onClick={() => { setEditVoucherId(v.id); setIsEditorOpen(true); }}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            Edit
                           </button>
-                          <button className="p-1.5 hover:bg-muted rounded text-muted-foreground hover:text-amber-600 transition-colors" title="Cancel / Void" onClick={() => handleCancel(v)}>
-                            <XCircle className="h-4 w-4" />
+                          <button
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-card text-amber-600 dark:text-amber-400 border border-border/60 hover:border-amber-400/50 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-all active:scale-95"
+                            title="Cancel / void voucher"
+                            onClick={() => handleCancel(v)}
+                          >
+                            <XCircle className="h-3.5 w-3.5" />
+                            Void
                           </button>
                         </>
                       )}
-                      <button className="p-1.5 hover:bg-muted rounded text-muted-foreground hover:text-destructive transition-colors" title="Permanent Delete" onClick={() => handleDelete(v)}>
-                        <Trash2 className="h-4 w-4" />
+                      <button
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-card text-destructive border border-border/60 hover:border-destructive/50 hover:bg-destructive/10 transition-all active:scale-95"
+                        title="Permanently delete voucher"
+                        onClick={() => handleDelete(v)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Delete
                       </button>
                     </div>
                   </td>
