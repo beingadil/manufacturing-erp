@@ -20,6 +20,28 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.7',
+    date: '2026-08-04',
+    title: 'Corrected release — purpose-specific voucher forms',
+    sections: [
+      {
+        title: '🚀 Features',
+        items: [
+          'Purpose-specific voucher forms — Cash Payment, Bank Payment, Cash Receipt, and Bank Receipt each have their own simple entry form (no tabs, no manual debit/credit lines). Cash pages auto-select Cash in Hand; bank pages show bank accounts only.',
+          'Live “Accounting Effect” preview on every simple voucher — you see the generated DR/CR double entry (and a Balanced badge) before saving.',
+          'Sub-ledger cascade — picking an Accounts Receivable / Accounts Payable control account reveals only its linked customers / suppliers, and posting is forced to the party child account.',
+          'Journal Voucher keeps the full multi-line debit/credit table with totals, difference, and balanced-only posting.',
+        ],
+      },
+      {
+        title: '♻️ Release Note',
+        items: [
+          'The previous v1.0.6 was published without these new voucher forms — this release delivers them to every user, including anyone who already updated to v1.0.6. Your data is preserved.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.6',
     date: '2026-08-03',
     title: 'Purpose-specific voucher forms & accounting redesign',
