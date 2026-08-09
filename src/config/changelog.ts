@@ -20,6 +20,27 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.8',
+    date: '2026-08-09',
+    title: 'Instant startup & live financial position',
+    sections: [
+      {
+        title: '⚡ Performance',
+        items: [
+          'The app now opens almost instantly — the UI renders immediately and your data loads in the background, so you no longer wait on a loading screen at every launch.',
+        ],
+      },
+      {
+        title: '🚀 Features',
+        items: [
+          'Financial & Inventory Position on the Dashboard — Cash in Hand, Bank Balance (per-bank breakdown), Inventory Value, Receivables, and Payables, all derived live from the accounting engine, with a date filter (Today / This Week / This Month / This Year / Custom).',
+          'Financial Position panel — Total Assets, Total Liabilities, Owner’s Equity, Net Working Capital, and Period Profit/Loss, each linking to its report.',
+          'Raw Materials now shows Total Value (PKR) per material and a total inventory value card — valued at weighted-average purchase cost, not selling price.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.7',
     date: '2026-08-04',
     title: 'Corrected release — purpose-specific voucher forms',
