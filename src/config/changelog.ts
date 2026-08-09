@@ -20,6 +20,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.10',
+    date: '2026-08-09',
+    title: 'Fixed the stuck loading spinner after restart',
+    sections: [
+      {
+        title: '🐛 Bug Fixes',
+        items: [
+          'Fixed a bug where the app could get stuck on a loading spinner after closing and reopening it with a saved session (the super-admin account). The app now restores your session and opens straight to the dashboard.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.9',
     date: '2026-08-09',
     title: 'Instant startup — no loading screen, no forced update install',
