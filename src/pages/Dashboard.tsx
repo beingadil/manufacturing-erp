@@ -145,6 +145,11 @@ export function Dashboard() {
       {summary.inventory.finishedGoods > 0 && (
         <div className="flex justify-between gap-2"><span>Finished goods</span><span className="font-medium text-foreground/80">{formatCurrency(summary.inventory.finishedGoods)}</span></div>
       )}
+      <div className="flex justify-between gap-2 border-t border-border/60 pt-1.5 mt-1">
+        <span className="font-semibold text-foreground">Total Inventory Value</span>
+        <span className="font-bold text-foreground">{formatCurrency(summary.inventory.total)}</span>
+      </div>
+      <div className="flex items-center justify-end gap-1 pt-0.5 text-primary">View Raw Materials <ArrowRight className="h-3 w-3" /></div>
     </div>
   );
 
