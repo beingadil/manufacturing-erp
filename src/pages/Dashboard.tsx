@@ -1,38 +1,83 @@
 import { useAuth } from "../contexts/AuthContext";
 import { filterFinancialData } from "../lib/abac";
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useERPStore } from "../store/useERPStore";
-import { formatCurrency, formatNumber } from "../lib/utils";
-import { ArrowRight, PackageSearch, Users, Truck, Wallet, TrendingUp, AlertTriangle, CircleDollarSign, ArrowUpCircle, ArrowDownCircle, DollarSign } from "lucide-react";
+import { formatCurrency, formatNumber, cn } from "../lib/utils";
+import { ArrowRight, PackageSearch, Users, Truck, TrendingUp, AlertTriangle, CircleDollarSign, ArrowUpCircle, ArrowDownCircle, DollarSign, Landmark, Building2, Scale, Wallet, ArrowLeftRight, ShoppingCart } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { format, subDays, isAfter } from 'date-fns';
-import { CashBookEngine } from '../lib/finance/CashBookEngine';
+import { format, subDays, startOfWeek, startOfMonth, startOfYear } from 'date-fns';
+import { DashboardSummaryService } from '../lib/dashboard/DashboardSummaryService';
+
+type Preset = 'today' | 'week' | 'month' | 'year' | 'custom';
+
+interface MetricCardProps {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  sub?: React.ReactNode;
+  onClick?: () => void;
+  accent?: string;
+  valueClassName?: string;
+}
+
+function MetricCard({ icon, label, value, sub, onClick, accent = "text-primary", valueClassName }: MetricCardProps) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={!onClick}
+      className="rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col justify-between text-left transition-all hover:shadow-md hover:border-primary/30 disabled:cursor-default disabled:hover:border-border disabled:hover:shadow-sm"
+    >
+      <div className="flex items-center gap-3 text-muted-foreground mb-2">
+        <span className={cn("h-5 w-5", accent)}>{icon}</span>
+        <span className="text-sm font-medium">{label}</span>
+      </div>
+      <div className={cn("text-2xl font-bold text-foreground", valueClassName)}>{value}</div>
+      {sub && <div className="mt-2 text-xs text-muted-foreground space-y-0.5">{sub}</div>}
+    </button>
+  );
+}
 
 export function Dashboard() {
   const { profile, isAdmin, dataPolicies } = useAuth();
-  const { materials, processors, suppliers, customers, processingSends, processingReceipts, sales, purchases, products, accounts, journalEntries, vouchers, accountSubtypes } = useERPStore();
+  const {
+    materials, processors, suppliers, customers, processingSends, processingReceipts,
+    sales, purchases, products, accounts, journalEntries, vouchers, accountSubtypes,
+    batches,
+  } = useERPStore();
   const navigate = useNavigate();
   const secureSales = filterFinancialData(sales, profile, isAdmin, dataPolicies);
   const securePurchases = filterFinancialData(purchases, profile, isAdmin, dataPolicies);
 
-  const totalRawStockPcs = materials.reduce((acc, m) => acc + m.stockPcs, 0);
+  // ── Date filter: balances as of period end, activity over the period ───────
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const [preset, setPreset] = useState<Preset>('today');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+
+  const range = useMemo(() => {
+    const end = preset === 'custom' ? (customEnd || today) : today;
+    let start = today;
+    if (preset === 'week') start = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+    else if (preset === 'month') start = format(startOfMonth(new Date()), 'yyyy-MM-dd');
+    else if (preset === 'year') start = format(startOfYear(new Date()), 'yyyy-MM-dd');
+    else if (preset === 'custom') start = customStart || end;
+    return { start, end };
+  }, [preset, customStart, customEnd, today]);
+
+  const summary = useMemo(() => DashboardSummaryService.getSummary(
+    {
+      accounts, accountSubtypes, journalEntries, vouchers, batches, materials,
+      customers, suppliers, processors,
+      sales: secureSales, purchases: securePurchases,
+    },
+    { asOfDate: range.end, periodStart: range.start, periodEnd: range.end }
+  ), [accounts, accountSubtypes, journalEntries, vouchers, batches, materials, customers, suppliers, processors, secureSales, securePurchases, range]);
+
   const totalProcessedStockPcs = materials.reduce((acc, m) => acc + m.processedStockPcs, 0);
-  
   const totalSent = processingSends.reduce((acc, s) => acc + s.pcsSent, 0);
   const totalReceived = processingReceipts.reduce((acc, r) => acc + r.pcsReceived, 0);
   const totalPendingWithProcessors = totalSent - totalReceived;
-
-  
-  const totalSalesRevenue = secureSales.reduce((acc: number, s: any) => acc + s.totalAmount, 0);
-  const totalPurchasesCost = purchases.reduce((acc, p) => acc + p.amount, 0);
-
-  // Use CashBookEngine for all cash position calculations (subtype-based, spec §25)
-  const cashPosition = useMemo(() =>
-    CashBookEngine.getCashPosition(accounts, journalEntries, vouchers, accountSubtypes),
-    [accounts, journalEntries, vouchers, accountSubtypes]
-  );
-
 
   // Generate last 7 days sales data
   const last7DaysSales = useMemo(() => {
@@ -47,11 +92,11 @@ export function Dashboard() {
       });
     }
     return data;
-  }, [sales]);
+  }, [secureSales]);
 
   const topProducts = useMemo(() => {
     const productSales: Record<string, number> = {};
-    sales.forEach(s => {
+    secureSales.forEach((s: any) => {
       productSales[s.productId] = (productSales[s.productId] || 0) + s.totalAmount;
     });
     return Object.entries(productSales)
@@ -61,10 +106,47 @@ export function Dashboard() {
         const p = products.find(prod => prod.id === id);
         return { name: p?.name || 'Unknown', amount };
       });
-  }, [sales, products]);
+  }, [secureSales, products]);
 
   const lowStockMaterials = materials.filter(m => m.stockPcs < 500 && m.stockPcs > 0);
   const outOfStockMaterials = materials.filter(m => m.stockPcs === 0);
+
+  const presets: { key: Preset; label: string }[] = [
+    { key: 'today', label: 'Today' },
+    { key: 'week', label: 'This Week' },
+    { key: 'month', label: 'This Month' },
+    { key: 'year', label: 'This Year' },
+    { key: 'custom', label: 'Custom' },
+  ];
+
+  const periodLabel = `${format(new Date(range.start + 'T00:00:00'), 'dd MMM yyyy')} – ${format(new Date(range.end + 'T00:00:00'), 'dd MMM yyyy')}`;
+  const asOfLabel = format(new Date(summary.asOfDate + 'T00:00:00'), 'dd MMM yyyy');
+
+  const bankSub = summary.bankAccounts.length === 0 ? (
+    <span>No bank accounts configured</span>
+  ) : (
+    <>
+      {summary.bankAccounts.slice(0, 3).map(b => (
+        <div key={b.id} className="flex justify-between gap-2">
+          <span className="truncate">{b.name}</span>
+          <span className="font-medium text-foreground/80 whitespace-nowrap">{formatCurrency(b.balance)}</span>
+        </div>
+      ))}
+      {summary.bankAccounts.length > 3 && (
+        <div className="text-muted-foreground/70">+{summary.bankAccounts.length - 3} more banks</div>
+      )}
+    </>
+  );
+
+  const inventorySub = (
+    <div className="space-y-0.5">
+      <div className="flex justify-between gap-2"><span>Raw materials</span><span className="font-medium text-foreground/80">{formatCurrency(summary.inventory.rawMaterials)}</span></div>
+      <div className="flex justify-between gap-2"><span>Processing stock</span><span className="font-medium text-foreground/80">{formatCurrency(summary.inventory.processedStock)}</span></div>
+      {summary.inventory.finishedGoods > 0 && (
+        <div className="flex justify-between gap-2"><span>Finished goods</span><span className="font-medium text-foreground/80">{formatCurrency(summary.inventory.finishedGoods)}</span></div>
+      )}
+    </div>
+  );
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-10">
@@ -80,64 +162,177 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center gap-3 text-muted-foreground mb-2">
-            <CircleDollarSign className="h-5 w-5 text-emerald-500" />
-            <span className="text-sm font-medium">Cash in Hand</span>
-          </div>
-          <div className="text-2xl font-bold text-foreground">{formatCurrency(cashPosition.cashInHand)}</div>
+      {/* ── Date filter ───────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-1 bg-muted/40 border border-border rounded-lg p-1">
+          {presets.map(p => (
+            <button
+              key={p.key}
+              onClick={() => setPreset(p.key)}
+              className={cn(
+                "px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+                preset === p.key ? "bg-card text-foreground shadow-sm border border-border" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {p.label}
+            </button>
+          ))}
         </div>
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center gap-3 text-muted-foreground mb-2">
-            <ArrowUpCircle className="h-5 w-5 text-emerald-500" />
-            <span className="text-sm font-medium">Today's Receipts</span>
+        {preset === 'custom' && (
+          <div className="flex items-center gap-2">
+            <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="px-3 py-2 rounded-lg border border-border bg-background text-sm" title="From" />
+            <span className="text-muted-foreground text-sm">to</span>
+            <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="px-3 py-2 rounded-lg border border-border bg-background text-sm" title="To" />
           </div>
-          <div className="text-2xl font-bold text-success">{formatCurrency(cashPosition.todayReceipts)}</div>
-        </div>
-
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center gap-3 text-muted-foreground mb-2">
-            <ArrowDownCircle className="h-5 w-5 text-red-500" />
-            <span className="text-sm font-medium">Today's Payments</span>
-          </div>
-          <div className="text-2xl font-bold text-destructive">{formatCurrency(cashPosition.todayPayments)}</div>
-        </div>
-
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center gap-3 text-muted-foreground mb-2">
-            <DollarSign className="h-5 w-5 text-primary" />
-            <span className="text-sm font-medium">Today's Closing</span>
-          </div>
-          <div className="text-2xl font-bold text-foreground">{formatCurrency(cashPosition.todayClosing)}</div>
-        </div>
-
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center gap-3 text-muted-foreground mb-2">
-            <Wallet className="h-5 w-5 text-blue-500" />
-            <span className="text-sm font-medium">Total Revenue</span>
-          </div>
-          <div className="text-2xl font-bold text-foreground">{formatCurrency(totalSalesRevenue)}</div>
-        </div>
-
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center gap-3 text-muted-foreground mb-2">
-            <TrendingUp className="h-5 w-5 text-red-500" />
-            <span className="text-sm font-medium">Total Cost</span>
-          </div>
-          <div className="text-2xl font-bold text-foreground">{formatCurrency(totalPurchasesCost)}</div>
-        </div>
-        
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center gap-3 text-muted-foreground mb-2">
-            <PackageSearch className="h-5 w-5 text-blue-500" />
-            <span className="text-sm font-medium">Raw Inventory (PCS)</span>
-          </div>
-          <div className="text-2xl font-bold text-foreground">{formatNumber(totalRawStockPcs)}</div>
-        </div>
+        )}
+        <span className="text-xs text-muted-foreground">Balances as of {asOfLabel} · Activity {periodLabel}</span>
       </div>
-      
+
+      {/* ── Financial & Inventory Position ─────────────────────────────────── */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-bold text-foreground">Financial & Inventory Position</h3>
+          <span className="text-xs text-muted-foreground bg-muted/40 border border-border rounded-full px-3 py-1">As of {asOfLabel}</span>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          <MetricCard
+            icon={<CircleDollarSign className="h-5 w-5 text-emerald-500" />}
+            label="Cash in Hand"
+            value={formatCurrency(summary.cashInHand)}
+            sub={<span className="flex justify-between"><span>Period receipts</span><span className="font-medium text-success">{formatCurrency(summary.periodCashReceipts)}</span></span>}
+            onClick={() => navigate('/accounting/cashbook')}
+            accent="text-emerald-500"
+          />
+          <MetricCard
+            icon={<Landmark className="h-5 w-5 text-blue-500" />}
+            label="Bank Balance"
+            value={formatCurrency(summary.bankTotal)}
+            sub={bankSub}
+            onClick={() => navigate('/accounting/general-ledger')}
+            accent="text-blue-500"
+          />
+          <MetricCard
+            icon={<PackageSearch className="h-5 w-5 text-violet-500" />}
+            label="Inventory Value"
+            value={formatCurrency(summary.inventory.total)}
+            sub={inventorySub}
+            onClick={() => navigate('/materials')}
+            accent="text-violet-500"
+          />
+          <MetricCard
+            icon={<Users className="h-5 w-5 text-teal-500" />}
+            label="Accounts Receivable"
+            value={formatCurrency(summary.receivables.total)}
+            sub={<span>{summary.receivables.customersOutstanding} customer{summary.receivables.customersOutstanding === 1 ? '' : 's'} outstanding</span>}
+            onClick={() => navigate('/ledgers')}
+            accent="text-teal-500"
+          />
+          <MetricCard
+            icon={<Truck className="h-5 w-5 text-amber-500" />}
+            label="Accounts Payable"
+            value={formatCurrency(summary.payables.total)}
+            sub={<span>{summary.payables.suppliersOutstanding} supplier{summary.payables.suppliersOutstanding === 1 ? '' : 's'} outstanding</span>}
+            onClick={() => navigate('/ledgers')}
+            accent="text-amber-500"
+          />
+        </div>
+      </section>
+
+      {/* ── Financial Position panel ───────────────────────────────────────── */}
+      <section className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+        <div className="p-5 border-b border-border/50 bg-muted/30">
+          <h3 className="font-semibold text-foreground">Financial Position</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">Derived from the accounting engine — Trial Balance, Balance Sheet and Profit &amp; Loss views</p>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 divide-x divide-y md:divide-y-0 divide-border/50">
+          <div className="p-5">
+            <div className="flex items-center gap-2 text-muted-foreground mb-2"><Building2 className="h-4 w-4 text-sky-500" /><span className="text-xs font-medium uppercase tracking-wide">Total Assets</span></div>
+            <div className="text-xl font-bold text-foreground">{formatCurrency(summary.totalAssets)}</div>
+            <button onClick={() => navigate('/accounting/balance-sheet')} className="mt-1 text-xs text-primary hover:underline">Balance Sheet</button>
+          </div>
+          <div className="p-5">
+            <div className="flex items-center gap-2 text-muted-foreground mb-2"><Scale className="h-4 w-4 text-rose-500" /><span className="text-xs font-medium uppercase tracking-wide">Total Liabilities</span></div>
+            <div className="text-xl font-bold text-foreground">{formatCurrency(summary.totalLiabilities)}</div>
+            <button onClick={() => navigate('/accounting/balance-sheet')} className="mt-1 text-xs text-primary hover:underline">Balance Sheet</button>
+          </div>
+          <div className="p-5">
+            <div className="flex items-center gap-2 text-muted-foreground mb-2"><Wallet className="h-4 w-4 text-amber-500" /><span className="text-xs font-medium uppercase tracking-wide">Owner's Equity</span></div>
+            <div className="text-xl font-bold text-foreground">{formatCurrency(summary.equity)}</div>
+            <button onClick={() => navigate('/accounting/balance-sheet')} className="mt-1 text-xs text-primary hover:underline">Balance Sheet</button>
+          </div>
+          <div className="p-5">
+            <div className="flex items-center gap-2 text-muted-foreground mb-2"><ArrowLeftRight className="h-4 w-4 text-indigo-500" /><span className="text-xs font-medium uppercase tracking-wide">Net Working Capital</span></div>
+            <div className={cn("text-xl font-bold", summary.netWorkingCapital >= 0 ? "text-success" : "text-destructive")}>{formatCurrency(summary.netWorkingCapital)}</div>
+            <button onClick={() => navigate('/accounting/cash-flow')} className="mt-1 text-xs text-primary hover:underline">Cash Flow</button>
+          </div>
+          <div className="p-5 col-span-2 md:col-span-1">
+            <div className="flex items-center gap-2 text-muted-foreground mb-2"><TrendingUp className="h-4 w-4 text-emerald-500" /><span className="text-xs font-medium uppercase tracking-wide">Period Profit / Loss</span></div>
+            <div className={cn("text-xl font-bold", summary.profit.net >= 0 ? "text-success" : "text-destructive")}>{formatCurrency(summary.profit.net)}</div>
+            <button onClick={() => navigate('/accounting/profit-loss')} className="mt-1 text-xs text-primary hover:underline">Profit &amp; Loss</button>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Period activity ────────────────────────────────────────────────── */}
+      <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex items-center justify-between">
+          <div className="flex items-center gap-3 text-muted-foreground">
+            <ArrowUpCircle className="h-5 w-5 text-emerald-500" />
+            <div>
+              <div className="text-sm font-medium">Cash Receipts</div>
+              <div className="text-xs text-muted-foreground/70">Period</div>
+            </div>
+          </div>
+          <div className="text-xl font-bold text-success">{formatCurrency(summary.periodCashReceipts)}</div>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex items-center justify-between">
+          <div className="flex items-center gap-3 text-muted-foreground">
+            <ArrowDownCircle className="h-5 w-5 text-red-500" />
+            <div>
+              <div className="text-sm font-medium">Cash Payments</div>
+              <div className="text-xs text-muted-foreground/70">Period</div>
+            </div>
+          </div>
+          <div className="text-xl font-bold text-destructive">{formatCurrency(summary.periodCashPayments)}</div>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex items-center justify-between">
+          <div className="flex items-center gap-3 text-muted-foreground">
+            <DollarSign className="h-5 w-5 text-blue-500" />
+            <div>
+              <div className="text-sm font-medium">Sales</div>
+              <div className="text-xs text-muted-foreground/70">Period</div>
+            </div>
+          </div>
+          <div className="text-xl font-bold text-foreground">{formatCurrency(summary.periodSales)}</div>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex items-center justify-between">
+          <div className="flex items-center gap-3 text-muted-foreground">
+            <ShoppingCart className="h-5 w-5 text-violet-500" />
+            <div>
+              <div className="text-sm font-medium">Purchases</div>
+              <div className="text-xs text-muted-foreground/70">Period</div>
+            </div>
+          </div>
+          <div className="text-xl font-bold text-foreground">{formatCurrency(summary.periodPurchases)}</div>
+        </div>
+      </section>
+
+      {/* ── Inventory processing strip ─────────────────────────────────────── */}
+      <section className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <div className="text-sm text-muted-foreground mb-1">Raw Stock</div>
+          <div className="text-2xl font-bold text-foreground">{formatNumber(materials.reduce((acc, m) => acc + m.stockPcs, 0))} <span className="text-sm font-medium text-muted-foreground">PCS</span></div>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <div className="text-sm text-muted-foreground mb-1">Processing Stock</div>
+          <div className="text-2xl font-bold text-foreground">{formatNumber(totalProcessedStockPcs)} <span className="text-sm font-medium text-muted-foreground">PCS</span></div>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <div className="text-sm text-muted-foreground mb-1">Pending with Processors</div>
+          <div className="text-2xl font-bold text-foreground">{formatNumber(totalPendingWithProcessors)} <span className="text-sm font-medium text-muted-foreground">PCS</span></div>
+        </div>
+      </section>
+
       <div className="grid gap-6 lg:grid-cols-3 md:grid-cols-2">
         <div className="lg:col-span-2 rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col">
           <div className="p-6 border-b border-border/50">
@@ -148,7 +343,7 @@ export function Dashboard() {
               <LineChart data={last7DaysSales} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} dx={-10} tickFormatter={(value) => `₹${value/1000}k`} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} dx={-10} tickFormatter={(value) => `PKR ${value/1000}k`} />
                 <Tooltip 
                   contentStyle={{ backgroundColor: "hsl(var(--card))", color: "hsl(var(--foreground))", borderRadius: '12px', border: "1px solid hsl(var(--border))", boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                   formatter={(value: number) => [formatCurrency(value), 'Revenue']}
