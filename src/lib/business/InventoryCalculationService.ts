@@ -2,6 +2,22 @@ import { Product, Batch, InventoryMovement } from '../../types/erp';
 
 export class InventoryCalculationService {
   /**
+   * Weighted-average cost per piece for a material, derived from its Active
+   * batches (remaining value ÷ remaining pcs). Zero when the material has no
+   * costed batches yet. Used for inventory valuation — never selling price.
+   */
+  static getWeightedAverageCostPerPiece(materialId: string, batches: Batch[]): number {
+    let totalValue = 0;
+    let totalPcs = 0;
+    for (const b of batches) {
+      if (b.materialId !== materialId || b.status !== 'Active' || b.remainingPcs <= 0 || b.initialPcs <= 0) continue;
+      totalValue += (b.amount / b.initialPcs) * b.remainingPcs;
+      totalPcs += b.remainingPcs;
+    }
+    return totalPcs > 0 ? totalValue / totalPcs : 0;
+  }
+
+  /**
    * Calculate total raw material stock correctly across all batches.
    * This is a derivation calculation, ensuring stock values are accurate.
    */

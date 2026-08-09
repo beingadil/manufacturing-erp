@@ -9,6 +9,8 @@ import { MaterialService } from '../services/MaterialService';
 import { toast } from 'sonner';
 import { SafeDeleteDialog } from '../components/common/SafeDeleteDialog';
 import { InlineEditInput } from '../components/common/InlineEditInput';
+import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
+import { formatCurrency, formatNumber } from '../lib/utils';
 
 export function RawMaterials() {
   const { materials, categories, purchases, processingSends, processingReceipts, batches, addRawMaterial, removeModuleItem } = useERPStore();
@@ -149,10 +151,15 @@ export function RawMaterials() {
     return cat ? cat.name : "Unknown Category";
   };
 
-  const enrichedMaterials = useMemo(() => materials.map(m => ({
-    ...m,
-    categoryName: getCategoryName(m.categoryId)
-  })), [materials, categories]);
+  const enrichedMaterials = useMemo(() => materials.map(m => {
+    const costPerPiece = InventoryCalculationService.getWeightedAverageCostPerPiece(m.id, batches);
+    return {
+      ...m,
+      categoryName: getCategoryName(m.categoryId),
+      costPerPiece,
+      value: costPerPiece * (m.stockPcs || 0)
+    };
+  }), [materials, categories, batches]);
 
   const columns: Column<typeof enrichedMaterials[0]>[] = [
     { 
@@ -190,6 +197,22 @@ export function RawMaterials() {
     },
     { key: "stockPcs", label: "Raw Stock (PCS)", align: "right", sortable: true, render: (item) => <span className="font-bold text-foreground">{item.stockPcs}</span> },
     { key: "processedStockPcs", label: "Processed Stock (PCS)", align: "right", sortable: true, render: (item) => <span className="font-bold text-success">{item.processedStockPcs}</span> },
+    {
+      key: "value",
+      label: "Total Value (PKR)",
+      align: "right",
+      sortable: true,
+      render: (item) => (
+        <div className="text-right">
+          <div className="font-bold text-foreground">{formatCurrency(item.value)}</div>
+          {item.costPerPiece > 0 ? (
+            <div className="text-xs text-muted-foreground">@ {formatCurrency(item.costPerPiece)} / PCS</div>
+          ) : (
+            <div className="text-xs text-muted-foreground">No cost data (no purchases yet)</div>
+          )}
+        </div>
+      )
+    },
     { 
       key: "status", 
       label: "Status", 
@@ -263,6 +286,22 @@ export function RawMaterials() {
             <Plus className="h-4 w-4" />
             Add Material
           </button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <div className="text-xs text-muted-foreground uppercase tracking-wide">Total Materials</div>
+          <div className="text-xl font-bold text-foreground mt-1">{formatNumber(enrichedMaterials.length)}</div>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <div className="text-xs text-muted-foreground uppercase tracking-wide">Total Raw Stock</div>
+          <div className="text-xl font-bold text-foreground mt-1">{formatNumber(enrichedMaterials.reduce((s, m) => s + (m.stockPcs || 0), 0))} <span className="text-sm font-medium text-muted-foreground">PCS</span></div>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <div className="text-xs text-muted-foreground uppercase tracking-wide">Total Inventory Value</div>
+          <div className="text-xl font-bold text-success mt-1">{formatCurrency(enrichedMaterials.reduce((s, m) => s + (m.value || 0), 0))}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">Raw stock valued at weighted-average purchase cost</div>
         </div>
       </div>
 

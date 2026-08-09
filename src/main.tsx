@@ -10,7 +10,23 @@ import { dbService } from "./database/DatabaseService";
 
 async function bootstrap() {
   const rootElement = document.getElementById("root")!;
-  
+
+  // Render the UI IMMEDIATELY — the login screen appears as fast as the
+  // bundle loads. Store rehydration from SQLite runs in the background below;
+  // zustand setState triggers re-renders as data arrives, and AuthContext
+  // gates seedDefaults/session-restore on __HYDRATION_COMPLETE__ so the
+  // timing fix (no re-seeding over user data) is preserved.
+  let root = (window as any).__REACT_ROOT__;
+  if (!root) {
+    root = createRoot(rootElement);
+    (window as any).__REACT_ROOT__ = root;
+  }
+  root.render(
+    <AppWrapper>
+      <App />
+    </AppWrapper>
+  );
+
   try {
     Logger.info('Startup', 'Loading Configuration...', `Version: ${APP_VERSION}`);
     await Desktop.config.getConfig('app_version', APP_VERSION);
@@ -179,18 +195,6 @@ async function bootstrap() {
     // This prevents seedDefaults from firing before persist middleware
     // rehydration completes for stores without skipHydration.
     (window as any).__HYDRATION_COMPLETE__ = true;
-
-    let root = (window as any).__REACT_ROOT__;
-    if (!root) {
-      root = createRoot(rootElement);
-      (window as any).__REACT_ROOT__ = root;
-    }
-
-    root.render(
-        <AppWrapper>
-          <App />
-        </AppWrapper>
-    );
   } catch (error) {
     console.error('[Startup] Fatal Error during bootstrap:', error);
     Desktop.dialog.showErrorBox('Startup Failed', `The application failed to start:\n${(error as Error).message}`);
