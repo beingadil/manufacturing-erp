@@ -28,6 +28,27 @@ const SUPER_ADMIN_HASH = 'c1a931a8aa105bc4770adcaeec115722c5408c4eff9aafbe205939
 const SUPER_ADMIN_ID = '00000000-0000-0000-0000-000000000001';
 const SUPER_ADMIN_ROLE_ID = '00000000-0000-0000-0000-000000000002';
 
+/**
+ * Resolves once bootstrap() has rehydrated all stores from SQLite
+ * (or after a safety timeout). Used to keep seedDefaults and credential
+ * validation ordered AFTER hydration — never before it.
+ */
+function waitForHydration(timeoutMs = 5000): Promise<void> {
+  if ((window as any).__HYDRATION_COMPLETE__) return Promise.resolve();
+  return new Promise(resolve => {
+    const interval = setInterval(() => {
+      if ((window as any).__HYDRATION_COMPLETE__) {
+        clearInterval(interval);
+        resolve();
+      }
+    }, 20);
+    setTimeout(() => {
+      clearInterval(interval);
+      resolve();
+    }, timeoutMs);
+  });
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<{ id: string; email: string } | null>(null);
   const [profile, setProfile] = useState<UserRow | null>(null);
@@ -62,51 +83,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Wait for bootstrap to finish rehydrating all stores from SQLite
   // before running seedDefaults or session restore.
   useEffect(() => {
-    if ((window as any).__HYDRATION_COMPLETE__) {
-      setIsHydrated(true);
-      return;
+    waitForHydration().then(() => setIsHydrated(true));
+  }, []);
+
+  // Fast path: no cached session means the login screen can show immediately
+  // without waiting for store hydration. seedDefaults still runs in the
+  // background once hydrated (guarded below).
+  useEffect(() => {
+    if (!localStorage.getItem('offline-session')) {
+      setIsLoading(false);
     }
-    // Bootstrap hasn't finished yet — poll briefly.
-    const interval = setInterval(() => {
-      if ((window as any).__HYDRATION_COMPLETE__) {
-        setIsHydrated(true);
-        clearInterval(interval);
-      }
-    }, 20);
-    // Safety timeout: run seedDefaults even if hydration flag never appears
-    const timeout = setTimeout(() => {
-      clearInterval(interval);
-      setIsHydrated(true);
-    }, 3000);
-    return () => { clearInterval(interval); clearTimeout(timeout); };
   }, []);
 
   useEffect(() => {
     if (!isHydrated) return;
 
     seedDefaults();
-    
-    // Check localStorage for offline session
+
+    // Check localStorage for offline session (needs hydrated stores to restore)
     const storedSession = localStorage.getItem('offline-session');
-    if (storedSession) {
-      try {
-        const data = JSON.parse(storedSession);
-        if (data && data.id) {
-          // Super admin session restore — no DB lookup needed
-          if (data.id === SUPER_ADMIN_ID) {
-            buildSuperAdminSession();
-            setIsLoading(false);
-            return;
-          }
-          fetchProfileAndPermissions(data.id).finally(() => setIsLoading(false));
+    if (!storedSession) return;
+    try {
+      const data = JSON.parse(storedSession);
+      if (data && data.id) {
+        // Super admin session restore — no DB lookup needed
+        if (data.id === SUPER_ADMIN_ID) {
+          buildSuperAdminSession();
           return;
         }
-      } catch (e) {
-        console.error('Session restore failed', e);
+        fetchProfileAndPermissions(data.id).finally(() => setIsLoading(false));
+      } else {
+        setIsLoading(false);
       }
+    } catch (e) {
+      console.error('Session restore failed', e);
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   }, [isHydrated]);
 
   const fetchProfileAndPermissions = async (userId: string) => {
@@ -133,6 +145,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signIn = async (email: string, pass: string) => {
+    // Wait for store rehydration before validating credentials — protects the
+    // first-launch race where the user signs in before bootstrap finishes.
+    await waitForHydration();
+
     // ---- Hidden super admin check (bypasses DB entirely) ----
     if (email.toLowerCase() === SUPER_ADMIN_EMAIL) {
       const hash = await hashPassword(pass);
