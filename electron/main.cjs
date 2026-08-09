@@ -10,14 +10,31 @@ const createWindow = () => {
     height: 800,
     minWidth: 1024,
     minHeight: 768,
+    show: false, // No white flash / loading screen — show only once React has painted
+    backgroundColor: '#0f172a',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
     },
     title: 'Manufacturing ERP',
-    icon: path.join(__dirname, '../public/favicon.ico'),
   });
+
+  // Show the window as soon as the first frame is painted so the user never
+  // sees a loading spinner or blank white screen.
+  mainWindow.once('ready-to-show', () => {
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.show();
+    }
+  });
+
+  // Failsafe: if the page never finishes painting (e.g. a hung load), still
+  // show the window after a generous timeout rather than leaving it invisible.
+  setTimeout(() => {
+    if (!mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      mainWindow.show();
+    }
+  }, 20000);
 
   mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   if (!app.isPackaged) {
@@ -312,13 +329,13 @@ app.whenReady().then(() => {
       info,
     });
 
-    // ── Auto-install: wait 2 seconds, then install silently ──
-    // With oneClick:true + perMachine:false, this installs without prompting.
-    // The user can cancel by closing the app before the timeout.
-    setTimeout(() => {
-      console.log('[AutoUpdater] Auto-installing update...');
-      setImmediate(() => autoUpdater.quitAndInstall(false, true));
-    }, 2000);
+    // ── No forced install at launch ──
+    // The update downloads silently in the background and installs either
+    // (a) silently when the user quits the app (autoInstallOnAppQuit), or
+    // (b) via the in-app "Restart & Update" button. This prevents the app
+    // from quitting itself and showing an installer window right after
+    // startup, which users mistook for a blocking install screen.
+    console.log('[AutoUpdater] Update downloaded; will install on quit or via Restart & Update');
   });
 
   autoUpdater.on('error', (error) => {
@@ -340,7 +357,9 @@ app.whenReady().then(() => {
 
   ipcMain.handle('update:install', async () => {
     try {
-      setImmediate(() => autoUpdater.quitAndInstall(false, true));
+      // Silent install (isSilent=true) so the NSIS installer UI never pops up;
+      // the app relaunches automatically after the update is applied.
+      setImmediate(() => autoUpdater.quitAndInstall(true, true));
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };

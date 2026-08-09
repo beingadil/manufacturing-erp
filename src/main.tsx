@@ -8,6 +8,19 @@ import { useLogStore } from "./store/useLogStore";
 import { APP_VERSION, IS_PRODUCTION } from "./config/version.ts";
 import { dbService } from "./database/DatabaseService";
 
+// ── Global error capture (diagnostics) ────────────────────────────────────
+// Print unhandled rejections/errors with stacks so packaged-app crashes are
+// visible in --enable-logging output instead of silently leaving a blank UI.
+window.addEventListener("unhandledrejection", (event) => {
+  const r: any = event.reason;
+  console.error("[GLOBAL:unhandledrejection]", r && r.stack ? r.stack : String(r));
+});
+window.addEventListener("error", (event) => {
+  const e: any = event.error;
+  console.error("[GLOBAL:error]", e && e.stack ? e.stack : event.message);
+});
+// ──────────────────────────────────────────────────────────────────────────
+
 async function bootstrap() {
   const rootElement = document.getElementById("root")!;
 

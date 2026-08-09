@@ -1,8 +1,14 @@
 import { dbService } from '../DatabaseService';
-import { Logger } from '../../lib/logger';
 
 /**
  * SQLite Storage Adapter for Zustand Persist Middleware.
+ *
+ * IMPORTANT: This adapter must NEVER log through the Logger sink (useLogStore).
+ * The log store persists through THIS adapter, so a Logger call from here
+ * would recurse: Logger -> addLog -> persist setItem -> adapter -> Logger -> ...
+ * That recursion blocked the renderer for seconds at startup (the "loading
+ * screen that never ends"). All diagnostics below go straight to console,
+ * which is what the Electron --enable-logging output captures anyway.
  *
  * Simple key-value persistence: reads/writes the entire Zustand state
  * as a JSON blob in the key_value_store table via the Electron IPC bridge.
@@ -98,17 +104,17 @@ export const SQLiteStorageAdapter = {
           }
           // Mirror is newer than SQLite → a previous SQLite write failed.
           // Return the mirror AND heal SQLite so both stores converge.
-          Logger.warn('SQLiteStorageAdapter', `${name}: mirror is newer than SQLite, healing SQLite`);
+          console.warn('[SQLiteStorageAdapter]', `${name}: mirror is newer than SQLite, healing SQLite`);
           try {
             await writeToSqlite(db, name, mirror.value);
           } catch (healError: any) {
-            Logger.error('SQLiteStorageAdapter', `Failed to heal ${name}: ${healError.message}`);
+            console.error('[SQLiteStorageAdapter]', `Failed to heal ${name}: ${healError.message}`);
           }
           return mirror.value;
         }
       }
     } catch (error: any) {
-      Logger.error('SQLiteStorageAdapter', `Failed to read ${name} from SQLite: ${error.message}`);
+      console.error('[SQLiteStorageAdapter]', `Failed to read ${name} from SQLite: ${error.message}`);
     }
 
     // SQLite has no value (preview / empty DB / not ready) → mirror fallback
@@ -117,7 +123,7 @@ export const SQLiteStorageAdapter = {
     }
 
     if (!dbService.isReady()) {
-      Logger.warn('SQLiteStorageAdapter', `DB not ready, no mirror for ${name}`);
+      console.warn('[SQLiteStorageAdapter]', `DB not ready, no mirror for ${name}`);
     }
     return null;
   },
@@ -128,13 +134,15 @@ export const SQLiteStorageAdapter = {
 
     try {
       if (!dbService.isReady()) {
-        Logger.warn('SQLiteStorageAdapter', `DB not ready, kept localStorage mirror for ${name}`);
+        // No Logger here — logging through the sink would recurse through the
+        // log store's own persist (see header comment).
+        console.warn('[SQLiteStorageAdapter]', `DB not ready, kept localStorage mirror for ${name}`);
         return;
       }
       const db = dbService.getAdapter();
       await writeToSqlite(db, name, value);
     } catch (error: any) {
-      Logger.error('SQLiteStorageAdapter', `Failed to save ${name}: ${error.message}`);
+      console.error('[SQLiteStorageAdapter]', `Failed to save ${name}: ${error.message}`);
     }
   },
 
@@ -145,7 +153,7 @@ export const SQLiteStorageAdapter = {
       const db = dbService.getAdapter();
       await db.execute('DELETE FROM key_value_store WHERE key = ?', [name]);
     } catch (error: any) {
-      Logger.error('SQLiteStorageAdapter', `Failed to delete ${name}: ${error.message}`);
+      console.error('[SQLiteStorageAdapter]', `Failed to delete ${name}: ${error.message}`);
     }
   },
 };
