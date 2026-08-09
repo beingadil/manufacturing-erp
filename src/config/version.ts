@@ -1,5 +1,5 @@
-export const APP_VERSION = '1.0.8';
-export const BUILD_NUMBER = '20260809.1';
+export const APP_VERSION = '1.0.9';
+export const BUILD_NUMBER = '20260809.2';
 export const RELEASE_DATE = '2026-08-09';
 export const ENVIRONMENT = import.meta.env.MODE || 'development';
 export const IS_PRODUCTION = ENVIRONMENT === 'production';

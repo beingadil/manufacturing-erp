@@ -20,6 +20,31 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.9',
+    date: '2026-08-09',
+    title: 'Instant startup — no loading screen, no forced update install',
+    sections: [
+      {
+        title: '⚡ Performance',
+        items: [
+          'The app now opens directly to the login screen — the loading spinner is gone, and a startup recursion bug that could stall the app for many seconds was fixed (startup completes in ~150 ms).',
+        ],
+      },
+      {
+        title: '🔧 Updates',
+        items: [
+          'Updates now download silently in the background and install when you close the app or click “Restart & Update” — the app no longer quits itself and shows an installer window right after launch.',
+        ],
+      },
+      {
+        title: '🐛 Bug Fixes',
+        items: [
+          'Fixed an infinite recursion in the persistence layer that blocked startup whenever the database was still initializing — this also prevented data rehydration in some cases.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.8',
     date: '2026-08-09',
     title: 'Instant startup & live financial position',
