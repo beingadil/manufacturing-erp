@@ -109,6 +109,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Super admin session restore — no DB lookup needed
         if (data.id === SUPER_ADMIN_ID) {
           buildSuperAdminSession();
+          // Must clear the loading gate or RouteGuard keeps showing its
+          // spinner forever on every launch with a saved session.
+          setIsLoading(false);
           return;
         }
         fetchProfileAndPermissions(data.id).finally(() => setIsLoading(false));
