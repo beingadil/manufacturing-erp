@@ -5,6 +5,7 @@ import type {
   Customer,
   JournalEntry,
   Processor,
+  ProcessorBill,
   Purchase,
   RawMaterial,
   Sale,
@@ -31,10 +32,22 @@ export interface BankBalance {
 }
 
 export interface InventoryValuation {
+  /** Value of raw stock on hand — batch cost basis. */
   rawMaterials: number;
+  /** Value of processed/finished stock at weighted-average material cost. */
   processedStock: number;
+  /** Cost-based value of stock physically at processors (operational — not ledger-posted). */
+  atProcessor: number;
+  /** Same as processedStock — in this ERP finished goods ARE the processed stock. */
   finishedGoods: number;
+  /** Total valued inventory = raw + at-processor + finished. */
   total: number;
+  /** Operational quantities (PCS). */
+  rawPcs: number;
+  wipPcs: number;
+  finishedPcs: number;
+  /** True when the batch-basis total equals the per-material roll-up (batch/stock state reconcile). */
+  reconciled: boolean;
 }
 
 export interface ReceivablesSummary {
@@ -80,6 +93,7 @@ export interface DashboardSummary {
   profit: ProfitSummary;
   periodSales: number;
   periodPurchases: number;
+  periodProcessing: number;
   netWorkingCapital: number;
 }
 
@@ -95,6 +109,7 @@ export interface DashboardSummaryState {
   processors: Processor[];
   sales: Sale[];
   purchases: Purchase[];
+  processorBills: ProcessorBill[];
 }
 
 export class DashboardSummaryService {
@@ -116,52 +131,80 @@ export class DashboardSummaryService {
   }
 
   /**
-   * Raw-material inventory value from the batch cost basis:
-   * for every active batch, remainingPcs × (amount / initialPcs).
-   * This is the cost already recorded at purchase time — no selling-price math.
+   * Per-material inventory value at ACTUAL purchase cost, split by stage.
+   *
+   * raw        = Σ batch remainingPcs × batch rate  (what you paid for the raw you hold)
+   * atProcessor= Σ batch atProcessorPcs × batch rate (the exact batch dispatched)
+   * finished   = Σ batch processedPcs × batch rate   (the exact batch that produced it)
+   *
+   * The BATCH TRAIL is the single source of truth. A batch's pcs are partitioned
+   * into exactly one stage (remaining + atProcessor + processed + sold =
+   * initialPcs), so moving stock between stages never changes total value — it
+   * only relocates it (raw → WIP → finished → COGS on sale). Material counters
+   * are reconciled against the batch trail; any drift is FLAGGED (reconciled =
+   * false) instead of being silently valued on top of the batch value — that
+   * silent addition was the double-counting bug (raw counted from batches PLUS
+   * WIP/finished counted from material counters).
    */
-  private static valueRawMaterials(batches: Batch[]): {
-    rawMaterials: number;
-    weightedCosts: Map<string, number>;
-  } {
-    const weightedCosts = new Map<string, number>();
-    const remainingByMaterial = new Map<string, number>();
+  private static valueInventory(batches: Batch[], materials: RawMaterial[]): InventoryValuation {
     let rawMaterials = 0;
+    let atProcessor = 0;
+    let finishedGoods = 0;
+    let reconciled = true;
 
-    for (const b of batches) {
-      if (b.status !== 'Active' || b.remainingPcs <= 0 || b.initialPcs <= 0) continue;
-      const costPerPiece = b.amount / b.initialPcs;
-      const remainingValue = costPerPiece * b.remainingPcs;
-      rawMaterials += remainingValue;
-      weightedCosts.set(b.materialId, (weightedCosts.get(b.materialId) || 0) + remainingValue);
-      remainingByMaterial.set(b.materialId, (remainingByMaterial.get(b.materialId) || 0) + b.remainingPcs);
+    const materialIds = new Set(materials.map(m => m.id));
+    const active = batches.filter(b => b.status === 'Active');
+
+    const attrRaw = new Map<string, number>();
+    const attrWip = new Map<string, number>();
+    const attrFin = new Map<string, number>();
+    for (const b of active) {
+      if (!materialIds.has(b.materialId)) continue;
+      const cost = b.initialPcs > 0 ? b.amount / b.initialPcs : 0;
+      const raw = b.remainingPcs || 0;
+      const wip = b.atProcessorPcs || 0;
+      const fin = b.processedPcs || 0;
+      attrRaw.set(b.materialId, (attrRaw.get(b.materialId) || 0) + raw);
+      attrWip.set(b.materialId, (attrWip.get(b.materialId) || 0) + wip);
+      attrFin.set(b.materialId, (attrFin.get(b.materialId) || 0) + fin);
+      rawMaterials += raw * cost;
+      atProcessor += wip * cost;
+      finishedGoods += fin * cost;
     }
 
-    // Weighted-average cost per piece per material (total remaining value / total remaining pcs)
-    const avgCostPerPiece = new Map<string, number>();
-    for (const [materialId, value] of weightedCosts) {
-      const remaining = remainingByMaterial.get(materialId) || 0;
-      avgCostPerPiece.set(materialId, remaining > 0 ? value / remaining : 0);
-    }
-    return { rawMaterials, weightedCosts: avgCostPerPiece };
-  }
+    // Operational quantities (material counters) for the UI cards.
+    const rawPcs = materials.reduce((s, m) => s + (m.stockPcs || 0), 0);
+    const wipPcs = materials.reduce((s, m) => s + (m.atProcessorPcs || 0), 0);
+    const finishedPcs = materials.reduce((s, m) => s + (m.processedStockPcs || 0), 0);
 
-  /**
-   * Processed stock is valued at the source material's weighted-average cost
-   * per piece (from the batches it was purchased in), times processedStockPcs.
-   */
-  private static valueProcessedStock(
-    materials: RawMaterial[],
-    avgCostPerPiece: Map<string, number>
-  ): number {
-    return materials.reduce((sum, m) => {
-      const cost = avgCostPerPiece.get(m.id) || 0;
-      return sum + cost * (m.processedStockPcs || 0);
-    }, 0);
+    // Reconciliation guard: material counters must equal the batch trail. If
+    // they diverge, flag it — never value the same pcs twice.
+    for (const m of materials) {
+      const batchRaw = attrRaw.get(m.id) || 0;
+      const batchWip = attrWip.get(m.id) || 0;
+      const batchFin = attrFin.get(m.id) || 0;
+      const tol = 0.01;
+      if (Math.abs((m.stockPcs || 0) - batchRaw) > tol) reconciled = false;
+      if (Math.abs((m.atProcessorPcs || 0) - batchWip) > tol) reconciled = false;
+      if (Math.abs((m.processedStockPcs || 0) - batchFin) > tol) reconciled = false;
+    }
+
+    const total = rawMaterials + atProcessor + finishedGoods;
+    return {
+      rawMaterials,
+      processedStock: finishedGoods,
+      finishedGoods,
+      atProcessor,
+      total,
+      rawPcs,
+      wipPcs,
+      finishedPcs,
+      reconciled,
+    };
   }
 
   static getSummary(state: DashboardSummaryState, options: DashboardSummaryOptions): DashboardSummary {
-    const { accounts, accountSubtypes, journalEntries, vouchers, batches, materials, customers, suppliers, processors, sales, purchases } = state;
+    const { accounts, accountSubtypes, journalEntries, vouchers, batches, materials, customers, suppliers, processors, sales, purchases, processorBills } = state;
     const { asOfDate, periodStart, periodEnd } = options;
 
     // ── Balances as of the period end — single authoritative engine ─────────
@@ -203,26 +246,22 @@ export class DashboardSummaryService {
       }
     }
 
-    // ── Inventory valuation (batch cost basis) ───────────────────────────────
-    const { rawMaterials, weightedCosts } = this.valueRawMaterials(batches);
-    const processedStock = this.valueProcessedStock(materials, weightedCosts);
-    const finishedGoods = 0; // finished goods have no stock quantity/cost tracked in inventory
-    const inventory = {
-      rawMaterials,
-      processedStock,
-      finishedGoods,
-      total: rawMaterials + processedStock + finishedGoods,
-    };
+    // ── Inventory valuation — ACTUAL purchase cost, per stage ────────────────
+    // raw / atProcessor / finished each = Σ pcs × that batch's purchase rate.
+    const inventory = this.valueInventory(batches, materials);
 
-    // ── Balance-sheet position (mirrors the Balance Sheet report) ────────────
+    // ── Balance-sheet position — mirrors the Balance Sheet report EXACTLY ────
+    // Raw balances, no clamping: if an asset account is negative (e.g. the
+    // under-posted Finished Goods line) the Dashboard must show the same total
+    // the report shows, or the two would never reconcile (Phase 7).
     let totalAssets = 0;
     let totalLiabilities = 0;
     let equity = 0;
     for (const account of accounts) {
       const bal = balances.get(account.id) || 0;
-      if (account.type === 'Assets') totalAssets += Math.max(0, bal);
-      else if (account.type === 'Liabilities') totalLiabilities += Math.max(0, bal);
-      else if (account.type === 'Equity') equity += Math.max(0, bal);
+      if (account.type === 'Assets') totalAssets += bal;
+      else if (account.type === 'Liabilities') totalLiabilities += bal;
+      else if (account.type === 'Equity') equity += bal;
     }
 
     // ── Period profit from posted entries only (no opening balances) ─────────
@@ -251,6 +290,7 @@ export class DashboardSummaryService {
     const inPeriod = (date: string) => date >= periodStart && date <= periodEnd;
     const periodSales = sales.filter(s => inPeriod(s.date)).reduce((sum, s) => sum + (s.totalAmount || 0), 0);
     const periodPurchases = purchases.filter(p => inPeriod(p.date)).reduce((sum, p) => sum + (p.amount || 0), 0);
+    const periodProcessing = processorBills.filter(b => inPeriod(b.date)).reduce((sum, b) => sum + (b.totalAmount || 0), 0);
 
     // ── Net working capital: (cash + bank + receivables + inventory) − payables
     const netWorkingCapital = cashInHand + bankTotal + receivablesTotal + inventory.total - payablesTotal;
@@ -273,6 +313,7 @@ export class DashboardSummaryService {
       profit,
       periodSales,
       periodPurchases,
+      periodProcessing,
       netWorkingCapital,
     };
   }

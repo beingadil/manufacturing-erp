@@ -152,12 +152,16 @@ export function RawMaterials() {
   };
 
   const enrichedMaterials = useMemo(() => materials.map(m => {
-    const costPerPiece = InventoryCalculationService.getWeightedAverageCostPerPiece(m.id, batches);
+    const stages = InventoryCalculationService.getMaterialStageValues(m.id, batches);
+    // Raw stock value at ACTUAL purchase cost: Σ remainingPcs × batch purchase rate
+    const value = stages.raw.value;
+    // Average purchase rate for display (weighted across the raw batches on hand)
+    const costPerPiece = stages.raw.pcs > 0 ? stages.raw.value / stages.raw.pcs : 0;
     return {
       ...m,
       categoryName: getCategoryName(m.categoryId),
       costPerPiece,
-      value: costPerPiece * (m.stockPcs || 0)
+      value
     };
   }), [materials, categories, batches]);
 
@@ -206,7 +210,7 @@ export function RawMaterials() {
         <div className="text-right">
           <div className="font-bold text-foreground">{formatCurrency(item.value)}</div>
           {item.costPerPiece > 0 ? (
-            <div className="text-xs text-muted-foreground">@ {formatCurrency(item.costPerPiece)} / PCS</div>
+            <div className="text-xs text-muted-foreground">Avg purchase rate @ {formatCurrency(item.costPerPiece)} / PCS</div>
           ) : (
             <div className="text-xs text-muted-foreground">No cost data (no purchases yet)</div>
           )}
@@ -301,7 +305,7 @@ export function RawMaterials() {
         <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
           <div className="text-xs text-muted-foreground uppercase tracking-wide">Total Inventory Value</div>
           <div className="text-xl font-bold text-success mt-1">{formatCurrency(enrichedMaterials.reduce((s, m) => s + (m.value || 0), 0))}</div>
-          <div className="text-xs text-muted-foreground mt-0.5">Raw stock valued at weighted-average purchase cost</div>
+          <div className="text-xs text-muted-foreground mt-0.5">Raw stock valued at actual purchase cost (per batch)</div>
         </div>
       </div>
 

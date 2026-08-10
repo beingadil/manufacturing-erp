@@ -448,7 +448,7 @@ export function JobWork() {
               </div>
               {sendMaterialId && (
                 <select value={sendBatchId} onChange={e => setSendBatchId(e.target.value)} className="w-full rounded-xl border p-3 text-sm">
-                  <option value="">Any Batch / General Stock</option>
+                  <option value="">Auto (oldest batch first)</option>
                   {availableBatches.map(b => <option key={b.id} value={b.id}>{b.batchNo} (Available: {b.remainingPcs} PCS)</option>)}
                 </select>
               )}

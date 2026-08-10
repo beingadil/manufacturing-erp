@@ -58,10 +58,10 @@ function buildState(): DashboardSummaryState {
   ];
 
   const batches = [
-    // m1: 200,000 for 1,000 pcs; 400 remaining → 80,000
-    { id: 'b1', batchNo: 'B-0001', purchaseId: 'p1', supplierId: 'sup-1', materialId: 'm1', date: '2026-06-01', weight: 0, weightUnit: 'KGs' as const, ratePerUnit: 0, weightPerPiece: 1, initialPcs: 1000, remainingPcs: 400, amount: 200000, status: 'Active' as const },
-    // m1: 100,000 for 500 pcs; 500 remaining → 100,000 (WA cost per pc = 180,000/900 = 200)
-    { id: 'b2', batchNo: 'B-0002', purchaseId: 'p2', supplierId: 'sup-1', materialId: 'm1', date: '2026-06-15', weight: 0, weightUnit: 'KGs' as const, ratePerUnit: 0, weightPerPiece: 1, initialPcs: 500, remainingPcs: 500, amount: 100000, status: 'Active' as const },
+    // m1: 200,000 for 1,000 pcs (200/pc); 400 raw remaining → 80,000; 50 finished from this batch → 10,000
+    { id: 'b1', batchNo: 'B-0001', purchaseId: 'p1', supplierId: 'sup-1', materialId: 'm1', date: '2026-06-01', weight: 0, weightUnit: 'KGs' as const, ratePerUnit: 0, weightPerPiece: 1, initialPcs: 1000, remainingPcs: 400, amount: 200000, status: 'Active' as const, atProcessorPcs: 0, processedPcs: 50 },
+    // m1: 100,000 for 500 pcs (200/pc); 500 remaining → 100,000
+    { id: 'b2', batchNo: 'B-0002', purchaseId: 'p2', supplierId: 'sup-1', materialId: 'm1', date: '2026-06-15', weight: 0, weightUnit: 'KGs' as const, ratePerUnit: 0, weightPerPiece: 1, initialPcs: 500, remainingPcs: 500, amount: 100000, status: 'Active' as const, atProcessorPcs: 0, processedPcs: 0 },
   ];
 
   return {
@@ -83,6 +83,10 @@ function buildState(): DashboardSummaryState {
     purchases: [
       { id: 'p1', purchaseNo: 'PO-1', supplierId: 'sup-1', materialId: 'm1', date: '2026-07-20', weight: 1, weightUnit: 'KGs' as const, ratePerUnit: 12000, weightPerPiece: 1, calculatedPcs: 1, amount: 12000 },
       { id: 'p2', purchaseNo: 'PO-2', supplierId: 'sup-1', materialId: 'm1', date: '2026-08-05', weight: 1, weightUnit: 'KGs' as const, ratePerUnit: 9000, weightPerPiece: 1, calculatedPcs: 1, amount: 9000 },
+    ],
+    processorBills: [
+      { id: 'pb1', billNo: 'BILL-1', processorId: 'pr1', date: '2026-07-15', receiptIds: [], totalAmount: 25000 },
+      { id: 'pb2', billNo: 'BILL-2', processorId: 'pr1', date: '2026-08-10', receiptIds: [], totalAmount: 40000 },
     ],
   } as DashboardSummaryState;
 }
@@ -117,6 +121,13 @@ describe('DashboardSummaryService.getSummary', () => {
     expect(s.inventory.rawMaterials).toBe(180000);
     // Processed: WA cost 180,000/900 = 200 × 50 pcs = 10,000
     expect(s.inventory.processedStock).toBe(10000);
+    // Finished goods ARE the processed stock — same value, plus operational quantities
+    expect(s.inventory.finishedGoods).toBe(10000);
+    expect(s.inventory.rawPcs).toBe(900);
+    expect(s.inventory.wipPcs).toBe(0);
+    expect(s.inventory.finishedPcs).toBe(50);
+    // Batch-basis total (190,000) equals the per-material roll-up (200 × 950 pcs)
+    expect(s.inventory.reconciled).toBe(true);
     expect(s.inventory.total).toBe(190000);
   });
 
@@ -138,10 +149,11 @@ describe('DashboardSummaryService.getSummary', () => {
     expect(s.netWorkingCapital).toBe(6000 + 0 + 10000 + 190000 - 5000);
   });
 
-  it('scopes period sales/purchases and cash receipts/payments to the window', () => {
+  it('scopes period sales/purchases/processing and cash receipts/payments to the window', () => {
     const s = DashboardSummaryService.getSummary(buildState(), options);
     expect(s.periodSales).toBe(30000); // Sep sale excluded
     expect(s.periodPurchases).toBe(12000); // Aug purchase excluded
+    expect(s.periodProcessing).toBe(25000); // Aug processor bill excluded
     expect(s.periodCashReceipts).toBe(10000);
     expect(s.periodCashPayments).toBe(4000);
   });

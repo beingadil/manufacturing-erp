@@ -1,5 +1,6 @@
 import { DocumentNumberingService } from '../lib/business/DocumentNumberingService';
 import { UnitConversionService } from '../lib/business/UnitConversionService';
+import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
 import { createCRUDActions } from './crudActions';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
@@ -14,7 +15,7 @@ import {
   CompanySettings, DocumentSettings
 } from '../types/erp';
 import { migrateERPState } from './erpMigration';
-import { getSystemAccountBySubtype } from '../lib/accounting/accountClassification';
+import { getSystemAccountBySubtype, getSystemInventoryAccount, getSystemCOGSAccount } from '../lib/accounting/accountClassification';
 
 export interface ERPState {
   inventoryThreshold: number;
@@ -529,7 +530,10 @@ export const useERPStore = create<ERPState>()(
         );
 
         // Automatic Voucher Generation (spec §25 — resolve accounts by subtype, never by name)
-        const purchaseAccount = getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Purchases');
+        // Purchases increase raw-material INVENTORY (an asset) — the purchase is
+        // NOT an expense yet. Cost of goods sold is recognized only when the
+        // goods are actually sold, so the Balance Sheet shows the stock we hold.
+        const purchaseAccount = getSystemInventoryAccount(state.accounts, state.accountSubtypes, 'Raw Material Inventory');
         const payableAccount = state.accounts.find(a => a.linkedEntityId === data.supplierId) 
           || getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Accounts Payable');
         
@@ -630,20 +634,22 @@ export const useERPStore = create<ERPState>()(
           } : m
         );
 
-        let updatedBatches = state.batches;
-        if (data.batchId) {
-          updatedBatches = (state.batches || []).map(b => 
-            b.id === data.batchId ? {
-              ...b,
-              remainingPcs: b.remainingPcs - data.pcsSent
-            } : b
-          );
-        }
+        // The batch trail ALWAYS moves with the physical stock: if no batch was
+        // selected ('Any Batch / General Stock'), consume FIFO (oldest batch
+        // first) so the same economic pcs are never counted as both raw and WIP.
+        const attributed = InventoryCalculationService.attributeDispatchFIFO(
+          data.materialId,
+          data.pcsSent,
+          state.batches || [],
+          data.batchId
+        );
+        const updatedBatches = attributed.batches;
+        const consumedBatchId = attributed.usedBatchIds[0] || data.batchId;
 
         const movement: InventoryMovement = {
           id: uuidv4(),
           materialId: data.materialId,
-          batchId: data.batchId,
+          batchId: consumedBatchId,
           date: data.date,
           referenceNo: dispatchNo,
           module: "Dispatch",
@@ -652,6 +658,10 @@ export const useERPStore = create<ERPState>()(
           runningBalance: newStock,
           remarks: data.remarks
         };
+
+        // Link the dispatch to the batch it physically drew from (when the user
+        // picked 'Any Batch', we attribute FIFO and record it for the receipt).
+        newSend.batchId = consumedBatchId;
 
         return { 
           processingSends: [newSend, ...updatedSends],
@@ -696,6 +706,18 @@ export const useERPStore = create<ERPState>()(
           } : m
         );
 
+        // Move the received pcs from the WIP stage to the finished stage so
+        // finished stock is valued at the actual purchase rate of the batch it
+        // was dispatched from. The batch trail ALWAYS moves in lockstep with the
+        // material counters (FIFO, preferring the send's batch) so the same pcs
+        // are never counted as both WIP and finished goods.
+        const updatedBatches = InventoryCalculationService.attributeReceiptFIFO(
+          data.materialId,
+          data.pcsReceived,
+          state.batches || [],
+          send.batchId
+        );
+
         const movement: InventoryMovement = {
           id: uuidv4(),
           materialId: data.materialId,
@@ -713,6 +735,7 @@ export const useERPStore = create<ERPState>()(
           processingReceipts: [newReceipt, ...state.processingReceipts],
           processingSends: updatedSends,
           materials: updatedMaterials,
+          batches: updatedBatches,
           inventoryMovements: [movement, ...(state.inventoryMovements || [])]
         };
       }),
@@ -831,7 +854,7 @@ export const useERPStore = create<ERPState>()(
               module: "Sale",
               transactionType: "OUT",
               quantity: data.pcsSold,
-              runningBalance: m.stockPcs, // keeping stockPcs as the main balance for raw materials
+              runningBalance: newProcessed, // processed-stock balance after this sale
               remarks: `Sold as product: ${selectedProduct.name}`
             };
             return { ...m, processedStockPcs: newProcessed };
@@ -857,6 +880,18 @@ export const useERPStore = create<ERPState>()(
           const voucherId = uuidv4();
           const voucherNo = DocumentNumberingService.nextVoucherNumber(state.vouchers, 'Sales Voucher', data.date);
           
+          // COGS at ACTUAL purchase cost, recognized at the moment of sale — FIFO
+          // across the batches that produced the finished goods (oldest batch
+          // first, each at its own purchase rate). Profit = selling − purchase.
+          const fifo = selectedProduct?.materialId
+            ? InventoryCalculationService.getFIFOCOGSForSale(selectedProduct.materialId, data.pcsSold, state.batches || [])
+            : { cogs: 0 };
+          const cogsAmount = fifo.cogs;
+          const cogsAccount = getSystemCOGSAccount(state.accounts, state.accountSubtypes);
+          const finishedGoodsAccount = getSystemInventoryAccount(state.accounts, state.accountSubtypes, 'Finished Goods Inventory');
+          const hasCogsLeg = cogsAmount > 0 && !!cogsAccount && !!finishedGoodsAccount;
+          const voucherTotal = totalAmount + (hasCogsLeg ? cogsAmount : 0);
+          
           const newVoucher: Voucher = {
             id: voucherId,
             voucherNo,
@@ -866,8 +901,8 @@ export const useERPStore = create<ERPState>()(
             sourceModule: 'Sales',
             sourceId: saleId,
             narration: `Sale Invoice for ${data.pcsSold} PCS`,
-            totalDebit: totalAmount,
-            totalCredit: totalAmount,
+            totalDebit: voucherTotal,
+            totalCredit: voucherTotal,
             createdAt: new Date().toISOString(),
             status: 'Posted',
             versionHistory: [{
@@ -878,29 +913,31 @@ export const useERPStore = create<ERPState>()(
             }]
           };
           
-          const debitEntry: JournalEntry = {
-            id: uuidv4(),
-            voucherId,
-            accountId: receivableAccount.id,
-            debit: totalAmount,
-            credit: 0
-          };
-          
-          const creditEntry: JournalEntry = {
-            id: uuidv4(),
-            voucherId,
-            accountId: salesAccount.id,
-            debit: 0,
-            credit: totalAmount
-          };
+          const saleEntries: JournalEntry[] = [
+            { id: uuidv4(), voucherId, accountId: receivableAccount.id, debit: totalAmount, credit: 0 },
+            { id: uuidv4(), voucherId, accountId: salesAccount.id, debit: 0, credit: totalAmount }
+          ];
+          if (hasCogsLeg) {
+            saleEntries.push(
+              { id: uuidv4(), voucherId, accountId: cogsAccount!.id, debit: cogsAmount, credit: 0 },
+              { id: uuidv4(), voucherId, accountId: finishedGoodsAccount!.id, debit: 0, credit: cogsAmount }
+            );
+          }
           
           updatedVouchers = [newVoucher, ...state.vouchers];
-          updatedJournalEntries = [debitEntry, creditEntry, ...state.journalEntries];
+          updatedJournalEntries = [...saleEntries, ...state.journalEntries];
         }
+
+        // Reduce finished pcs on the actual batches sold (FIFO — oldest first) so
+        // each remaining batch keeps its own purchase-rate cost for valuation.
+        const updatedBatches = selectedProduct?.materialId
+          ? InventoryCalculationService.consumeFinishedFIFO(selectedProduct.materialId, data.pcsSold, state.batches || [])
+          : state.batches;
 
         return {
           sales: [newSale, ...state.sales],
           materials: updatedMaterials,
+          batches: updatedBatches,
           customers: updatedCustomers,
           inventoryMovements: nextMovements,
           vouchers: updatedVouchers,

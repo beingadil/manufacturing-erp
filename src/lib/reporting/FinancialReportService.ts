@@ -280,30 +280,47 @@ return withPercentage.sort((a,b) => b.balance - a.balance);
   }
 
 
+  /**
+   * Profit & Loss from the authoritative accounting engine — posted vouchers
+   * only, within the period. Revenue − Cost of Goods Sold = Gross Profit;
+   * Gross Profit − Operating Expenses = Net Profit. Purchases are inventory
+   * (an asset), never an expense at purchase time — COGS is recognized on sale.
+   */
   static getProfitLossReportData(dateRange: any) {
-    const state = useERPStore.getState();
-    const { sales, purchases, processingReceipts } = state;
-    const filterDate = (dateStr: string) => {
-  if (!dateRange.start || !dateRange.end) return true;
-  const d = new Date(dateStr);
-  const start = new Date(dateRange.start);
-  const end = new Date(dateRange.end);
-  start.setHours(0,0,0,0); end.setHours(23,59,59,999);
-  return d >= start && d <= end;
-};
+    const { journalEntries, vouchers, accounts } = useERPStore.getState();
 
-const filteredSales = sales.filter(s => filterDate(s.date));
-const filteredPurchases = purchases.filter(p => filterDate(p.date));
-const filteredReceipts = processingReceipts.filter(r => filterDate(r.date));
+    const activeVouchers = vouchers.filter(v =>
+      v.status === 'Posted'
+      && (!dateRange?.start || v.date >= dateRange.start)
+      && (!dateRange?.end || v.date <= dateRange.end)
+    );
+    const activeIds = new Set(activeVouchers.map(v => v.id));
+    const entries = journalEntries.filter(je => activeIds.has(je.voucherId));
 
-const totalSalesAmount = filteredSales.reduce((sum, s) => sum + s.totalAmount, 0);
-const totalPurchasesAmount = filteredPurchases.reduce((sum, p) => sum + (p.amount || 0), 0);
-const totalProcessingBills = filteredReceipts.reduce((sum, r) => sum + r.billAmount, 0);
+    const netByAccount = new Map<string, number>();
+    entries.forEach(je => {
+      netByAccount.set(je.accountId, (netByAccount.get(je.accountId) || 0) + (je.debit || 0) - (je.credit || 0));
+    });
 
-const grossProfit = totalSalesAmount - totalPurchasesAmount;
-const netProfit = grossProfit - totalProcessingBills;
+    const section = (types: string[], isDebitNormal: boolean) => accounts
+      .filter(a => types.includes(a.type))
+      .map(a => {
+        const net = netByAccount.get(a.id) || 0;
+        return { name: a.name, balance: isDebitNormal ? net : -net };
+      })
+      .filter(r => Math.abs(r.balance) > 0.01);
 
-return { totalSalesAmount, totalPurchasesAmount, totalProcessingBills, grossProfit, netProfit };
+    const revenueAccounts = section(['Revenue', 'Other Income'], false);
+    const cogsAccounts = section(['Cost of Goods Sold'], true);
+    const expenseAccounts = section(['Expenses', 'Other Expenses'], true);
+
+    const totalRevenue = revenueAccounts.reduce((s, r) => s + r.balance, 0);
+    const totalCogs = cogsAccounts.reduce((s, r) => s + r.balance, 0);
+    const totalExpenses = expenseAccounts.reduce((s, r) => s + r.balance, 0);
+    const grossProfit = totalRevenue - totalCogs;
+    const netProfit = grossProfit - totalExpenses;
+
+    return { revenueAccounts, totalRevenue, cogsAccounts, totalCogs, grossProfit, expenseAccounts, totalExpenses, netProfit };
   }
 
 

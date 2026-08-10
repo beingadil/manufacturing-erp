@@ -3,11 +3,12 @@ import { filterFinancialData } from "../lib/abac";
 import React, { useMemo, useState } from "react";
 import { useERPStore } from "../store/useERPStore";
 import { formatCurrency, formatNumber, cn } from "../lib/utils";
-import { ArrowRight, PackageSearch, Users, Truck, TrendingUp, AlertTriangle, CircleDollarSign, ArrowUpCircle, ArrowDownCircle, DollarSign, Landmark, Building2, Scale, Wallet, ArrowLeftRight, ShoppingCart } from "lucide-react";
+import { ArrowRight, PackageSearch, Users, Truck, TrendingUp, AlertTriangle, CircleDollarSign, ArrowUpCircle, ArrowDownCircle, DollarSign, Landmark, Building2, Scale, Wallet, ArrowLeftRight, ShoppingCart, Banknote, Factory, Layers, Package } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { format, subDays, startOfWeek, startOfMonth, startOfYear } from 'date-fns';
 import { DashboardSummaryService } from '../lib/dashboard/DashboardSummaryService';
+import { getSystemAccountBySubtype } from '../lib/accounting/accountClassification';
 
 type Preset = 'today' | 'week' | 'month' | 'year' | 'custom';
 
@@ -41,11 +42,18 @@ function MetricCard({ icon, label, value, sub, onClick, accent = "text-primary",
 export function Dashboard() {
   const { profile, isAdmin, dataPolicies } = useAuth();
   const {
-    materials, processors, suppliers, customers, processingSends, processingReceipts,
+    materials, processors, suppliers, customers, processorBills,
     sales, purchases, products, accounts, journalEntries, vouchers, accountSubtypes,
     batches,
   } = useERPStore();
   const navigate = useNavigate();
+
+  // AR/AP control accounts (parties are sub-ledgers nested under these — spec §9).
+  // The Receivables/Payables cards open the ledger on the matching control account,
+  // not the first account in the chart (which is Cash in Hand).
+  const arControlAccount = getSystemAccountBySubtype(accounts, accountSubtypes, 'Accounts Receivable');
+  const apControlAccount = getSystemAccountBySubtype(accounts, accountSubtypes, 'Accounts Payable');
+
   const secureSales = filterFinancialData(sales, profile, isAdmin, dataPolicies);
   const securePurchases = filterFinancialData(purchases, profile, isAdmin, dataPolicies);
 
@@ -68,16 +76,11 @@ export function Dashboard() {
   const summary = useMemo(() => DashboardSummaryService.getSummary(
     {
       accounts, accountSubtypes, journalEntries, vouchers, batches, materials,
-      customers, suppliers, processors,
+      customers, suppliers, processors, processorBills,
       sales: secureSales, purchases: securePurchases,
     },
     { asOfDate: range.end, periodStart: range.start, periodEnd: range.end }
   ), [accounts, accountSubtypes, journalEntries, vouchers, batches, materials, customers, suppliers, processors, secureSales, securePurchases, range]);
-
-  const totalProcessedStockPcs = materials.reduce((acc, m) => acc + m.processedStockPcs, 0);
-  const totalSent = processingSends.reduce((acc, s) => acc + s.pcsSent, 0);
-  const totalReceived = processingReceipts.reduce((acc, r) => acc + r.pcsReceived, 0);
-  const totalPendingWithProcessors = totalSent - totalReceived;
 
   // Generate last 7 days sales data
   const last7DaysSales = useMemo(() => {
@@ -141,10 +144,8 @@ export function Dashboard() {
   const inventorySub = (
     <div className="space-y-0.5">
       <div className="flex justify-between gap-2"><span>Raw materials</span><span className="font-medium text-foreground/80">{formatCurrency(summary.inventory.rawMaterials)}</span></div>
-      <div className="flex justify-between gap-2"><span>Processing stock</span><span className="font-medium text-foreground/80">{formatCurrency(summary.inventory.processedStock)}</span></div>
-      {summary.inventory.finishedGoods > 0 && (
-        <div className="flex justify-between gap-2"><span>Finished goods</span><span className="font-medium text-foreground/80">{formatCurrency(summary.inventory.finishedGoods)}</span></div>
-      )}
+      <div className="flex justify-between gap-2"><span>At processor (WIP)</span><span className="font-medium text-foreground/80">{formatCurrency(summary.inventory.atProcessor)}</span></div>
+      <div className="flex justify-between gap-2"><span>Finished goods</span><span className="font-medium text-foreground/80">{formatCurrency(summary.inventory.finishedGoods)}</span></div>
       <div className="flex justify-between gap-2 border-t border-border/60 pt-1.5 mt-1">
         <span className="font-semibold text-foreground">Total Inventory Value</span>
         <span className="font-bold text-foreground">{formatCurrency(summary.inventory.total)}</span>
@@ -199,7 +200,7 @@ export function Dashboard() {
           <h3 className="text-lg font-bold text-foreground">Financial & Inventory Position</h3>
           <span className="text-xs text-muted-foreground bg-muted/40 border border-border rounded-full px-3 py-1">As of {asOfLabel}</span>
         </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <MetricCard
             icon={<CircleDollarSign className="h-5 w-5 text-emerald-500" />}
             label="Cash in Hand"
@@ -217,19 +218,18 @@ export function Dashboard() {
             accent="text-blue-500"
           />
           <MetricCard
-            icon={<PackageSearch className="h-5 w-5 text-violet-500" />}
-            label="Inventory Value"
-            value={formatCurrency(summary.inventory.total)}
-            sub={inventorySub}
-            onClick={() => navigate('/materials')}
-            accent="text-violet-500"
+            icon={<Banknote className="h-5 w-5 text-slate-400" />}
+            label="Cheques in Hand"
+            value="—"
+            sub={<span>Not tracked — cheque workflow not implemented (audit finding)</span>}
+            accent="text-slate-400"
           />
           <MetricCard
             icon={<Users className="h-5 w-5 text-teal-500" />}
             label="Accounts Receivable"
             value={formatCurrency(summary.receivables.total)}
             sub={<span>{summary.receivables.customersOutstanding} customer{summary.receivables.customersOutstanding === 1 ? '' : 's'} outstanding</span>}
-            onClick={() => navigate('/ledgers')}
+            onClick={() => navigate(arControlAccount ? `/ledgers?id=${arControlAccount.id}` : '/ledgers')}
             accent="text-teal-500"
           />
           <MetricCard
@@ -237,8 +237,16 @@ export function Dashboard() {
             label="Accounts Payable"
             value={formatCurrency(summary.payables.total)}
             sub={<span>{summary.payables.suppliersOutstanding} supplier{summary.payables.suppliersOutstanding === 1 ? '' : 's'} outstanding</span>}
-            onClick={() => navigate('/ledgers')}
+            onClick={() => navigate(apControlAccount ? `/ledgers?id=${apControlAccount.id}` : '/ledgers')}
             accent="text-amber-500"
+          />
+          <MetricCard
+            icon={<PackageSearch className="h-5 w-5 text-violet-500" />}
+            label="Inventory Value"
+            value={formatCurrency(summary.inventory.total)}
+            sub={inventorySub}
+            onClick={() => navigate('/materials')}
+            accent="text-violet-500"
           />
         </div>
       </section>
@@ -279,7 +287,7 @@ export function Dashboard() {
       </section>
 
       {/* ── Period activity ────────────────────────────────────────────────── */}
-      <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex items-center justify-between">
           <div className="flex items-center gap-3 text-muted-foreground">
             <ArrowUpCircle className="h-5 w-5 text-emerald-500" />
@@ -320,21 +328,71 @@ export function Dashboard() {
           </div>
           <div className="text-xl font-bold text-foreground">{formatCurrency(summary.periodPurchases)}</div>
         </div>
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex items-center justify-between">
+          <div className="flex items-center gap-3 text-muted-foreground">
+            <Factory className="h-5 w-5 text-orange-500" />
+            <div>
+              <div className="text-sm font-medium">Processing Bills</div>
+              <div className="text-xs text-muted-foreground/70">Period</div>
+            </div>
+          </div>
+          <div className="text-xl font-bold text-foreground">{formatCurrency(summary.periodProcessing)}</div>
+        </div>
       </section>
 
-      {/* ── Inventory processing strip ─────────────────────────────────────── */}
-      <section className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <div className="text-sm text-muted-foreground mb-1">Raw Stock</div>
-          <div className="text-2xl font-bold text-foreground">{formatNumber(materials.reduce((acc, m) => acc + m.stockPcs, 0))} <span className="text-sm font-medium text-muted-foreground">PCS</span></div>
+      {/* ── Inventory Position ─────────────────────────────────────────────── */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-bold text-foreground">Inventory Position</h3>
+          <span className="text-xs text-muted-foreground bg-muted/40 border border-border rounded-full px-3 py-1">Current operational stock · As of {asOfLabel}</span>
         </div>
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <div className="text-sm text-muted-foreground mb-1">Processing Stock</div>
-          <div className="text-2xl font-bold text-foreground">{formatNumber(totalProcessedStockPcs)} <span className="text-sm font-medium text-muted-foreground">PCS</span></div>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <div className="text-sm text-muted-foreground mb-1">Pending with Processors</div>
-          <div className="text-2xl font-bold text-foreground">{formatNumber(totalPendingWithProcessors)} <span className="text-sm font-medium text-muted-foreground">PCS</span></div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
+            icon={<Layers className="h-5 w-5 text-violet-500" />}
+            label="Raw Material Inventory"
+            value={`${formatNumber(summary.inventory.rawPcs)} PCS`}
+            sub={<>
+              <div className="flex justify-between"><span>Value</span><span className="font-medium text-foreground/80">{formatCurrency(summary.inventory.rawMaterials)}</span></div>
+              <div className="text-muted-foreground/70">At actual purchase cost (per batch)</div>
+            </>}
+            onClick={() => navigate('/materials')}
+            accent="text-violet-500"
+          />
+          <MetricCard
+            icon={<Factory className="h-5 w-5 text-orange-500" />}
+            label="WIP / At Processor"
+            value={`${formatNumber(summary.inventory.wipPcs)} PCS`}
+            sub={<>
+              <div className="flex justify-between"><span>Value</span><span className="font-medium text-foreground/80">{formatCurrency(summary.inventory.atProcessor)}</span></div>
+              <div className="text-muted-foreground/70">At purchase cost of the batch dispatched</div>
+            </>}
+            onClick={() => navigate('/processing')}
+            accent="text-orange-500"
+          />
+          <MetricCard
+            icon={<Package className="h-5 w-5 text-sky-500" />}
+            label="Finished Goods"
+            value={`${formatNumber(summary.inventory.finishedPcs)} PCS`}
+            sub={<>
+              <div className="flex justify-between"><span>Value</span><span className="font-medium text-foreground/80">{formatCurrency(summary.inventory.finishedGoods)}</span></div>
+              <div className="text-muted-foreground/70">At purchase cost of the producing batch</div>
+            </>}
+            onClick={() => navigate('/products')}
+            accent="text-sky-500"
+          />
+          <MetricCard
+            icon={<PackageSearch className="h-5 w-5 text-emerald-500" />}
+            label="Total Inventory"
+            value={formatCurrency(summary.inventory.total)}
+            sub={<>
+              <div className="flex justify-between"><span>Raw + WIP + Finished</span><span className="font-medium text-foreground/80">{formatCurrency(summary.inventory.rawMaterials + summary.inventory.atProcessor + summary.inventory.finishedGoods)}</span></div>
+              <div className={summary.inventory.reconciled ? 'text-muted-foreground/70' : 'text-destructive'}>
+                {summary.inventory.reconciled ? 'Reconciled with inventory valuation' : 'Mismatch — check batch/stock state'}
+              </div>
+            </>}
+            onClick={() => navigate('/reports')}
+            accent="text-emerald-500"
+          />
         </div>
       </section>
 
