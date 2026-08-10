@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useERPStore } from "../store/useERPStore";
 import { useAuth } from "../contexts/AuthContext";
+import { AccountingEngine } from "../lib/accounting/AccountingEngine";
 import { filterFinancialData } from "../lib/abac";
 import { formatCurrency, cn } from "../lib/utils";
 import { Download, Wallet } from "lucide-react";
@@ -22,9 +23,12 @@ export function Ledgers() {
   // If navigating from legacy links with tab and id:
   const initialEntityId = searchParams.get("id") || "";
   
-  // Find the initial account based on legacy entity ID or just use first account
+  // Find the initial account: prefer a direct account id (?id=<accountId>, used
+  // by the Dashboard AR/AP cards to open the control account's ledger), then
+  // fall back to the legacy linked-entity lookup (?id=<partyId>), then the
+  // first account.
   const initialAccount = initialEntityId 
-    ? accounts.find(a => a.linkedEntityId === initialEntityId)
+    ? (accounts.find(a => a.id === initialEntityId) || accounts.find(a => a.linkedEntityId === initialEntityId))
     : accounts[0];
     
   const [selectedAccountId, setSelectedAccountId] = useState(initialAccount?.id || "");
@@ -33,6 +37,14 @@ export function Ledgers() {
   const activeAccount = accounts.find(a => a.id === selectedAccountId);
   const isProcessorAccount = activeAccount?.linkedEntityId && processors.some(p => p.id === activeAccount.linkedEntityId);
   const processorId = isProcessorAccount ? activeAccount.linkedEntityId : null;
+
+  // Sub-ledger: AR/AP control accounts have party accounts nested under them via
+  // parentId (spec §15). Postings hit the party child, so the control account's
+  // own entry list is empty — show the children with their balances instead.
+  const subLedger = activeAccount
+    ? AccountingEngine.getSubLedger(activeAccount.id, accounts, journalEntries, vouchers)
+    : null;
+  const hasSubLedger = !!subLedger && subLedger.children.length > 0;
 
   // Enforce view mode
   useEffect(() => {
@@ -112,9 +124,14 @@ export function Ledgers() {
     });
   }, [activeAccount, journalEntries, vouchers]);
 
-  const currentFinancialBalance = filteredEntries.length > 0 
-    ? filteredEntries[filteredEntries.length - 1].runningBalance 
-    : (activeAccount?.openingBalance || 0);
+  // Control accounts (AR/AP) show the aggregate of their sub-ledger children;
+  // other accounts show their own running balance or opening balance.
+  const subLedgerTotal = subLedger?.children.reduce((s, c) => s + c.balance, 0) ?? 0;
+  const currentFinancialBalance = hasSubLedger
+    ? subLedgerTotal
+    : filteredEntries.length > 0 
+      ? filteredEntries[filteredEntries.length - 1].runningBalance 
+      : (activeAccount?.openingBalance || 0);
 
   const standardColumns: Column<any>[] = [
     { key: "formattedDate", label: "Date", sortable: true },
@@ -217,6 +234,43 @@ export function Ledgers() {
             </div>
           )}
         </div>
+
+        {hasSubLedger && (
+          <div className="p-6 border-b border-border/50">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-foreground">Sub-ledger — {activeAccount?.name}</h3>
+              <span className="text-xs font-medium px-2 py-1 rounded-md bg-muted text-muted-foreground">
+                {subLedger!.children.length} account{subLedger!.children.length === 1 ? '' : 's'} · click to open
+              </span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {subLedger!.children.map(child => {
+                const party = customers.find(c => c.id === child.account.linkedEntityId)
+                  || suppliers.find(s => s.id === child.account.linkedEntityId)
+                  || processors.find(p => p.id === child.account.linkedEntityId);
+                const isDebitNormal = ['Assets', 'Expenses'].includes(child.account.type);
+                const bal = child.balance;
+                return (
+                  <button
+                    key={child.account.id}
+                    onClick={() => setSelectedAccountId(child.account.id)}
+                    className="text-left rounded-xl border border-border bg-background p-3 hover:border-primary/40 hover:shadow-sm transition-all"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium text-foreground truncate">{party?.name || child.account.name}</span>
+                      <span className={cn("text-sm font-bold", bal !== 0 ? (isDebitNormal ? (bal > 0 ? "text-success" : "text-destructive") : (bal > 0 ? "text-destructive" : "text-success")) : "text-muted-foreground")}>
+                        {formatCurrency(Math.abs(bal))}
+                      </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {child.account.code} • {bal !== 0 ? (bal > 0 === isDebitNormal ? 'Dr' : 'Cr') : '—'}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {viewMode === "Goods" && isProcessorAccount ? (
           <DataTable

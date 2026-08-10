@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useERPStore } from '../store/useERPStore';
 import { ArrowLeft, Package, History, ArrowRightLeft, Target, Clock, ArrowDown, ArrowUp } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn, formatCurrency } from '../lib/utils';
 import { format } from 'date-fns';
 
 export function MaterialDetail() {
@@ -176,6 +176,9 @@ export function MaterialDetail() {
                     <th className="px-4 py-3 font-medium">Supplier</th>
                     <th className="px-4 py-3 font-medium text-right">Initial</th>
                     <th className="px-4 py-3 font-medium text-right">Remaining</th>
+                    <th className="px-4 py-3 font-medium text-right">WIP</th>
+                    <th className="px-4 py-3 font-medium text-right">Finished</th>
+                    <th className="px-4 py-3 font-medium text-right">Purchase Rate</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
@@ -186,11 +189,16 @@ export function MaterialDetail() {
                         <td className="px-4 py-3 text-muted-foreground">{getSupplierName(b.supplierId)}</td>
                         <td className="px-4 py-3 text-right text-muted-foreground">{b.initialPcs}</td>
                         <td className="px-4 py-3 text-right font-medium text-foreground">{b.remainingPcs}</td>
+                        <td className="px-4 py-3 text-right text-warning">{b.atProcessorPcs || 0}</td>
+                        <td className="px-4 py-3 text-right text-success">{b.processedPcs || 0}</td>
+                        <td className="px-4 py-3 text-right font-medium text-foreground">
+                          {b.initialPcs > 0 ? `${formatCurrency(b.amount / b.initialPcs)}/PCS` : '—'}
+                        </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">No batches recorded</td>
+                      <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No batches recorded</td>
                     </tr>
                   )}
                 </tbody>

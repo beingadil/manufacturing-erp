@@ -1,29 +1,29 @@
 import React, { useState, useMemo } from "react";
 import { useERPStore } from "../store/useERPStore";
-import { Plus, X, Pencil } from "lucide-react";
+import { Plus, X, Pencil, Trash2 } from "lucide-react";
 import { DataTable, Column } from "../components/DataTable";
 import { formatCurrency } from "../lib/utils";
 import { SearchableSelect } from "../components/SearchableSelect";
 import { QuickAddMaterial } from "../components/QuickAddModals";
+import { DeleteConfirmationModal } from "../components/DeleteConfirmationModal";
 import { toast } from "sonner";
 
 export function FinishedGoods() {
-  const { products, materials, categories, addProduct, updateModuleItem } = useERPStore();
+  const { products, materials, categories, sales, addProduct, updateModuleItem, removeModuleItem } = useERPStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAddMaterialOpen, setIsAddMaterialOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [name, setName] = useState("");
   const [materialId, setMaterialId] = useState("");
-  const [categoryId, setCategoryId] = useState("");
   const [sellingPrice, setSellingPrice] = useState("");
   const [sku, setSku] = useState("");
   const [description, setDescription] = useState("");
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; id: string; no: string }>({ isOpen: false, id: "", no: "" });
 
   const openEditModal = (product: any) => {
     setEditingProduct(product);
     setName(product.name);
     setMaterialId(product.materialId || "");
-    setCategoryId(product.categoryId || "");
     setSellingPrice(product.sellingPrice != null ? String(product.sellingPrice) : "");
     setSku(product.sku || "");
     setDescription(product.description || "");
@@ -35,11 +35,14 @@ export function FinishedGoods() {
     setEditingProduct(null);
     setName("");
     setMaterialId("");
-    setCategoryId("");
     setSellingPrice("");
     setSku("");
     setDescription("");
   };
+
+  // Category is inherited from the linked material — never entered separately.
+  const linkedMaterial = materials.find(m => m.id === materialId);
+  const categoryId = linkedMaterial?.categoryId || "";
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,9 +81,21 @@ export function FinishedGoods() {
     }
   };
 
+  const handleDelete = () => {
+    const saleCount = sales.filter(s => s.productId === deleteModal.id).length;
+    if (saleCount > 0) {
+      toast.error(`Cannot delete — this product is referenced by ${saleCount} sale record(s). Deactivate it instead if it is no longer sold.`);
+      setDeleteModal({ isOpen: false, id: '', no: '' });
+      return;
+    }
+    removeModuleItem('products', deleteModal.id);
+    toast.success('Product deleted successfully');
+    setDeleteModal({ isOpen: false, id: '', no: '' });
+  };
+
   const enrichedProducts = useMemo(() => products.map(p => {
     const m = materials.find(mat => mat.id === p.materialId);
-    const cat = categories.find(c => c.id === p.categoryId);
+    const cat = categories.find(c => c.id === (m?.categoryId || p.categoryId));
     return {
       ...p,
       categoryName: cat?.name || '-',
@@ -94,7 +109,7 @@ export function FinishedGoods() {
     { key: "sku", label: "SKU", sortable: true, render: (item) => <span className="font-mono text-xs text-muted-foreground">{item.sku || '—'}</span> },
     { key: "categoryName", label: "Category", sortable: true },
     { key: "materialName", label: "Linked Material", sortable: true },
-    { key: "sellingPrice", label: "Selling Price", align: "right", sortable: true, render: (item) => <span className="font-medium">{formatCurrency(item.sellingPrice)}</span> },
+    { key: "sellingPrice", label: "Selling Price (PKR)", align: "right", sortable: true, render: (item) => <span className="font-medium">{formatCurrency(item.sellingPrice)}</span> },
     { key: "availableStock", label: "Available Stock (PCS)", align: "right", sortable: true, render: (item) => <span className="font-bold text-success">{item.availableStock}</span> },
     {
       key: "actions",
@@ -108,6 +123,13 @@ export function FinishedGoods() {
             title="Edit Product"
           >
             <Pencil className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => setDeleteModal({ isOpen: true, id: item.id, no: item.name })}
+            className="text-muted-foreground/80 hover:text-destructive transition-colors p-1"
+            title="Delete Product"
+          >
+            <Trash2 className="h-4 w-4" />
           </button>
         </div>
       )
@@ -135,6 +157,15 @@ export function FinishedGoods() {
         defaultSortKey="name"
       />
 
+      <DeleteConfirmationModal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({ isOpen: false, id: '', no: '' })}
+        onConfirm={handleDelete}
+        title="Delete Product"
+        recordNo={deleteModal.no}
+        description="Are you sure you want to permanently delete this product? This cannot be undone."
+      />
+
       {isModalOpen && !isAddMaterialOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-card rounded-2xl shadow-xl w-full max-w-md">
@@ -147,13 +178,8 @@ export function FinishedGoods() {
               
               <div className="grid grid-cols-2 gap-3">
                 <input type="text" placeholder="SKU (Optional)" value={sku} onChange={e => setSku(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
-                <input type="number" step="0.01" required placeholder="Selling Price" value={sellingPrice} onChange={e => setSellingPrice(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
+                <input type="number" step="0.01" required placeholder="Selling Price (PKR)" value={sellingPrice} onChange={e => setSellingPrice(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
               </div>
-
-              <select value={categoryId} onChange={e => setCategoryId(e.target.value)} className="w-full rounded-xl border p-3 text-sm bg-card">
-                <option value="">Select Category (Optional)</option>
-                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
 
               <div>
                 <SearchableSelect 
@@ -165,6 +191,15 @@ export function FinishedGoods() {
                   required
                 />
               </div>
+
+              {linkedMaterial && (
+                <div className="rounded-xl bg-muted/40 border border-border px-4 py-3 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Category (from material)</span>
+                    <span className="font-medium text-foreground">{categories.find(c => c.id === linkedMaterial.categoryId)?.name || '—'}</span>
+                  </div>
+                </div>
+              )}
               
               <input type="text" placeholder="Description (Optional)" value={description} onChange={e => setDescription(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
               <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">{editingProduct ? 'Save Changes' : 'Save Product'}</button>

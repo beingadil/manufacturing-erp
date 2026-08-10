@@ -38,6 +38,10 @@ export interface Batch {
   remainingPcs: number;
   amount: number;
   status: "Active" | "Depleted";
+  /** Pcs of this batch physically at a processor (WIP) — valued at this batch's purchase cost. */
+  atProcessorPcs?: number;
+  /** Pcs of this batch finished/processed and on hand (unsold) — valued at this batch's purchase cost. */
+  processedPcs?: number;
 }
 
 export interface InventoryMovement {

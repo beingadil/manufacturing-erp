@@ -72,10 +72,35 @@ async function bootstrap() {
           if (persistedState && typeof persistedState === 'object') {
             const { useERPStore } = await import('./store/useERPStore');
             const { migrateERPState } = await import('./store/erpMigration');
+            const { fixHistoricalPostings } = await import('./lib/accounting/historicalPostingFix');
+
             // Apply persist v3 migration: legacy voucher-type remap, AR/AP
             // control-account nesting, and legacy ledgerEntries trail removal.
-            useERPStore.setState(migrateERPState(persistedState));
-            Logger.info('Startup', 'ERP state rehydrated from SQLite key_value_store (v3 migration applied)');
+            const migrated = migrateERPState(persistedState);
+
+            // One-time data-fix for historical postings. Snapshot the DB first
+            // so the migration is always reversible, then remap legacy purchase
+            // postings (COGS expense → Raw Material Inventory asset) and
+            // back-fill COGS on legacy sales. Idempotent — no-ops once applied.
+            // Best-effort: if it ever throws, the app must STILL open — the
+            // fix simply runs again next launch.
+            let fixedState = migrated;
+            let fixReport: any = null;
+            try {
+              const backup = await (window as any).electronDB?.backup?.();
+              if (backup?.success) Logger.info('Startup', `Pre-migration DB backup saved: ${backup.path || 'ok'}`);
+            } catch (_b) { /* non-fatal — migration still proceeds */ }
+            try {
+              const fixed = fixHistoricalPostings(migrated);
+              fixedState = fixed.state;
+              fixReport = fixed.report;
+            } catch (e: any) {
+              Logger.warn('Startup', `Historical postings fix skipped: ${e.message}`);
+            }
+            useERPStore.setState(fixedState);
+            Logger.info('Startup', fixReport
+              ? `ERP state rehydrated from SQLite key_value_store (v3 migration applied; postings fix: ${fixReport.purchasesRemapped} purchases remapped, ${fixReport.salesCogsAdded} sales COGS back-filled, ${fixReport.salesSkippedNoCost} sales skipped-no-cost)`
+              : 'ERP state rehydrated from SQLite key_value_store (v3 migration applied; postings fix skipped)');
           }
         } else {
           Logger.info('Startup', 'No persisted ERP state found (first launch)');

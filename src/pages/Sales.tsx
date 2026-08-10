@@ -219,6 +219,15 @@ export function Sales() {
         </div>
       )}
 
+      <DeleteConfirmationModal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({ isOpen: false, id: '', no: '' })}
+        onConfirm={handleDelete}
+        title="Delete Sale"
+        recordNo={deleteModal.no}
+        description="Are you sure you want to permanently delete this sale? All linked accounting entries, vouchers, and stock movements will be reversed automatically."
+      />
+
       <QuickAddCustomer 
         isOpen={isAddCustomerOpen} 
         onClose={() => setIsAddCustomerOpen(false)} 

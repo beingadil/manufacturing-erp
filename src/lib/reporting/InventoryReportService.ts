@@ -38,20 +38,21 @@ export class InventoryReportService {
 
   static getCurrentStockReportData() {
     const state = useERPStore.getState();
-    const { materials, purchases } = state;
+    const { materials, batches } = state;
     return materials.map((m: any) => {
-const recentPurchase = purchases.find(p => p.materialId === m.id);
-const costPerPc = recentPurchase ? (recentPurchase.amount / recentPurchase.calculatedPcs) : 0;
-const value = (m.stockPcs + m.processedStockPcs + (m.atProcessorPcs || 0)) * costPerPc;
-const category = useERPStore.getState().categories.find((c: any) => c.id === m.categoryId)?.name || 'Unknown';
-
-return {
-  ...m,
-  categoryName: category,
-  costPerPc,
-  value
-};
-})
+      // Value at ACTUAL purchase cost per stage (raw / at processor / finished),
+      // each at the purchase rate of the batch that produced it.
+      const stages = InventoryCalculationService.getMaterialStageValues(m.id, batches);
+      const value = stages.raw.value + stages.atProcessor.value + stages.finished.value;
+      const costPerPc = stages.raw.pcs > 0 ? stages.raw.value / stages.raw.pcs : 0;
+      const category = useERPStore.getState().categories.find((c: any) => c.id === m.categoryId)?.name || 'Unknown';
+      return {
+        ...m,
+        categoryName: category,
+        costPerPc,
+        value
+      };
+    });
   }
 
 
@@ -125,37 +126,24 @@ return batches.filter(b => b.remainingPcs > 0).map(b => {
   }
 
 
+  /**
+   * Inventory valuation at ACTUAL purchase cost — the same number the Dashboard
+   * and Raw Materials pages show. A material's quantity spans every stage of
+   * ownership (raw + at processor + processed) and every piece is valued at the
+   * purchase rate of the batch that produced it, never a mock or selling price.
+   */
   static getInventoryValuationData(search: any) {
     const state = useERPStore.getState();
-    const { materials, products, inventoryMovements } = state;
-    const valuation: any[] = [];
+    const { materials, batches } = state;
+    const valuation: any[] = materials.map(m => {
+      const stages = InventoryCalculationService.getMaterialStageValues(m.id, batches);
+      const qty = (m.stockPcs || 0) + (m.atProcessorPcs || 0) + (m.processedStockPcs || 0);
+      const value = stages.raw.value + stages.atProcessor.value + stages.finished.value;
+      const cost = stages.raw.pcs > 0 ? stages.raw.value / stages.raw.pcs : 0;
+      return { type: 'Material', name: m.name, qty, cost, totalValue: value };
+    }).filter(v => v.qty > 0 || v.totalValue > 0);
 
-materials.forEach(m => {
-    let qty = 0;
-    inventoryMovements.filter(mov => mov.materialId === m.id).forEach(mov => {
-        if (mov.transactionType.startsWith('IN')) qty += mov.quantity;
-        if (mov.transactionType.startsWith('OUT')) qty -= mov.quantity;
-    });
-    if (qty > 0) {
-        // Approximation: normally derived from weighted average cost. For this demo, random or 0.
-        const cost = 150; // Mock cost per unit
-        valuation.push({ type: 'Material', name: m.name, qty, cost, totalValue: qty * cost });
-    }
-});
-
-products.forEach(p => {
-    let qty = 0;
-    inventoryMovements.filter(mov => (mov as any).productId === p.id).forEach(mov => {
-        if (mov.transactionType.startsWith('IN')) qty += mov.quantity;
-        if (mov.transactionType.startsWith('OUT')) qty -= mov.quantity;
-    });
-    if (qty > 0) {
-        const cost = (p as any).price || 500; // Mock cost for product
-        valuation.push({ type: 'Product', name: p.name, qty, cost, totalValue: qty * cost });
-    }
-});
-
-return valuation.filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase()));
+    return valuation.filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase()));
   }
 
 

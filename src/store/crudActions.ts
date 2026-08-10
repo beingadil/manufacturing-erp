@@ -2,6 +2,8 @@ import { StoreApi } from 'zustand';
 import { ERPState } from './useERPStore';
 import { v4 as uuidv4 } from 'uuid';
 import { UnitConversionService } from '../lib/business/UnitConversionService';
+import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
+import { getSystemAccountBySubtype, getSystemInventoryAccount, getSystemCOGSAccount } from '../lib/accounting/accountClassification';
 
 export const createCRUDActions = (
   set: StoreApi<ERPState>['setState'],
@@ -159,6 +161,21 @@ export const createCRUDActions = (
       // 3. Remove inventory movement
       const updatedInventoryMovements = state.inventoryMovements.filter(im => im.referenceNo !== sale.invoiceNo);
 
+      // 3b. Restore the finished pcs this sale consumed (FIFO) back onto batches
+      // so per-batch valuation stays correct after the delete.
+      let updatedBatches = state.batches;
+      if (product?.materialId) {
+        updatedBatches = InventoryCalculationService.recomputeFinishedPcsForMaterial(
+          product.materialId,
+          state.batches || [],
+          state.processingReceipts || [],
+          state.processingSends || [],
+          state.sales || [],
+          state.products || [],
+          id
+        );
+      }
+
       // 4. Remove voucher and JEs
       const voucher = state.vouchers.find(v => v.sourceId === id && v.sourceModule === 'Sales');
       let updatedVouchers = state.vouchers;
@@ -172,6 +189,7 @@ export const createCRUDActions = (
         ...state,
         sales: state.sales.filter(s => s.id !== id),
         materials: updatedMaterials,
+        batches: updatedBatches,
         customers: updatedCustomers,
         inventoryMovements: updatedInventoryMovements,
         vouchers: updatedVouchers,
@@ -210,24 +228,70 @@ export const createCRUDActions = (
           : c
       );
 
+      // Rebuild the material's finished pcs per batch from the authoritative
+      // history (receipts produce, sales consume FIFO) so an edit re-applies
+      // cleanly at actual purchase cost.
+      const saleProduct = state.products.find(p => p.id === data.productId || p.id === oldSale.productId);
+      const linkedMaterialId = saleProduct?.materialId;
+      let updatedBatches = state.batches;
+      if (linkedMaterialId) {
+        updatedBatches = InventoryCalculationService.recomputeFinishedPcsForMaterial(
+          linkedMaterialId,
+          state.batches || [],
+          state.processingReceipts || [],
+          state.processingSends || [],
+          updatedSales,
+          state.products || [],
+          undefined
+        );
+      }
+
       const voucher = state.vouchers.find(v => v.sourceId === id && v.sourceModule === 'Sales');
       let updatedVouchers = state.vouchers;
       let updatedJournalEntries = state.journalEntries;
       if (voucher) {
+        // Rebuild the sale voucher's entries by account role (receivable / sales /
+        // COGS / finished goods) so the COGS leg is recomputed at the new quantity
+        // instead of every debit/credit being stamped with the sale amount.
+        const product = state.products.find(p => p.id === data.productId || p.id === oldSale.productId);
+        const linkedMaterialId = product?.materialId;
+        const fifo = linkedMaterialId
+          ? InventoryCalculationService.getFIFOCOGSForSale(linkedMaterialId, data.pcsSold, updatedBatches || [])
+          : { cogs: 0 };
+        const cogsAmount = fifo.cogs;
+
+        const receivableAccount = state.accounts.find(a => a.linkedEntityId === data.customerId)
+          || getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Accounts Receivable');
+        const salesAccount = getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Sales');
+        const cogsAccount = getSystemCOGSAccount(state.accounts, state.accountSubtypes);
+        const finishedGoodsAccount = getSystemInventoryAccount(state.accounts, state.accountSubtypes, 'Finished Goods Inventory');
+
+        const rebuiltEntries: { accountId: string; debit: number; credit: number }[] = [];
+        if (receivableAccount) rebuiltEntries.push({ accountId: receivableAccount.id, debit: newTotalAmount, credit: 0 });
+        if (salesAccount) rebuiltEntries.push({ accountId: salesAccount.id, debit: 0, credit: newTotalAmount });
+        if (cogsAmount > 0 && cogsAccount) rebuiltEntries.push({ accountId: cogsAccount.id, debit: cogsAmount, credit: 0 });
+        if (cogsAmount > 0 && finishedGoodsAccount) rebuiltEntries.push({ accountId: finishedGoodsAccount.id, debit: 0, credit: cogsAmount });
+
+        const voucherTotal = newTotalAmount + cogsAmount;
         updatedVouchers = state.vouchers.map(v => 
-          v.id === voucher.id ? { ...v, totalDebit: newTotalAmount, totalCredit: newTotalAmount } : v
+          v.id === voucher.id ? { ...v, totalDebit: voucherTotal, totalCredit: voucherTotal, date: data.date } : v
         );
-        updatedJournalEntries = state.journalEntries.map(je => 
-          je.voucherId === voucher.id 
-            ? { ...je, debit: je.debit > 0 ? newTotalAmount : 0, credit: je.credit > 0 ? newTotalAmount : 0 }
-            : je
-        );
+
+        const existingEntries = state.journalEntries.filter(je => je.voucherId === voucher.id);
+        updatedJournalEntries = [
+          ...state.journalEntries.filter(je => je.voucherId !== voucher.id),
+          ...rebuiltEntries.map(ne => {
+            const match = existingEntries.find(e => e.accountId === ne.accountId);
+            return { id: match?.id || uuidv4(), voucherId: voucher.id, ...ne };
+          })
+        ];
       }
 
       return {
         ...state,
         sales: updatedSales,
         materials: updatedMaterials,
+        batches: updatedBatches,
         customers: updatedCustomers,
         vouchers: updatedVouchers,
         journalEntries: updatedJournalEntries
@@ -262,12 +326,12 @@ export const createCRUDActions = (
 
       // Reverse material stock
       const updatedMaterials = state.materials.map(m => 
-        m.id === send.materialId ? { ...m, stockPcs: m.stockPcs + send.pcsSent } : m
+        m.id === send.materialId ? { ...m, stockPcs: m.stockPcs + send.pcsSent, atProcessorPcs: Math.max(0, (m.atProcessorPcs || 0) - send.pcsSent) } : m
       );
 
-      // Restore batch remainingPcs
+      // Restore batch remainingPcs and pull back the WIP stage
       const updatedBatches = state.batches.map(b => 
-        b.id === send.batchId ? { ...b, remainingPcs: b.remainingPcs + send.pcsSent } : b
+        b.id === send.batchId ? { ...b, remainingPcs: b.remainingPcs + send.pcsSent, atProcessorPcs: Math.max(0, (b.atProcessorPcs || 0) - send.pcsSent) } : b
       );
 
       // Remove from pending 
@@ -299,10 +363,18 @@ export const createCRUDActions = (
           : m
       );
 
+      // Keep the batch's raw/WIP stages in sync with the edited dispatch
+      const updatedBatches = state.batches.map(b =>
+        b.id === oldSend.batchId
+          ? { ...b, remainingPcs: b.remainingPcs - diffPcs, atProcessorPcs: Math.max(0, (b.atProcessorPcs || 0) + diffPcs) }
+          : b
+      );
+
       return {
         ...state,
         processingSends: updatedSends,
-        materials: updatedMaterials
+        materials: updatedMaterials,
+        batches: updatedBatches
       };
     });
   },
@@ -313,9 +385,17 @@ export const createCRUDActions = (
       const receipt = state.processingReceipts.find(r => r.id === id);
       if (!receipt) return state;
 
-      // We need to reverse processedStockPcs
+      // Reverse the material's finished stock back to WIP
       const updatedMaterials = state.materials.map(m => 
-        m.id === receipt.materialId ? { ...m, processedStockPcs: m.processedStockPcs - receipt.pcsReceived } : m
+        m.id === receipt.materialId ? { ...m, processedStockPcs: m.processedStockPcs - receipt.pcsReceived, atProcessorPcs: (m.atProcessorPcs || 0) + receipt.pcsReceived } : m
+      );
+
+      // Move the pcs back from the batch's finished stage to its WIP stage
+      const send = state.processingSends.find(s => s.id === receipt.sendId);
+      const updatedBatches = state.batches.map(b =>
+        b.id === send?.batchId
+          ? { ...b, processedPcs: Math.max(0, (b.processedPcs || 0) - receipt.pcsReceived), atProcessorPcs: (b.atProcessorPcs || 0) + receipt.pcsReceived }
+          : b
       );
 
       // We also need to restore pending pcs on the original sends
@@ -333,6 +413,7 @@ export const createCRUDActions = (
         processingReceipts: state.processingReceipts.filter(r => r.id !== id),
         processingSends: updatedSends,
         materials: updatedMaterials,
+        batches: updatedBatches,
         inventoryMovements: state.inventoryMovements.filter(im => im.referenceNo !== receipt.receiveNo)
       };
     });
@@ -368,11 +449,20 @@ export const createCRUDActions = (
           : m
       );
 
+      // Keep the batch's WIP/finished stages in sync with the edited receipt
+      const oldSend = state.processingSends.find(s => s.id === oldReceipt.sendId);
+      const updatedBatches = state.batches.map(b =>
+        b.id === oldSend?.batchId
+          ? { ...b, atProcessorPcs: Math.max(0, (b.atProcessorPcs || 0) - diffPcs), processedPcs: Math.max(0, (b.processedPcs || 0) + diffPcs) }
+          : b
+      );
+
       return {
         ...state,
         processingReceipts: updatedReceipts,
         processingSends: updatedSends,
-        materials: updatedMaterials
+        materials: updatedMaterials,
+        batches: updatedBatches
       };
     });
   },
