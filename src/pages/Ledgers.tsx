@@ -171,7 +171,7 @@ export function Ledgers() {
       </div>
 
       <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col">
-        <div className="p-6 border-b border-border/50 bg-muted/40/50 flex flex-col gap-4">
+        <div className="p-6 border-b border-border/50 bg-muted/40 flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4 flex-1">
               <div className="h-10 w-10 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-primary"><Wallet className="h-5 w-5" /></div>

@@ -116,7 +116,7 @@ export function MaterialDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-6">
           <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col h-[400px]">
-            <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between bg-muted/40/50">
+            <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between bg-muted/40">
               <h3 className="font-semibold text-foreground flex items-center gap-2">
                 <ArrowRightLeft className="h-4 w-4" /> Movement Ledger
               </h3>
@@ -135,7 +135,7 @@ export function MaterialDetail() {
                 <tbody className="divide-y divide-border/50">
                   {materialMovements.length > 0 ? (
                     materialMovements.map(m => (
-                      <tr key={m.id} className="hover:bg-muted/40/80 transition-colors">
+                      <tr key={m.id} className="hover:bg-muted/40 transition-colors">
                         <td className="px-4 py-3 text-muted-foreground">{format(new Date(m.date), 'MMM d, yyyy')}</td>
                         <td className="px-4 py-3 font-medium text-foreground">
                           <div>{m.referenceNo}</div>
@@ -165,7 +165,7 @@ export function MaterialDetail() {
           </div>
 
           <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col max-h-[400px]">
-            <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between bg-muted/40/50">
+            <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between bg-muted/40">
               <h3 className="font-semibold text-foreground">Batches</h3>
             </div>
             <div className="overflow-y-auto flex-1 p-0">
@@ -184,7 +184,7 @@ export function MaterialDetail() {
                 <tbody className="divide-y divide-border/50">
                   {materialBatches.length > 0 ? (
                     materialBatches.map(b => (
-                      <tr key={b.id} className="hover:bg-muted/40/80 transition-colors">
+                      <tr key={b.id} className="hover:bg-muted/40 transition-colors">
                         <td className="px-4 py-3 font-medium text-foreground">{b.batchNo}</td>
                         <td className="px-4 py-3 text-muted-foreground">{getSupplierName(b.supplierId)}</td>
                         <td className="px-4 py-3 text-right text-muted-foreground">{b.initialPcs}</td>
@@ -209,7 +209,7 @@ export function MaterialDetail() {
 
         <div className="space-y-6">
           <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col max-h-[300px]">
-            <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between bg-muted/40/50">
+            <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between bg-muted/40">
               <h3 className="font-semibold text-foreground">Processing History</h3>
             </div>
             <div className="overflow-y-auto flex-1 p-0">
@@ -225,7 +225,7 @@ export function MaterialDetail() {
                 <tbody className="divide-y divide-border/50">
                   {materialSends.length > 0 ? (
                     materialSends.map(s => (
-                      <tr key={s.id} className="hover:bg-muted/40/80 transition-colors">
+                      <tr key={s.id} className="hover:bg-muted/40 transition-colors">
                         <td className="px-4 py-3 font-medium text-foreground">{s.dispatchNo}</td>
                         <td className="px-4 py-3 text-muted-foreground">{getProcessorName(s.processorId)}</td>
                         <td className="px-4 py-3 text-right text-foreground">{s.pcsSent}</td>
@@ -243,7 +243,7 @@ export function MaterialDetail() {
           </div>
 
           <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col max-h-[300px]">
-            <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between bg-muted/40/50">
+            <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between bg-muted/40">
               <h3 className="font-semibold text-foreground">Sales History</h3>
             </div>
             <div className="overflow-y-auto flex-1 p-0">
@@ -259,7 +259,7 @@ export function MaterialDetail() {
                 <tbody className="divide-y divide-border/50">
                   {materialSales.length > 0 ? (
                     materialSales.map(s => (
-                      <tr key={s.id} className="hover:bg-muted/40/80 transition-colors">
+                      <tr key={s.id} className="hover:bg-muted/40 transition-colors">
                         <td className="px-4 py-3 text-muted-foreground">{format(new Date(s.date), 'MMM d, yyyy')}</td>
                         <td className="px-4 py-3 font-medium text-foreground">{s.invoiceNo}</td>
                         <td className="px-4 py-3 text-muted-foreground">{getProductName(s.productId)}</td>

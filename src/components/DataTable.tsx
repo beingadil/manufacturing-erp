@@ -144,7 +144,7 @@ function DataTableInner<T extends Record<string, any>>({
       
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left whitespace-nowrap">
-          <thead className="text-xs text-muted-foreground bg-muted/40/50 border-b border-border/50">
+          <thead className="text-xs text-muted-foreground bg-muted/40 border-b border-border/50">
             <tr>
               {columns.map((col) => (
                 <th 
@@ -171,7 +171,7 @@ function DataTableInner<T extends Record<string, any>>({
           </thead>
           <tbody className="divide-y divide-border/50">
             {paginatedData.map((item, idx) => (
-              <tr key={item.id || idx} className="transition-colors hover:bg-muted/40/80">
+              <tr key={item.id || idx} className="transition-colors hover:bg-muted/40">
                 {columns.map((col) => (
                   <td 
                     key={col.key} 

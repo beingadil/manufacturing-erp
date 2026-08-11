@@ -40,8 +40,8 @@ export function Login() {
             {logo ? (
               <img src={logo} alt="Logo" className="h-10 object-contain" />
             ) : (
-              <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center">
-                <span className="text-primary-foreground font-semibold text-sm tracking-wide">{initials}</span>
+              <div className="h-10 w-10 rounded-lg bg-zinc-900 dark:bg-zinc-950 flex items-center justify-center">
+                <span className="text-white font-semibold text-sm tracking-wide">{initials}</span>
               </div>
             )}
             <div>

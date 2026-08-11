@@ -88,7 +88,7 @@ function HealthTab() {
   const navigate = useNavigate();
   return (
     <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
-      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40/50">
+      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40">
         <h3 className="text-lg font-bold text-foreground">System Health Check</h3>
         <p className="text-sm text-muted-foreground mt-1">Run diagnostics and verify database integrity.</p>
       </div>
@@ -147,7 +147,7 @@ function ProfileTab({ onSave, showSavedToast }: { onSave: () => void, showSavedT
 
   return (
     <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
-      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40/50">
+      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40">
         <h3 className="text-lg font-bold text-foreground">User Profile</h3>
         <p className="text-sm text-muted-foreground mt-1">Update your personal information and profile photo.</p>
       </div>
@@ -246,7 +246,7 @@ function BrandingTab({ onSave, showSavedToast }: { onSave: () => void, showSaved
 
   return (
     <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
-      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40/50">
+      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40">
         <h3 className="text-lg font-bold text-foreground">Dashboard Branding & Logo</h3>
         <p className="text-sm text-muted-foreground mt-1">Customize the application name, tagline, logo, and colors.</p>
       </div>
@@ -434,7 +434,7 @@ function PreferencesTab({ onSave, showSavedToast }: { onSave: () => void, showSa
 
   return (
     <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
-      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40/50">
+      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40">
         <h3 className="text-lg font-bold text-foreground">User Preferences</h3>
         <p className="text-sm text-muted-foreground mt-1">Customize your experience, notifications, and language settings.</p>
       </div>
@@ -549,7 +549,7 @@ function SecurityTab({ onSave, showSavedToast }: { onSave: () => void, showSaved
 
   return (
     <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
-      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40/50">
+      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40">
         <h3 className="text-lg font-bold text-foreground">Security Settings</h3>
         <p className="text-sm text-muted-foreground mt-1">Manage your password, 2FA, devices, and API keys.</p>
       </div>
@@ -739,7 +739,7 @@ function BackupTab() {
 
   return (
     <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
-      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40/50">
+      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40">
         <h3 className="text-lg font-bold text-foreground">Backup & Restore</h3>
         <p className="text-sm text-muted-foreground mt-1">Create on-demand SQLite snapshots, or export/import a unified .merpbak bundle with a version manifest.</p>
       </div>
@@ -836,7 +836,7 @@ function AdvancedTab({ onSave, showSavedToast }: { onSave: () => void, showSaved
 
   return (
     <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
-      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40/50">
+      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40">
         <h3 className="text-lg font-bold text-foreground">Advanced Features</h3>
         <p className="text-sm text-muted-foreground mt-1">Backup data, manage integrations, and advanced system configuration.</p>
       </div>
@@ -960,7 +960,7 @@ function VoucherNumberingTab({ onSave, showSavedToast }: { onSave: () => void, s
 
   return (
     <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
-      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40/50">
+      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40">
         <h3 className="text-lg font-bold text-foreground">Voucher Numbering</h3>
         <p className="text-sm text-muted-foreground mt-1">Configure custom prefixes per voucher type and toggle yearly sequence reset.</p>
       </div>
@@ -1100,7 +1100,7 @@ function AboutUpdatesTab() {
 
   return (
     <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
-      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40/50">
+      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40">
         <h3 className="text-lg font-bold text-foreground">About & Updates</h3>
         <p className="text-sm text-muted-foreground mt-1">Version information and automatic update management.</p>
       </div>
