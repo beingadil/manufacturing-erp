@@ -1,6 +1,8 @@
 import { useERPStore } from '../../store/useERPStore';
 import { ReportEngine } from './ReportEngine';
 import { FinancialCalculationService } from '../business/FinancialCalculationService';
+import { AccountingEngine } from '../accounting/AccountingEngine';
+import type { Account } from '../../types/erp';
 
 export class FinancialReportService {
   static getTrialBalance(dateRange: { start: string; end: string }, searchQuery: string) {
@@ -306,7 +308,7 @@ return withPercentage.sort((a,b) => b.balance - a.balance);
       .filter(a => types.includes(a.type))
       .map(a => {
         const net = netByAccount.get(a.id) || 0;
-        return { name: a.name, balance: isDebitNormal ? net : -net };
+        return { id: a.id, code: a.code, type: a.type, name: a.name, balance: isDebitNormal ? net : -net };
       })
       .filter(r => Math.abs(r.balance) > 0.01);
 
@@ -321,6 +323,120 @@ return withPercentage.sort((a,b) => b.balance - a.balance);
     const netProfit = grossProfit - totalExpenses;
 
     return { revenueAccounts, totalRevenue, cogsAccounts, totalCogs, grossProfit, expenseAccounts, totalExpenses, netProfit };
+  }
+
+  /**
+   * Balance Sheet as of a date, built from the authoritative accounting engine
+   * (spec §19, §24). Accounts are grouped by subtype (Cash & Bank, Receivables,
+   * Inventory, Fixed Assets, Payables, Loans, Taxes, ...) with clear subtotals,
+   * and child/party accounts are rolled up into their parent control account so
+   * the statement shows one AR/AP line per group instead of every customer and
+   * supplier. Equity includes the current-period profit (revenue − expenses).
+   */
+  static getBalanceSheetData(asOfDate?: string) {
+    const state = useERPStore.getState();
+    const { accounts, accountSubtypes, journalEntries, vouchers } = state;
+    const balances = AccountingEngine.getAccountBalances(accounts, journalEntries, vouchers, asOfDate || undefined);
+
+    // Current-period profit from posted vouchers up to the as-of date.
+    const activeEntries = journalEntries.filter(je => {
+      const v = vouchers.find(x => x.id === je.voucherId);
+      return v && v.status === 'Posted' && (!asOfDate || v.date <= asOfDate);
+    });
+    let revenue = 0;
+    let expenses = 0;
+    for (const je of activeEntries) {
+      const acc = accounts.find(a => a.id === je.accountId);
+      if (!acc) continue;
+      if (acc.type === 'Revenue' || acc.type === 'Other Income') revenue += je.credit || 0;
+      else if (acc.type === 'Cost of Goods Sold' || acc.type === 'Expenses' || acc.type === 'Other Expenses') expenses += je.debit || 0;
+    }
+    const netProfit = revenue - expenses;
+
+    // Roll child (party) balances up into their parent control account.
+    const childrenByParent = new Map<string, Account[]>();
+    accounts.forEach(a => {
+      if (a.parentId) childrenByParent.set(a.parentId, [...(childrenByParent.get(a.parentId) || []), a]);
+    });
+    const effBalance = new Map<string, number>();
+    const computeEff = (a: Account): number => {
+      const own = balances.get(a.id) || 0;
+      const kids = childrenByParent.get(a.id) || [];
+      const eff = own + kids.reduce((s, k) => s + computeEff(k), 0);
+      effBalance.set(a.id, eff);
+      return eff;
+    };
+    accounts.forEach(a => computeEff(a));
+
+    const subtypeName = (a: Account) => accountSubtypes.find(s => s.id === a.subtypeId)?.name || '';
+
+    const buildGroup = (
+      label: string,
+      type: Account['type'],
+      subtypeNames: string[] | null,
+      excludeSubtypes: string[] = []
+    ) => {
+      const inGroup = accounts.filter(a => {
+        if (a.type !== type) return false;
+        const sn = subtypeName(a);
+        if (excludeSubtypes.includes(sn)) return false;
+        if (subtypeNames) return subtypeNames.includes(sn);
+        return true;
+      });
+      const rows = inGroup
+        .filter(a => Math.abs(effBalance.get(a.id) || 0) > 0.01)
+        // Hide children whose parent control account is already shown (rolled up)
+        .filter(a => {
+          if (!a.parentId) return true;
+          return Math.abs(effBalance.get(a.parentId) || 0) <= 0.01;
+        })
+        .map(a => ({ id: a.id, code: a.code, name: a.name, balance: effBalance.get(a.id) || 0 }))
+        .sort((a, b) => a.code.localeCompare(b.code));
+      return { label, rows, total: rows.reduce((s, r) => s + r.balance, 0) };
+    };
+
+    const knownAssetSubtypes = ['Cash', 'Bank', 'Accounts Receivable', 'Inventory', 'Fixed Assets', 'Accumulated Depreciation'];
+    const knownLiabilitySubtypes = ['Accounts Payable', 'Short-term Loans', 'Long-term Loans', 'Taxes Payable'];
+
+    const assetGroups = [
+      buildGroup('Cash & Bank', 'Assets', ['Cash', 'Bank']),
+      buildGroup('Accounts Receivable', 'Assets', ['Accounts Receivable']),
+      buildGroup('Inventory', 'Assets', ['Inventory']),
+      buildGroup('Fixed Assets', 'Assets', ['Fixed Assets', 'Accumulated Depreciation']),
+      buildGroup('Other Assets', 'Assets', null, knownAssetSubtypes),
+    ];
+    const liabilityGroups = [
+      buildGroup('Accounts Payable', 'Liabilities', ['Accounts Payable']),
+      buildGroup('Loans & Borrowings', 'Liabilities', ['Short-term Loans', 'Long-term Loans']),
+      buildGroup('Taxes Payable', 'Liabilities', ['Taxes Payable']),
+      buildGroup('Other Liabilities', 'Liabilities', null, knownLiabilitySubtypes),
+    ];
+
+    const equityAccounts = accounts
+      .filter(a => a.type === 'Equity' && Math.abs(effBalance.get(a.id) || 0) > 0.01)
+      .filter(a => {
+        if (!a.parentId) return true;
+        return Math.abs(effBalance.get(a.parentId) || 0) <= 0.01;
+      })
+      .map(a => ({ id: a.id, code: a.code, name: a.name, balance: effBalance.get(a.id) || 0 }))
+      .sort((a, b) => a.code.localeCompare(b.code));
+
+    const totalAssets = assetGroups.reduce((s, g) => s + g.total, 0);
+    const totalLiabilities = liabilityGroups.reduce((s, g) => s + g.total, 0);
+    const totalEquityAccounts = equityAccounts.reduce((s, r) => s + r.balance, 0);
+    const totalEquity = totalEquityAccounts + netProfit;
+
+    return {
+      assetGroups,
+      totalAssets,
+      liabilityGroups,
+      totalLiabilities,
+      equityAccounts,
+      totalEquityAccounts,
+      netProfit,
+      totalEquity,
+      balanced: Math.abs(totalAssets - (totalLiabilities + totalEquity)) < 0.01,
+    };
   }
 
 
