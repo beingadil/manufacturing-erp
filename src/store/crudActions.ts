@@ -317,27 +317,71 @@ export const createCRUDActions = (
     }));
   },
 
-  // Stub Processing deletes to handle later, since they are complex
+  /**
+   * Delete a dispatch (send) and fully reverse its stock + batch-trail effect.
+   * Safety rules (dependency order: bill → receipt → send):
+   *  - A send that already has receipts cannot be deleted — receipts must be
+   *    deleted first (guarded no-op, plus the UI disables the button).
+   *  - Sends that were merged into this dispatch ('Adjusted') are restored to
+   *    Pending so their pcs stay in the trail.
+   * The batch trail is rebuilt from the remaining history (same FIFO replay the
+   * engine and migration use), so legacy no-batch dispatches are handled
+   * correctly and the same pcs are never counted twice.
+   */
   deleteProcessingSend: (id: string) => {
     set((state) => {
-      // Find the send
       const send = state.processingSends.find(s => s.id === id);
       if (!send) return state;
 
-      // Reverse material stock
+      // Guard: receipts exist against this dispatch — delete them first.
+      const hasReceipts = state.processingReceipts.some(r => r.sendId === id);
+      if (hasReceipts || send.pcsReceived > 0) return state;
+
+      // Sends merged into this dispatch ('Adjusted') — bring them back to Pending.
+      const adjustedOrphans = state.processingSends.filter(s => s.adjustedToDispatchId === id);
+      const adjustedPcs = adjustedOrphans.reduce((sum, s) => sum + (s.pcsSent - s.pcsReceived), 0);
+      // Pcs this dispatch physically drew from raw stock (adjusted pcs were
+      // already drawn by the original sends and live in WIP).
+      const physicalPcs = Math.max(0, send.pcsSent - adjustedPcs);
+
+      // 1. Restore material counters
       const updatedMaterials = state.materials.map(m => 
-        m.id === send.materialId ? { ...m, stockPcs: m.stockPcs + send.pcsSent, atProcessorPcs: Math.max(0, (m.atProcessorPcs || 0) - send.pcsSent) } : m
+        m.id === send.materialId
+          ? {
+              ...m,
+              stockPcs: (m.stockPcs || 0) + physicalPcs,
+              atProcessorPcs: Math.max(0, (m.atProcessorPcs || 0) - physicalPcs)
+            }
+          : m
       );
 
-      // Restore batch remainingPcs and pull back the WIP stage
-      const updatedBatches = state.batches.map(b => 
-        b.id === send.batchId ? { ...b, remainingPcs: b.remainingPcs + send.pcsSent, atProcessorPcs: Math.max(0, (b.atProcessorPcs || 0) - send.pcsSent) } : b
+      // 2. Restore adjusted orphans to Pending (clear the merge link)
+      const restoredOrphans = adjustedOrphans.map(s => ({
+        ...s,
+        status: 'Pending' as const,
+        adjustedToDispatchId: undefined,
+        remarks: (s.remarks || '').replace(/ \(Adjusted .*\)$/, '')
+      }));
+      const remainingSends = [
+        ...state.processingSends.filter(s => s.id !== id && s.adjustedToDispatchId !== id),
+        ...restoredOrphans
+      ];
+
+      // 3. Rebuild the batch trail from the remaining history (idempotent, FIFO)
+      const updatedBatches = InventoryCalculationService.recomputeFinishedPcsForMaterial(
+        send.materialId,
+        state.batches || [],
+        state.processingReceipts || [],
+        remainingSends,
+        state.sales || [],
+        state.products || [],
+        undefined
       );
 
-      // Remove from pending 
+      // 4. Remove this dispatch's inventory movement
       return {
         ...state,
-        processingSends: state.processingSends.filter(s => s.id !== id),
+        processingSends: remainingSends,
         materials: updatedMaterials,
         batches: updatedBatches,
         inventoryMovements: state.inventoryMovements.filter(im => im.referenceNo !== send.dispatchNo)
@@ -380,37 +424,71 @@ export const createCRUDActions = (
   },
 
 
+  /**
+   * Delete a processing receipt and fully reverse its stock + batch-trail
+   * effect. Safety rules:
+   *  - A billed receipt cannot be deleted — delete the processor bill first.
+   *  - A receipt whose finished goods have already been sold cannot be deleted
+   *    (the remaining receipts could not cover the sales) — delete the sale first.
+   * Only this receipt's share is removed from the send's pcsReceived (other
+   * receipts on the same send are preserved), and the batch trail is rebuilt
+   * from the remaining history.
+   */
   deleteProcessingReceipt: (id: string) => {
     set((state) => {
       const receipt = state.processingReceipts.find(r => r.id === id);
       if (!receipt) return state;
 
-      // Reverse the material's finished stock back to WIP
+      // Guard: billed receipts must be un-billed (delete the bill) first.
+      if (receipt.billedStatus === 'Billed') return state;
+
+      // Guard: don't allow deleting a receipt whose finished goods were already
+      // sold — the remaining production could not cover the sales, so the
+      // material counters and batch trail would diverge.
+      const remainingReceipts = state.processingReceipts.filter(r => r.id !== id);
+      const remainingProduction = remainingReceipts
+        .filter(r => r.materialId === receipt.materialId)
+        .reduce((sum, r) => sum + r.pcsReceived, 0);
+      const productIds = new Set(state.products.filter(p => p.materialId === receipt.materialId).map(p => p.id));
+      const soldPcs = state.sales
+        .filter(s => productIds.has(s.productId))
+        .reduce((sum, s) => sum + s.pcsSold, 0);
+      if (remainingProduction < soldPcs) return state;
+
+      // 1. Reverse material counters: finished → WIP
       const updatedMaterials = state.materials.map(m => 
-        m.id === receipt.materialId ? { ...m, processedStockPcs: m.processedStockPcs - receipt.pcsReceived, atProcessorPcs: (m.atProcessorPcs || 0) + receipt.pcsReceived } : m
+        m.id === receipt.materialId
+          ? {
+              ...m,
+              processedStockPcs: Math.max(0, (m.processedStockPcs || 0) - receipt.pcsReceived),
+              atProcessorPcs: (m.atProcessorPcs || 0) + receipt.pcsReceived
+            }
+          : m
       );
 
-      // Move the pcs back from the batch's finished stage to its WIP stage
-      const send = state.processingSends.find(s => s.id === receipt.sendId);
-      const updatedBatches = state.batches.map(b =>
-        b.id === send?.batchId
-          ? { ...b, processedPcs: Math.max(0, (b.processedPcs || 0) - receipt.pcsReceived), atProcessorPcs: (b.atProcessorPcs || 0) + receipt.pcsReceived }
-          : b
-      );
-
-      // We also need to restore pending pcs on the original sends
+      // 2. Remove only this receipt's share from the send and recompute status
       const updatedSends = state.processingSends.map(s => {
-        if (receipt.sendId === s.id) {
-          // This is a rough estimation since we can't easily track exact deductions per send.
-          // For a real ERP, we'd need a mapping table. We'll just reset status.
-          return { ...s, pcsReceived: 0, status: 'Pending' as const };
-        }
-        return s;
+        if (s.id !== receipt.sendId) return s;
+        const newReceived = Math.max(0, s.pcsReceived - receipt.pcsReceived);
+        const status = newReceived >= s.pcsSent ? 'Closed' : newReceived > 0 ? 'Partial' : 'Pending';
+        return { ...s, pcsReceived: newReceived, status: status as 'Closed' | 'Partial' | 'Pending' | 'Adjusted' };
       });
 
+      // 3. Rebuild the batch trail from the remaining history
+      const updatedBatches = InventoryCalculationService.recomputeFinishedPcsForMaterial(
+        receipt.materialId,
+        state.batches || [],
+        remainingReceipts,
+        state.processingSends || [],
+        state.sales || [],
+        state.products || [],
+        undefined
+      );
+
+      // 4. Remove this receipt's inventory movement
       return {
         ...state,
-        processingReceipts: state.processingReceipts.filter(r => r.id !== id),
+        processingReceipts: remainingReceipts,
         processingSends: updatedSends,
         materials: updatedMaterials,
         batches: updatedBatches,

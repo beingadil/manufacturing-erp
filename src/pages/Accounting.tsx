@@ -1,5 +1,5 @@
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { useERPStore } from "../store/useERPStore";
 import { cn } from "../lib/utils";
@@ -10,6 +10,9 @@ import { AddAccountModal } from "../components/AddAccountModal";
 import { generateLedgerStatementPDF } from "../lib/documentGenerators";
 import { getCashBankAccounts } from "../lib/accounting/accountClassification";
 import { AccountingEngine } from "../lib/accounting/AccountingEngine";
+import { FinancialReportService } from "../lib/reporting/FinancialReportService";
+import { BalanceSheetStatement } from "../components/reports/financial/BalanceSheetStatement";
+import { ProfitLossStatement } from "../components/reports/financial/ProfitLossStatement";
 
 /**
  * Shared report helper (spec §14, §24): returns only journal entries whose
@@ -39,8 +42,8 @@ export function Accounting() {
   const activeTab = pathParts[pathParts.length - 1] || 'chart-of-accounts';
 
   return (
-    <div className="space-y-6 flex flex-col h-[calc(100vh-6rem)]">
-      <div className="bg-card rounded-xl border border-border/50 shadow-sm flex-1 flex flex-col overflow-hidden">
+    <div className="space-y-6 pb-10">
+      <div className="bg-card rounded-xl border border-border/50 shadow-sm">
         {activeTab === 'chart-of-accounts' && <ChartOfAccounts />}
         {activeTab === 'general-ledger' && <GeneralLedger />}
         {activeTab === 'trial-balance' && <TrialBalance />}
@@ -86,7 +89,7 @@ function GeneralLedger() {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full">
+    <div className="flex flex-col">
       <div className="p-6 border-b border-border/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-lg font-semibold text-foreground">General Ledger</h2>
@@ -143,7 +146,7 @@ function GeneralLedger() {
           </div>
         </div>
       </div>
-      <div className="flex-1 overflow-auto">
+      <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-border/50 bg-muted/30">
@@ -189,55 +192,16 @@ function GeneralLedger() {
 }
 
 function BalanceSheet() {
-  const { accounts, journalEntries, vouchers } = useERPStore();
   const [asOfDate, setAsOfDate] = useState('');
 
-  const active = activeEntries(journalEntries, vouchers, undefined, asOfDate || undefined);
-
-  // Calculate balances
-  const balances = accounts.map(account => {
-    let totalDebit = account.openingBalanceType === 'Debit' ? account.openingBalance : 0;
-    let totalCredit = account.openingBalanceType === 'Credit' ? account.openingBalance : 0;
-    
-    const entries = active.filter(je => je.accountId === account.id);
-    entries.forEach(entry => {
-      totalDebit += entry.debit;
-      totalCredit += entry.credit;
-    });
-    
-    let balance = 0;
-    if (account.type === 'Assets') {
-      balance = totalDebit - totalCredit;
-    } else if (account.type === 'Liabilities' || account.type === 'Equity') {
-      balance = totalCredit - totalDebit;
-    } else if (account.type === 'Revenue' || account.type === 'Other Income') {
-      balance = totalCredit - totalDebit;
-    } else if (account.type === 'Cost of Goods Sold' || account.type === 'Expenses' || account.type === 'Other Expenses') {
-      balance = totalDebit - totalCredit;
-    }
-    
-    return { ...account, balance };
-  });
-
-  const assetAccounts = balances.filter(a => a.type === 'Assets' && a.balance !== 0);
-  const liabilityAccounts = balances.filter(a => a.type === 'Liabilities' && a.balance !== 0);
-  const equityAccounts = balances.filter(a => a.type === 'Equity' && a.balance !== 0);
-  
-  // Calculate retained earnings (net profit)
-  const revenueTotal = balances.filter(a => a.type === 'Revenue' || a.type === 'Other Income').reduce((sum, a) => sum + a.balance, 0);
-  const expenseTotal = balances.filter(a => a.type === 'Cost of Goods Sold' || a.type === 'Expenses' || a.type === 'Other Expenses').reduce((sum, a) => sum + a.balance, 0);
-  const netProfit = revenueTotal - expenseTotal;
-
-  const totalAssets = assetAccounts.reduce((sum, a) => sum + a.balance, 0);
-  const totalLiabilities = liabilityAccounts.reduce((sum, a) => sum + a.balance, 0);
-  const totalEquity = equityAccounts.reduce((sum, a) => sum + a.balance, 0) + netProfit;
+  const data = useMemo(() => FinancialReportService.getBalanceSheetData(asOfDate || undefined), [asOfDate]);
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col">
       <div className="p-6 border-b border-border/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
         <div>
           <h2 className="text-lg font-semibold text-foreground">Balance Sheet</h2>
-          <p className="text-sm text-muted-foreground">Statement of financial position</p>
+          <p className="text-sm text-muted-foreground">Statement of financial position — click any account to drill into its ledger</p>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <div className="flex items-center gap-2 bg-muted/20 border border-border/50 rounded-lg px-3 py-2">
@@ -250,77 +214,13 @@ function BalanceSheet() {
               title="As of date"
             />
           </div>
-          <button className="flex items-center gap-2 bg-muted text-foreground px-4 py-2 rounded-lg hover:bg-muted/80 transition-colors text-sm font-medium whitespace-nowrap border border-border/50">
-            Export
-          </button>
         </div>
       </div>
-      
-      <div className="flex-1 overflow-auto p-6 flex justify-center">
-        <div className="w-full max-w-4xl bg-card border border-border/50 rounded-xl p-8 shadow-sm my-auto">
-          <div className="text-center mb-8 pb-6 border-b border-border/50">
-            <h2 className="text-2xl font-bold text-foreground">Balance Sheet</h2>
-            <p className="text-muted-foreground mt-1">As of {asOfDate ? new Date(asOfDate).toLocaleDateString() : new Date().toLocaleDateString()}</p>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Assets */}
-            <div>
-              <h3 className="text-lg font-bold text-foreground border-b-2 border-primary pb-2 mb-4">Assets</h3>
-              <div className="space-y-2">
-                {assetAccounts.map(account => (
-                  <div key={account.id} className="flex justify-between items-center text-sm">
-                    <span className="text-foreground">{account.name}</span>
-                    <span className="text-foreground font-medium">{account.balance.toLocaleString()}</span>
-                  </div>
-                ))}
-                {assetAccounts.length === 0 && <p className="text-sm text-muted-foreground italic">No assets found.</p>}
-              </div>
-              <div className="flex justify-between items-center text-base font-bold bg-muted/30 p-3 rounded-lg mt-6 border border-border/50">
-                <span className="text-foreground">Total Assets</span>
-                <span className="text-foreground">PKR {totalAssets.toLocaleString()}</span>
-              </div>
-            </div>
-
-            {/* Liabilities & Equity */}
-            <div>
-              <h3 className="text-lg font-bold text-foreground border-b-2 border-rose-500 pb-2 mb-4">Liabilities</h3>
-              <div className="space-y-2 mb-6">
-                {liabilityAccounts.map(account => (
-                  <div key={account.id} className="flex justify-between items-center text-sm">
-                    <span className="text-foreground">{account.name}</span>
-                    <span className="text-foreground font-medium">{account.balance.toLocaleString()}</span>
-                  </div>
-                ))}
-                {liabilityAccounts.length === 0 && <p className="text-sm text-muted-foreground italic">No liabilities found.</p>}
-              </div>
-              
-              <h3 className="text-lg font-bold text-foreground border-b-2 border-amber-500 pb-2 mb-4">Equity</h3>
-              <div className="space-y-2">
-                {equityAccounts.map(account => (
-                  <div key={account.id} className="flex justify-between items-center text-sm">
-                    <span className="text-foreground">{account.name}</span>
-                    <span className="text-foreground font-medium">{account.balance.toLocaleString()}</span>
-                  </div>
-                ))}
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-foreground">Retained Earnings (Net Profit)</span>
-                  <span className="text-foreground font-medium">{netProfit.toLocaleString()}</span>
-                </div>
-              </div>
-              
-              <div className="flex justify-between items-center text-base font-bold bg-muted/30 p-3 rounded-lg mt-6 border border-border/50">
-                <span className="text-foreground">Total Liabilities & Equity</span>
-                <span className={cn(
-                  "text-foreground",
-                  totalAssets !== totalLiabilities + totalEquity && "text-destructive"
-                )}>
-                  PKR {(totalLiabilities + totalEquity).toLocaleString()}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+      <div className="p-6 flex justify-center items-start">
+        <BalanceSheetStatement
+          data={data}
+          asOfLabel={asOfDate ? new Date(asOfDate).toLocaleDateString() : new Date().toLocaleDateString()}
+        />
       </div>
     </div>
   );
@@ -395,7 +295,7 @@ function ChartOfAccounts() {
   };
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex flex-col">
       <div className="p-6 border-b border-border/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-lg font-semibold text-foreground">Chart of Accounts</h2>
@@ -431,7 +331,7 @@ function ChartOfAccounts() {
         </div>
       </div>
       
-      <div className="flex-1 p-6 overflow-y-auto">
+      <div className="p-6">
         <div className="space-y-6">
           {types.map(type => {
             const subtypesOfType = accountSubtypes.filter(st => st.type === type);
@@ -508,7 +408,7 @@ function TrialBalance() {
   const isBalanced = tb.balanced;
 
   return (
-    <div className="flex-1 flex flex-col h-full">
+    <div className="flex flex-col">
       <div className="p-6 border-b border-border/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-lg font-semibold text-foreground">Trial Balance</h2>
@@ -531,7 +431,7 @@ function TrialBalance() {
         </div>
       </div>
       
-      <div className="flex-1 overflow-auto p-6">
+      <div className="p-6 overflow-x-auto">
         <div className="border border-border/50 rounded-xl overflow-hidden bg-card">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -586,75 +486,23 @@ function TrialBalance() {
 }
 
 function ProfitAndLoss() {
-  const { accounts, journalEntries, vouchers } = useERPStore();
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
-  const active = activeEntries(journalEntries, vouchers, dateFrom || undefined, dateTo || undefined);
-
-  // Calculate balances
-  const balances = accounts.map(account => {
-    let totalDebit = account.openingBalanceType === 'Debit' ? account.openingBalance : 0;
-    let totalCredit = account.openingBalanceType === 'Credit' ? account.openingBalance : 0;
-    
-    const entries = active.filter(je => je.accountId === account.id);
-    entries.forEach(entry => {
-      totalDebit += entry.debit;
-      totalCredit += entry.credit;
-    });
-    
-    let balance = 0;
-    if (account.type === 'Revenue' || account.type === 'Other Income') {
-      balance = totalCredit - totalDebit;
-    } else if (account.type === 'Cost of Goods Sold' || account.type === 'Expenses' || account.type === 'Other Expenses') {
-      balance = totalDebit - totalCredit;
-    }
-    
-    return {
-      ...account,
-      balance
-    };
-  }).filter(b => b.balance !== 0);
-
-  const revenueAccounts = balances.filter(a => a.type === 'Revenue' || a.type === 'Other Income');
-  const cogsAccounts = balances.filter(a => a.type === 'Cost of Goods Sold');
-  const expenseAccounts = balances.filter(a => a.type === 'Expenses' || a.type === 'Other Expenses');
-
-  const totalRevenue = revenueAccounts.reduce((sum, a) => sum + a.balance, 0);
-  const totalCogs = cogsAccounts.reduce((sum, a) => sum + a.balance, 0);
-  const grossProfit = totalRevenue - totalCogs;
-  
-  const totalExpenses = expenseAccounts.reduce((sum, a) => sum + a.balance, 0);
-  const netProfit = grossProfit - totalExpenses;
-
-  const renderSection = (title: string, data: typeof balances, total: number) => (
-    <div className="mb-6">
-      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/50 pb-2 mb-3">{title}</h3>
-      {data.length === 0 ? (
-        <p className="text-sm text-muted-foreground italic pl-4">No data for this period.</p>
-      ) : (
-        <div className="space-y-2 pl-4">
-          {data.map(account => (
-            <div key={account.id} className="flex justify-between items-center text-sm">
-              <span className="text-foreground">{account.name}</span>
-              <span className="text-foreground font-medium">{account.balance.toLocaleString()}</span>
-            </div>
-          ))}
-          <div className="flex justify-between items-center text-sm font-semibold border-t border-border/50 pt-2 mt-2">
-            <span className="text-foreground">Total {title}</span>
-            <span className="text-foreground">{total.toLocaleString()}</span>
-          </div>
-        </div>
-      )}
-    </div>
+  const data = useMemo(
+    () => FinancialReportService.getProfitLossReportData({ start: dateFrom, end: dateTo, label: '' }),
+    [dateFrom, dateTo]
   );
+  const periodLabel = dateFrom && dateTo
+    ? `${new Date(dateFrom).toLocaleDateString()} → ${new Date(dateTo).toLocaleDateString()}`
+    : 'the selected period';
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col">
       <div className="p-6 border-b border-border/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
         <div>
           <h2 className="text-lg font-semibold text-foreground">Profit & Loss</h2>
-          <p className="text-sm text-muted-foreground">Statement of comprehensive income</p>
+          <p className="text-sm text-muted-foreground">Statement of comprehensive income — click any account to drill into its ledger</p>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <input
@@ -672,38 +520,10 @@ function ProfitAndLoss() {
             className="px-3 py-2 rounded-lg border border-border bg-background text-sm"
             title="Date To"
           />
-          <button className="flex items-center gap-2 bg-muted text-foreground px-4 py-2 rounded-lg hover:bg-muted/80 transition-colors text-sm font-medium whitespace-nowrap border border-border/50">
-            Export
-          </button>
         </div>
       </div>
-      
-      <div className="flex-1 overflow-auto p-6 flex justify-center">
-        <div className="w-full max-w-3xl bg-card border border-border/50 rounded-xl p-8 shadow-sm my-auto">
-          <div className="text-center mb-8 pb-6 border-b border-border/50">
-            <h2 className="text-2xl font-bold text-foreground">Profit & Loss Statement</h2>
-            <p className="text-muted-foreground mt-1">For the period ending {new Date().toLocaleDateString()}</p>
-          </div>
-          
-          {renderSection("Revenue", revenueAccounts, totalRevenue)}
-          {renderSection("Cost of Goods Sold", cogsAccounts, totalCogs)}
-          
-          <div className="flex justify-between items-center text-base font-bold bg-muted/30 p-3 rounded-lg mb-6 border border-border/50">
-            <span className="text-foreground">Gross Profit</span>
-            <span className={cn(grossProfit >= 0 ? "text-success" : "text-destructive")}>
-              PKR {grossProfit.toLocaleString()}
-            </span>
-          </div>
-          
-          {renderSection("Operating Expenses", expenseAccounts, totalExpenses)}
-          
-          <div className="flex justify-between items-center text-lg font-bold bg-primary/10 border border-primary/20 p-4 rounded-lg mt-8">
-            <span className="text-foreground">Net Profit</span>
-            <span className={cn(netProfit >= 0 ? "text-success" : "text-destructive")}>
-              PKR {netProfit.toLocaleString()}
-            </span>
-          </div>
-        </div>
+      <div className="p-6 flex justify-center items-start">
+        <ProfitLossStatement data={data} periodLabel={periodLabel} />
       </div>
     </div>
   );
@@ -767,7 +587,7 @@ function CashFlow() {
   const closingCash = openingCash + netIncreaseInCash;
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col">
       <div className="p-6 border-b border-border/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
         <div>
           <h2 className="text-lg font-semibold text-foreground">Cash Flow Statement</h2>
@@ -791,8 +611,8 @@ function CashFlow() {
           />
         </div>
       </div>
-      <div className="flex-1 overflow-auto p-6 flex justify-center">
-        <div className="w-full max-w-3xl bg-card border border-border/50 rounded-xl p-8 shadow-sm my-auto">
+      <div className="p-6 flex justify-center items-start">
+        <div className="w-full max-w-3xl bg-card border border-border/50 rounded-xl p-8 shadow-sm">
           <div className="text-center mb-8 pb-6 border-b border-border/50">
             <h2 className="text-2xl font-bold text-foreground">Statement of Cash Flows</h2>
             <p className="text-muted-foreground mt-1">For the period ending {new Date().toLocaleDateString()}</p>

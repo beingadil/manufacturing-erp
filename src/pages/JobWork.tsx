@@ -235,7 +235,12 @@ export function JobWork() {
         </button>
         <button className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Eye className="h-4 w-4" /></button>
         <button onClick={() => handleEditSend(item)} className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Edit className="h-4 w-4" /></button>
-        <button onClick={() => setDeleteModal({isOpen: true, type: 'send', id: item.id, no: item.dispatchNo || 'Unknown'})} className="p-1.5 hover:bg-destructive/10 text-destructive rounded-md transition-colors"><Trash2 className="h-4 w-4" /></button>
+        <button
+          onClick={() => setDeleteModal({isOpen: true, type: 'send', id: item.id, no: item.dispatchNo || 'Unknown'})}
+          disabled={item.pcsReceived > 0}
+          title={item.pcsReceived > 0 ? 'Delete linked receipts first' : 'Delete dispatch'}
+          className="p-1.5 rounded-md text-destructive transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-destructive/10"
+        ><Trash2 className="h-4 w-4" /></button>
       </div>
     ) },
     { key: "formattedDate", label: "Date", sortable: true },
@@ -273,7 +278,12 @@ export function JobWork() {
       <div className="flex justify-end gap-2">
         <button className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Eye className="h-4 w-4" /></button>
         <button onClick={() => handleEditReceive(item)} className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Edit className="h-4 w-4" /></button>
-        <button onClick={() => setDeleteModal({isOpen: true, type: 'receipt', id: item.id, no: item.receiveNo || 'Unknown'})} className="p-1.5 hover:bg-destructive/10 text-destructive rounded-md transition-colors"><Trash2 className="h-4 w-4" /></button>
+        <button
+          onClick={() => setDeleteModal({isOpen: true, type: 'receipt', id: item.id, no: item.receiveNo || 'Unknown'})}
+          disabled={item.billedStatus === 'Billed'}
+          title={item.billedStatus === 'Billed' ? 'Delete the processor bill first' : 'Delete receipt'}
+          className="p-1.5 rounded-md text-destructive transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-destructive/10"
+        ><Trash2 className="h-4 w-4" /></button>
       </div>
     ) },
     { key: "formattedDate", label: "Date", sortable: true },
@@ -624,6 +634,20 @@ export function JobWork() {
         isOpen={isAddMaterialOpen} 
         onClose={() => setIsAddMaterialOpen(false)} 
         onSuccess={(id) => setSendMaterialId(id)} 
+      />
+      <DeleteConfirmationModal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({isOpen: false, type: 'send', id: '', no: ''})}
+        onConfirm={handleDelete}
+        title={deleteModal.type === 'send' ? 'Delete Dispatch' : deleteModal.type === 'receipt' ? 'Delete Receipt' : 'Delete Processor Bill'}
+        recordNo={deleteModal.no}
+        description={
+          deleteModal.type === 'send'
+            ? 'Are you sure you want to permanently delete this dispatch? Stock will be returned to raw material and the batch trail rebuilt.'
+            : deleteModal.type === 'receipt'
+              ? 'Are you sure you want to permanently delete this receipt? The received pcs will move back to At Processor (WIP).'
+              : 'Are you sure you want to permanently delete this processor bill? Receipts will be marked unbilled and the processor balance reversed.'
+        }
       />
     </div>
   );
