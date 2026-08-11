@@ -137,7 +137,7 @@ export function BackupRestoreTab() {
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       {/* ── Create & Manage Internal Backups ── */}
       <div className="md:col-span-2 rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-border/50 bg-muted/40/50">
+        <div className="p-6 border-b border-border/50 bg-muted/40">
           <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
             <Database className="h-5 w-5 text-primary" />
             SQLite Database Backups

@@ -264,7 +264,7 @@ function NotificationBell() {
 
       {isOpen && (
         <div className="absolute right-0 top-full mt-2 w-80 bg-card rounded-xl shadow-xl border border-border overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between bg-muted/40/50">
+          <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between bg-muted/40">
             <h3 className="font-semibold text-foreground">Notifications</h3>
             {unreadCount > 0 && (
               <button 
@@ -419,8 +419,8 @@ export function DashboardLayout() {
             {logo ? (
               <img src={logo} alt="Logo" className="h-8 object-contain" />
             ) : (
-              <div className="h-8 w-8 bg-primary rounded-lg flex items-center justify-center">
-                <span className="text-primary-foreground text-sm">{dashboardName.substring(0, 3).toUpperCase()}</span>
+              <div className="h-8 w-8 bg-zinc-900 dark:bg-zinc-950 rounded-lg flex items-center justify-center">
+                <span className="text-white text-sm">{dashboardName.substring(0, 3).toUpperCase()}</span>
               </div>
             )}
             <span className="hidden sm:inline-block">{dashboardName}</span>

@@ -9,6 +9,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { format, subDays, startOfWeek, startOfMonth, startOfYear } from 'date-fns';
 import { DashboardSummaryService } from '../lib/dashboard/DashboardSummaryService';
 import { getSystemAccountBySubtype } from '../lib/accounting/accountClassification';
+import { FinancialReportService } from '../lib/reporting/FinancialReportService';
+import { PositionSummary } from '../components/reports/financial/BalanceSheetStatement';
 
 type Preset = 'today' | 'week' | 'month' | 'year' | 'custom';
 
@@ -81,6 +83,14 @@ export function Dashboard() {
     },
     { asOfDate: range.end, periodStart: range.start, periodEnd: range.end }
   ), [accounts, accountSubtypes, journalEntries, vouchers, batches, materials, customers, suppliers, processors, secureSales, securePurchases, range]);
+
+  // "Where you stand" — the SAME authoritative balance-sheet figures as the
+  // Balance Sheet report (invested / total profit to date / what's yours),
+  // so the Dashboard card can never disagree with the report.
+  const balanceSheetData = useMemo(
+    () => FinancialReportService.getBalanceSheetData(range.end),
+    [range.end, accounts, accountSubtypes, journalEntries, vouchers]
+  );
 
   // Generate last 7 days sales data
   const last7DaysSales = useMemo(() => {
@@ -248,6 +258,17 @@ export function Dashboard() {
             onClick={() => navigate('/materials')}
             accent="text-violet-500"
           />
+        </div>
+      </section>
+
+      {/* ── Where you stand ────────────────────────────────────────────────── */}
+      <section className="space-y-2">
+        <PositionSummary data={balanceSheetData} title="Where you stand" />
+        <div className="flex items-center justify-between px-1 text-xs text-muted-foreground">
+          <span>As of {asOfLabel} · Same figures as the Balance Sheet report</span>
+          <button onClick={() => navigate('/accounting/balance-sheet')} className="inline-flex items-center gap-1 text-primary hover:underline">
+            View Balance Sheet <ArrowRight className="h-3 w-3" />
+          </button>
         </div>
       </section>
 
@@ -441,7 +462,7 @@ export function Dashboard() {
 
       <div className="grid gap-6 md:grid-cols-2">
         <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col">
-          <div className="p-5 border-b border-border/50 flex items-center justify-between bg-muted/40/50">
+          <div className="p-5 border-b border-border/50 flex items-center justify-between bg-muted/40">
             <h3 className="font-semibold text-foreground flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-amber-500" /> Alerts & Notifications
             </h3>
@@ -474,7 +495,7 @@ export function Dashboard() {
         </div>
 
         <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col">
-          <div className="p-5 border-b border-border/50 flex items-center justify-between bg-muted/40/50">
+          <div className="p-5 border-b border-border/50 flex items-center justify-between bg-muted/40">
             <h3 className="font-semibold text-foreground">Recent Transactions</h3>
             <button onClick={() => navigate('/sales')} className="text-sm font-medium text-info hover:text-info">View All Sales</button>
           </div>

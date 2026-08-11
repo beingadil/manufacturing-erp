@@ -87,9 +87,19 @@ export default function App() {
     };
 
     const root = document.documentElement;
+    // Custom brand colors are light-mode values. In dark mode the .dark CSS
+    // variables (primary = light, primary-foreground = dark) must win, or every
+    // text-primary / bg-primary element renders dark-on-dark. This was the
+    // root cause of the broken dark-mode contrast on buttons and KPI cards.
+    const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    if (isDark) {
+      root.style.removeProperty('--primary');
+      root.style.removeProperty('--secondary');
+      return;
+    }
     root.style.setProperty('--primary', hexToHSL(primaryColor));
     root.style.setProperty('--secondary', hexToHSL(secondaryColor));
-  }, [primaryColor, secondaryColor]);
+  }, [theme, primaryColor, secondaryColor]);
 
 
   useEffect(() => {

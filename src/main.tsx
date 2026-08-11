@@ -226,6 +226,24 @@ async function bootstrap() {
       Logger.warn('Startup', `Chart of Accounts auto-seed skipped: ${e.message}`);
     }
 
+    // Dev-only: seed realistic demo data across ALL modules (never in
+    // production — Vite replaces import.meta.env.DEV with false at build time
+    // and tree-shakes this whole branch, so the installer ships no demo data).
+    if (import.meta.env.DEV) {
+      try {
+        const mod = await import('./lib/demo/demoSeed');
+        // Always expose reset helpers in dev so a fresh demo can be regenerated.
+        (window as any).__seedDemoData = mod.seedDemoData;
+        (window as any).__resetDemoData = mod.resetDemoData;
+        const result = mod.seedDemoData();
+        Logger.info('Startup', result.seeded
+          ? 'Dev demo data seeded across all modules'
+          : `Dev demo data skipped: ${result.reason}`);
+      } catch (e: any) {
+        Logger.warn('Startup', `Dev demo data seed skipped: ${e.message}`);
+      }
+    }
+
     Logger.info('Startup', 'Startup sequence complete, rendering UI...');
     
     // Signal that all stores have been rehydrated from SQLite.
@@ -236,12 +254,14 @@ async function bootstrap() {
   } catch (error) {
     console.error('[Startup] Fatal Error during bootstrap:', error);
     Desktop.dialog.showErrorBox('Startup Failed', `The application failed to start:\n${(error as Error).message}`);
+    // Theme-aware fallback: uses the app's CSS variables so the crash screen
+    // is readable in both light and dark mode (no hardcoded light colors).
     rootElement.innerHTML = `
-      <div style="padding: 2rem; color: #7f1d1d; background: #fef2f2; height: 100vh; font-family: sans-serif;">
-        <h1>Fatal Startup Error</h1>
+      <div style="padding: 2rem; color: hsl(var(--foreground)); background: hsl(var(--background)); height: 100vh; font-family: sans-serif;">
+        <h1 style="color: hsl(var(--destructive));">Fatal Startup Error</h1>
         <p>The application could not be initialized.</p>
-        <pre style="background: white; padding: 1rem; border-radius: 4px; overflow: auto;">${(error as Error).stack || (error as Error).message}</pre>
-        <button onclick="window.location.reload()" style="padding: 0.5rem 1rem; cursor: pointer;">Retry</button>
+        <pre style="background: hsl(var(--muted)); color: hsl(var(--foreground)); padding: 1rem; border-radius: 4px; overflow: auto;">${(error as Error).stack || (error as Error).message}</pre>
+        <button onclick="window.location.reload()" style="padding: 0.5rem 1rem; cursor: pointer; background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); border: none; border-radius: 4px;">Retry</button>
       </div>
     `;
   }
