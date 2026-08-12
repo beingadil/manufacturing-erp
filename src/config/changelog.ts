@@ -20,6 +20,21 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.15',
+    date: '2026-08-12',
+    title: 'Accessible money text & theme-aware charts',
+    sections: [
+      {
+        title: '🎨 UI / Accessibility',
+        items: [
+          'Money and financial figures now pass WCAG AA contrast (4.5:1) on white — the success (green), destructive (red), info (blue), and warning (amber) text colors were darkened in light mode. Previously receipts, payments, and balances were hard to read (as low as 2.3:1). Dark mode was already compliant and is unchanged.',
+          'Charts are now theme-aware — Revenue/Purchase trends, Top Products, and the monitor screen rank cards use the design-system chart tokens instead of hardcoded colors, with brighter variants in dark mode. Light mode looks pixel-identical to before.',
+          'Completed the design-token system: --chart-1..5, --gradient-*, --shadow-card/hover, and education colors are now defined in both themes, so every utility mapped in the Tailwind config resolves.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.14',
     date: '2026-08-12',
     title: 'Correct party balances & working Dashboard Branding',
