@@ -40,6 +40,8 @@ interface CounterpartyRow {
   /** Set when the account picker selected a control account (AR/AP) with children. */
   parentAccountId?: string;
   amount: number | '';
+  /** Per-entry narration — shown in the ledger for this line (spec: ledger drill-down). */
+  narration?: string;
 }
 
 interface JournalRow {
@@ -47,6 +49,7 @@ interface JournalRow {
   accountId: string;
   debit: number | '';
   credit: number | '';
+  narration?: string;
 }
 
 interface CashbookVoucherFormProps {
@@ -148,10 +151,10 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
   const [journalRows, setJournalRows] = useState<JournalRow[]>([newJournalRow()]);
 
   function newCounterpartyRow(type: RowType): CounterpartyRow {
-    return { uid: uuidv4(), type, counterpartyId: '', amount: '' };
+    return { uid: uuidv4(), type, counterpartyId: '', amount: '', narration: '' };
   }
   function newJournalRow(): JournalRow {
-    return { uid: uuidv4(), accountId: '', debit: '', credit: '' };
+    return { uid: uuidv4(), accountId: '', debit: '', credit: '', narration: '' };
   }
 
   const updateCounterparty = (uid: string, patch: Partial<CounterpartyRow>) =>
@@ -202,6 +205,7 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
         accountId: je.accountId,
         debit: je.debit > 0 ? je.debit : '',
         credit: je.credit > 0 ? je.credit : '',
+        narration: je.narration || '',
       })));
       return;
     }
@@ -221,6 +225,7 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
           type: inferRowType(acc),
           counterpartyId: acc?.linkedEntityId || je.accountId,
           amount: rowsAreDebit ? je.debit : je.credit,
+          narration: je.narration || '',
         };
       }));
     } else {
@@ -349,7 +354,7 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
         accountId: r.accountId,
         debit: Number(r.debit) || 0,
         credit: Number(r.credit) || 0,
-        narration,
+        narration: r.narration?.trim() || narration,
       }));
       ErrorManagement.safeExecuteSync(() => {
         if (isEditing) {
@@ -413,7 +418,7 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
         accountId: accId,
         debit: rowsAreDebit ? amt : 0,
         credit: rowsAreDebit ? 0 : amt,
-        narration,
+        narration: row.narration?.trim() || narration,
       });
     }
 
@@ -571,6 +576,7 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
                 <tr className="bg-muted/30 border-b border-border/50 [&>th:first-child]:rounded-tl-xl [&>th:last-child]:rounded-tr-xl">
                   <th className="px-4 py-3.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-10">#</th>
                   <th className="px-4 py-3.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Account</th>
+                  <th className="px-4 py-3.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Narration</th>
                   <th className="px-4 py-3.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider text-right w-44">Debit</th>
                   <th className="px-4 py-3.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider text-right w-44">Credit</th>
                   <th className="px-4 py-3.5 w-12"></th>
@@ -586,6 +592,15 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
                         onChange={id => updateJournal(row.uid, { accountId: id })}
                         placeholder="Select account..."
                         required
+                      />
+                    </td>
+                    <td className="px-4 py-3 align-top min-w-[220px]">
+                      <input
+                        type="text"
+                        value={row.narration || ''}
+                        onChange={e => updateJournal(row.uid, { narration: e.target.value })}
+                        placeholder="Line narration (optional)"
+                        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary"
                       />
                     </td>
                     <td className="px-4 py-3 align-top">
@@ -729,6 +744,15 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
+                    </div>
+                    <div className="col-span-12">
+                      <input
+                        type="text"
+                        value={row.narration || ''}
+                        onChange={e => updateCounterparty(row.uid, { narration: e.target.value })}
+                        placeholder="Narration for this line (optional) — shows in the ledger"
+                        className="w-full rounded-lg border border-border/70 bg-background/50 px-3 py-1.5 text-xs text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary focus:text-foreground transition-colors"
+                      />
                     </div>
                     {idx === counterpartyRows.length - 1 && (
                       <div className="col-span-12 mt-2">

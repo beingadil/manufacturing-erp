@@ -171,7 +171,7 @@ function GeneralLedger() {
               <tr key={entry.id} className="hover:bg-muted/20 transition-colors">
                 <td className="py-3 px-6 text-sm text-foreground whitespace-nowrap">{new Date(entry.voucher?.date || new Date().toISOString()).toLocaleDateString()}</td>
                 <td className="py-3 px-6 text-sm font-medium text-foreground">{entry.voucher?.voucherNo}</td>
-                <td className="py-3 px-6 text-sm text-muted-foreground">{entry.voucher?.narration}</td>
+                <td className="py-3 px-6 text-sm text-muted-foreground max-w-[280px] truncate" title={entry.narration || entry.voucher?.narration}>{entry.narration || entry.voucher?.narration || '-'}</td>
                 <td className="py-3 px-6 text-sm text-right text-foreground">{entry.debit > 0 ? entry.debit.toLocaleString() : ''}</td>
                 <td className="py-3 px-6 text-sm text-right text-foreground">{entry.credit > 0 ? entry.credit.toLocaleString() : ''}</td>
                 <td className="py-3 px-6 text-sm text-right font-medium text-foreground">{Math.abs(entry.runningBalance).toLocaleString()} {entry.runningBalance >= 0 ? (account?.type === 'Assets' || account?.type === 'Expenses' || account?.type === 'Cost of Goods Sold' || account?.type === 'Other Expenses' ? 'Dr' : 'Cr') : (account?.type === 'Assets' || account?.type === 'Expenses' || account?.type === 'Cost of Goods Sold' || account?.type === 'Other Expenses' ? 'Cr' : 'Dr')}</td>
