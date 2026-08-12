@@ -167,7 +167,10 @@ function GeneralLedger() {
                 <td className="py-3 px-6 text-sm text-right font-medium text-foreground">{Math.abs(openingBalance).toLocaleString()} {openingBalance >= 0 ? (account.type === 'Assets' || account.type === 'Expenses' || account.type === 'Cost of Goods Sold' || account.type === 'Other Expenses' ? 'Dr' : 'Cr') : (account.type === 'Assets' || account.type === 'Expenses' || account.type === 'Cost of Goods Sold' || account.type === 'Other Expenses' ? 'Cr' : 'Dr')}</td>
               </tr>
             )}
-            {processedEntries.map((entry) => (
+            {/* Newest entry at the top (spec §24). Each row's running balance is
+                computed over the FULL ascending ledger, so the top row shows the
+                closing balance — never the latest entry's amount. */}
+            {[...processedEntries].reverse().map((entry) => (
               <tr key={entry.id} className="hover:bg-muted/20 transition-colors">
                 <td className="py-3 px-6 text-sm text-foreground whitespace-nowrap">{new Date(entry.voucher?.date || new Date().toISOString()).toLocaleDateString()}</td>
                 <td className="py-3 px-6 text-sm font-medium text-foreground">{entry.voucher?.voucherNo}</td>

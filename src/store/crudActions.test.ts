@@ -201,7 +201,7 @@ describe('deleteProcessingReceipt', () => {
 });
 
 describe('deleteProcessorBill', () => {
-  it('restores receipts to Unbilled, reverses processor balance, and removes the voucher', () => {
+  it('restores receipts to Unbilled, removes the voucher, and does NOT mutate the balance in-state (it is derived from the ledger via recomputePartyBalances)', () => {
     const voucherId = 'v1';
     const { actions, getState } = setup({
       materials: [{ id: 'm1', stockPcs: 0, atProcessorPcs: 0, processedStockPcs: 1000 }],
@@ -234,7 +234,10 @@ describe('deleteProcessorBill', () => {
 
     expect(s.processorBills).toHaveLength(0);
     expect(s.processingReceipts[0].billedStatus).toBe('Unbilled');
-    expect(s.processors[0].balancePayable).toBe(0);
+    // Balance is NOT touched in-state: AccountingEngine.recomputePartyBalances()
+    // derives it from the linked account's COMPLETE ledger after every mutation
+    // (spec §14), so the record here is left untouched by the delete.
+    expect(s.processors[0].balancePayable).toBe(5000);
     expect(s.vouchers).toHaveLength(0);
     expect(s.journalEntries).toHaveLength(0);
   });

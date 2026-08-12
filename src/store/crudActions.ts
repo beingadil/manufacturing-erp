@@ -5,9 +5,18 @@ import { UnitConversionService } from '../lib/business/UnitConversionService';
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
 import { getSystemAccountBySubtype, getSystemInventoryAccount, getSystemCOGSAccount } from '../lib/accounting/accountClassification';
 
+/**
+ * NOTE: this module deliberately does NOT import AccountingEngine (that would
+ * create a static import cycle: crudActions → AccountingEngine → useERPStore →
+ * crudActions, which crashes in isolated entry points). Instead the store wires
+ * a recompute callback — AccountingEngine.recomputePartyBalances() — as the
+ * third argument, so party balances are always re-derived from the COMPLETE
+ * ledger after every mutation (spec §14).
+ */
 export const createCRUDActions = (
   set: StoreApi<ERPState>['setState'],
-  get: StoreApi<ERPState>['getState']
+  get: StoreApi<ERPState>['getState'],
+  afterMutation?: () => void
 ) => ({
   deletePurchase: (id: string) => {
     set((state) => {
@@ -33,12 +42,10 @@ export const createCRUDActions = (
         im.referenceNo !== purchase.purchaseNo && im.batchId !== batchId
       );
 
-      // 4. Update supplier balance
-      const updatedSuppliers = state.suppliers.map(s => 
-        s.id === purchase.supplierId 
-          ? { ...s, balancePayable: s.balancePayable - purchase.amount }
-          : s
-      );
+      // 4. NOTE: the supplier's balancePayable is derived from the linked
+      //    account's COMPLETE ledger via the afterMutation callback (the store
+      //    wires AccountingEngine.recomputePartyBalances) — never decremented
+      //    here (spec §14).
 
       // 5. Remove associated voucher and journal entries
       const voucher = state.vouchers.find(v => v.sourceId === purchase.id && v.sourceModule === 'Purchase');
@@ -55,11 +62,11 @@ export const createCRUDActions = (
         batches: state.batches.filter(b => b.purchaseId !== id),
         materials: updatedMaterials,
         inventoryMovements: updatedInventoryMovements,
-        suppliers: updatedSuppliers,
         vouchers: updatedVouchers,
         journalEntries: updatedJournalEntries
       };
     });
+    afterMutation?.();
   },
 
   updatePurchase: (id: string, data: any) => {
@@ -101,12 +108,8 @@ export const createCRUDActions = (
           : m
       );
 
-      // Update Supplier balance
-      const updatedSuppliers = state.suppliers.map(s => 
-        s.id === oldPurchase.supplierId 
-          ? { ...s, balancePayable: s.balancePayable + diffAmount }
-          : s
-      );
+      // NOTE: the supplier's balancePayable is derived from the linked account's
+      // COMPLETE ledger via the afterMutation callback — never adjusted here (spec §14).
 
       // Update Voucher and JEs
       const voucher = state.vouchers.find(v => v.sourceId === id && v.sourceModule === 'Purchase');
@@ -128,11 +131,11 @@ export const createCRUDActions = (
         purchases: updatedPurchases,
         batches: updatedBatches,
         materials: updatedMaterials,
-        suppliers: updatedSuppliers,
         vouchers: updatedVouchers,
         journalEntries: updatedJournalEntries
       };
     });
+    afterMutation?.();
   },
 
   deleteSale: (id: string) => {
@@ -151,12 +154,9 @@ export const createCRUDActions = (
         );
       }
 
-      // 2. Reduce Customer balance
-      const updatedCustomers = state.customers.map(c => 
-        c.id === sale.customerId 
-          ? { ...c, balanceReceivable: c.balanceReceivable - sale.totalAmount }
-          : c
-      );
+      // 2. NOTE: the customer's balanceReceivable is derived from the linked
+      //    account's COMPLETE ledger via the afterMutation callback — never
+      //    decremented here (spec §14).
 
       // 3. Remove inventory movement
       const updatedInventoryMovements = state.inventoryMovements.filter(im => im.referenceNo !== sale.invoiceNo);
@@ -190,12 +190,12 @@ export const createCRUDActions = (
         sales: state.sales.filter(s => s.id !== id),
         materials: updatedMaterials,
         batches: updatedBatches,
-        customers: updatedCustomers,
         inventoryMovements: updatedInventoryMovements,
         vouchers: updatedVouchers,
         journalEntries: updatedJournalEntries
       };
     });
+    afterMutation?.();
   },
 
   updateSale: (id: string, data: any) => {
@@ -222,11 +222,9 @@ export const createCRUDActions = (
         );
       }
 
-      const updatedCustomers = state.customers.map(c => 
-        c.id === oldSale.customerId 
-          ? { ...c, balanceReceivable: c.balanceReceivable + diffAmount }
-          : c
-      );
+      // NOTE: the customer's balanceReceivable is derived from the linked
+      // account's COMPLETE ledger via the afterMutation callback — never
+      // adjusted here (spec §14).
 
       // Rebuild the material's finished pcs per batch from the authoritative
       // history (receipts produce, sales consume FIFO) so an edit re-applies
@@ -292,11 +290,11 @@ export const createCRUDActions = (
         sales: updatedSales,
         materials: updatedMaterials,
         batches: updatedBatches,
-        customers: updatedCustomers,
         vouchers: updatedVouchers,
         journalEntries: updatedJournalEntries
       };
     });
+    afterMutation?.();
   },
 
   deleteAccount: (id: string) => {
@@ -556,10 +554,9 @@ export const createCRUDActions = (
         bill.receiptIds.includes(r.id) ? { ...r, billedStatus: 'Unbilled' as const } : r
       );
 
-      // Reduce processor balance
-      const updatedProcessors = state.processors.map(p => 
-        p.id === bill.processorId ? { ...p, balancePayable: p.balancePayable - bill.totalAmount } : p
-      );
+      // NOTE: the processor's balancePayable is derived from the linked
+      // account's COMPLETE ledger via the afterMutation callback — never
+      // decremented here (spec §14).
 
       // Remove voucher
       const voucher = state.vouchers.find(v => v.sourceId === id && v.sourceModule === 'Processing');
@@ -574,11 +571,11 @@ export const createCRUDActions = (
         ...state,
         processorBills: state.processorBills.filter(b => b.id !== id),
         processingReceipts: updatedReceipts,
-        processors: updatedProcessors,
         vouchers: updatedVouchers,
         journalEntries: updatedJournalEntries
       };
     });
+    afterMutation?.();
   },
 
 
@@ -594,11 +591,9 @@ export const createCRUDActions = (
         b.id === id ? { ...b, ...data } : b
       );
 
-      const updatedProcessors = state.processors.map(p =>
-        p.id === oldBill.processorId
-          ? { ...p, balancePayable: p.balancePayable + diffAmount }
-          : p
-      );
+      // NOTE: the processor's balancePayable is derived from the linked
+      // account's COMPLETE ledger via the afterMutation callback — never
+      // adjusted here (spec §14).
 
       const voucher = state.vouchers.find(v => v.sourceId === id && v.sourceModule === 'Processing');
       let updatedVouchers = state.vouchers;
@@ -617,11 +612,11 @@ export const createCRUDActions = (
       return {
         ...state,
         processorBills: updatedBills,
-        processors: updatedProcessors,
         vouchers: updatedVouchers,
         journalEntries: updatedJournalEntries
       };
     });
+    afterMutation?.();
   },
 
 

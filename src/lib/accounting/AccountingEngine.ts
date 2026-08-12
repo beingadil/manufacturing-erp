@@ -218,24 +218,28 @@ export class AccountingEngine {
 
     const balances = AccountingEngine.getAccountBalances(accounts, journalEntries, vouchers);
 
+    // Balances are the account's COMPLETE ledger closing balance (raw signed).
+    // No Math.max clamp — the listing balance must equal the ledger closing
+    // balance exactly, including negative (overpaid) balances, so a fully paid
+    // supplier shows 0 even when its latest entry is a large credit (spec §14).
     const nextSuppliers = suppliers.map(sup => {
       const acc = accounts.find(a => a.linkedEntityId === sup.id);
       const balance = acc ? balances.get(acc.id) || 0 : 0;
       // Payables accounts are credit-normal: positive balance = owed to supplier
-      return { ...sup, balancePayable: Math.max(0, balance) };
+      return { ...sup, balancePayable: balance };
     });
 
     const nextCustomers = customers.map(cus => {
       const acc = accounts.find(a => a.linkedEntityId === cus.id);
       const balance = acc ? balances.get(acc.id) || 0 : 0;
       // Receivables are debit-normal: positive balance = owed by customer
-      return { ...cus, balanceReceivable: Math.max(0, balance) };
+      return { ...cus, balanceReceivable: balance };
     });
 
     const nextProcessors = processors.map(proc => {
       const acc = accounts.find(a => a.linkedEntityId === proc.id);
       const balance = acc ? balances.get(acc.id) || 0 : 0;
-      return { ...proc, balancePayable: Math.max(0, balance) };
+      return { ...proc, balancePayable: balance };
     });
 
     const { updateSupplier, updateCustomer, updateProcessor } = state;

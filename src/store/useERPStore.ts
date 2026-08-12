@@ -15,6 +15,7 @@ import {
   CompanySettings, DocumentSettings
 } from '../types/erp';
 import { migrateERPState } from './erpMigration';
+import { AccountingEngine } from '../lib/accounting/AccountingEngine';
 import { getSystemAccountBySubtype, getSystemInventoryAccount, getSystemCOGSAccount } from '../lib/accounting/accountClassification';
 
 export interface ERPState {
@@ -170,7 +171,9 @@ export const useERPStore = create<ERPState>()(
       vouchers: [],
       journalEntries: [],
 
-            ...createCRUDActions(set, get),
+            // Party balances are re-derived from the COMPLETE ledger after every
+            // purchase/sale/bill create·edit·delete via this callback (spec §14).
+            ...createCRUDActions(set, get, () => AccountingEngine.recomputePartyBalances()),
 
       wipeAllData: () => {
         try {
@@ -566,7 +569,8 @@ export const useERPStore = create<ERPState>()(
         return id;
       },
 
-      addPurchase: (data) => set((state) => {
+      addPurchase: (data) => {
+        set((state) => {
         const purchaseNo = DocumentNumberingService.nextDocumentNumber(state.purchases, 'purchaseNo', 'PO', data.date);
         const weightInKg = UnitConversionService.convertToKg(data.weight, data.weightUnit);
         const calculatedPcs = UnitConversionService.calculatePcsFromWeight(data.weight, data.weightUnit, data.weightPerPiece);
@@ -621,9 +625,10 @@ export const useERPStore = create<ERPState>()(
           remarks: data.remarks
         };
 
-        const updatedSuppliers = state.suppliers.map(s => 
-          s.id === data.supplierId ? { ...s, balancePayable: s.balancePayable + amount } : s
-        );
+        // NOTE: the supplier's balancePayable is NOT incremented here — it is
+        // derived from the linked account's COMPLETE ledger via
+        // AccountingEngine.recomputePartyBalances() right after this set, so the
+        // listing balance can never drift from the ledger closing balance.
 
         // Automatic Voucher Generation (spec §25 — resolve accounts by subtype, never by name)
         // Purchases increase raw-material INVENTORY (an asset) — the purchase is
@@ -686,11 +691,12 @@ export const useERPStore = create<ERPState>()(
           batches: [newBatch, ...(state.batches || [])],
           inventoryMovements: [movement, ...(state.inventoryMovements || [])],
           materials: updatedMaterials,
-          suppliers: updatedSuppliers,
           vouchers: updatedVouchers,
           journalEntries: updatedJournalEntries
         };
-      }),
+        });
+        AccountingEngine.recomputePartyBalances();
+      },
 
       addProcessingSend: (data, adjustSendIds) => set((state) => {
         const dispatchNo = DocumentNumberingService.nextDocumentNumber(state.processingSends, 'dispatchNo', 'DSP', data.date);
@@ -836,7 +842,8 @@ export const useERPStore = create<ERPState>()(
         };
       }),
 
-      addProcessorBill: (data) => set((state) => {
+      addProcessorBill: (data) => {
+        set((state) => {
         const billNo = DocumentNumberingService.nextDocumentNumber(state.processorBills, 'billNo', 'BILL', data.date);
         const receiptsToBill = state.processingReceipts.filter(r => data.receiptIds.includes(r.id));
         const totalAmount = receiptsToBill.reduce((sum, r) => sum + r.billAmount, 0);
@@ -856,9 +863,9 @@ export const useERPStore = create<ERPState>()(
           return r;
         });
 
-        const updatedProcessors = state.processors.map(p =>
-          p.id === data.processorId ? { ...p, balancePayable: p.balancePayable + totalAmount } : p
-        );
+        // NOTE: processor balancePayable is derived from the linked account's
+        // COMPLETE ledger via AccountingEngine.recomputePartyBalances() after
+        // this set — never incremented here (spec §14).
 
         // Automatic Voucher Generation (spec §25 — resolve accounts by subtype, never by name)
         const processingExpenseAccount = getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Processing Expense');
@@ -916,13 +923,15 @@ export const useERPStore = create<ERPState>()(
         return {
           processorBills: [newBill, ...state.processorBills],
           processingReceipts: updatedReceipts,
-          processors: updatedProcessors,
           vouchers: updatedVouchers,
           journalEntries: updatedJournalEntries
         };
-      }),
+        });
+        AccountingEngine.recomputePartyBalances();
+      },
 
-      addSale: (data) => set((state) => {
+      addSale: (data) => {
+        set((state) => {
         const invoiceNo = DocumentNumberingService.nextDocumentNumber(state.sales, 'invoiceNo', 'INV', data.date);
         const totalAmount = data.pcsSold * data.pricePerPiece;
         
@@ -958,9 +967,9 @@ export const useERPStore = create<ERPState>()(
           return m;
         });
 
-        const updatedCustomers = state.customers.map(c => 
-          c.id === data.customerId ? { ...c, balanceReceivable: c.balanceReceivable + totalAmount } : c
-        );
+        // NOTE: the customer's balanceReceivable is derived from the linked
+        // account's COMPLETE ledger via AccountingEngine.recomputePartyBalances()
+        // after this set — never incremented here (spec §14).
         
         const nextMovements = movement ? [movement, ...(state.inventoryMovements || [])] : (state.inventoryMovements || []);
 
@@ -1034,12 +1043,13 @@ export const useERPStore = create<ERPState>()(
           sales: [newSale, ...state.sales],
           materials: updatedMaterials,
           batches: updatedBatches,
-          customers: updatedCustomers,
           inventoryMovements: nextMovements,
           vouchers: updatedVouchers,
           journalEntries: updatedJournalEntries
         };
-      })
+        });
+        AccountingEngine.recomputePartyBalances();
+      }
     })),
     {
       name: 'erp-storage',

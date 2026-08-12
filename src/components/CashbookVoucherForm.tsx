@@ -439,22 +439,9 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
         }, entries as any);
       }
 
-      // Update entity balances only when creating (edits already applied them)
-      if (!isEditing) {
-        counterpartyRows.forEach(row => {
-          const amt = Number(row.amount) || 0;
-          if (rowsAreDebit && (row.type === 'supplier' || row.type === 'processor')) {
-            const sup = suppliers.find(s => s.id === row.counterpartyId);
-            if (sup) useERPStore.getState().updateSupplier(sup.id, { balancePayable: Math.max(0, sup.balancePayable - amt) });
-            const proc = processors.find(p => p.id === row.counterpartyId);
-            if (proc) useERPStore.getState().updateProcessor(proc.id, { balancePayable: Math.max(0, proc.balancePayable - amt) });
-          }
-          if (!rowsAreDebit && row.type === 'customer') {
-            const cus = customers.find(c => c.id === row.counterpartyId);
-            if (cus) useERPStore.getState().updateCustomer(cus.id, { balanceReceivable: Math.max(0, cus.balanceReceivable - amt) });
-          }
-        });
-      }
+      // NOTE: party balances are NOT adjusted here — AccountingService already
+      // runs AccountingEngine.recomputePartyBalances(), which derives every
+      // balance from the linked account's COMPLETE ledger (spec §14).
 
       alert(`${meta.voucherType} ${voucherNo} saved!`);
       if (onSaved) onSaved();
