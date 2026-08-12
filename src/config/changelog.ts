@@ -20,6 +20,28 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.14',
+    date: '2026-08-12',
+    title: 'Correct party balances & working Dashboard Branding',
+    sections: [
+      {
+        title: '⚖️ Party balances — always the full ledger',
+        items: [
+          'Supplier, Customer, and Processor balances are now calculated from the COMPLETE ledger of their linked account (all entries summed), never from the latest/top entry. A supplier you bought from for Rs 276,000 and paid in full now correctly shows Rs 0 — even when the most recent ledger line is the big credit.',
+          'Balances stay in sync through every flow: purchases, sales, processor bills, payments/receipts, and edit/delete of any of them. The listing balance on the Suppliers / Customers / Processors pages always matches the closing balance of the party ledger drill-down.',
+          'Party and General Ledger tables now show the newest entry at the top, while the balance column still reflects the full running ledger.',
+        ],
+      },
+      {
+        title: '🎨 Dashboard Branding fixed',
+        items: [
+          'Fixed a crash when opening Settings → Dashboard Branding (an infinite re-render loop left a blank screen) — the tab now opens and saves normally.',
+          'The Tagline setting is now shown in the top header and on the Login page (it was saved but never displayed before), and Logo Position now takes effect on the login screen.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.13',
     date: '2026-08-12',
     title: 'Reliable backup & restore, per-line voucher narration, and module wipes',
