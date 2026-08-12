@@ -7,9 +7,10 @@ import {
   Sparkles, ChevronDown, ChevronRight
 } from "lucide-react";
 import { SeedChartOfAccountsButton } from "@/components/settings/SeedChartOfAccountsButton";
+import { BackupRestoreTab } from "@/components/maintenance/BackupRestoreTab";
 import { cn } from "../lib/utils";
 import { useSettingsStore } from "../store/useSettingsStore";
-import { useERPStore } from "../store/useERPStore";
+import { useERPStore, MODULE_WIPE_KEYS, WIPE_MODULE_LABELS } from "../store/useERPStore";
 import { useNavigate } from "react-router-dom";
 
 import { useAuth } from '../contexts/AuthContext';
@@ -73,7 +74,7 @@ export function Settings() {
           {activeTab === 'branding' && <BrandingTab onSave={handleSave} showSavedToast={showSavedToast} />}
           {activeTab === 'preferences' && <PreferencesTab onSave={handleSave} showSavedToast={showSavedToast} />}
           {activeTab === 'security' && <SecurityTab onSave={handleSave} showSavedToast={showSavedToast} />}
-          {activeTab === 'backup' && <BackupTab />}
+          {activeTab === 'backup' && <BackupRestoreTab />}
           {activeTab === 'advanced' && <AdvancedTab onSave={handleSave} showSavedToast={showSavedToast} />}
           {activeTab === 'voucher' && <VoucherNumberingTab onSave={handleSave} showSavedToast={showSavedToast} />}
           {activeTab === 'health' && <HealthTab />}
@@ -617,222 +618,41 @@ function SecurityTab({ onSave, showSavedToast }: { onSave: () => void, showSaved
       </div>
     </div>
   );
-}
-
-function BackupTab() {
-  const [backups, setBackups] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [backingUp, setBackingUp] = useState(false);
-  const [restoring, setRestoring] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [importing, setImporting] = useState(false);
-
-  const loadBackups = async () => {
-    setLoading(true);
-    try {
-      if ((window as any).electronDB?.listBackups) {
-        const res = await (window as any).electronDB.listBackups();
-        if (res.success) setBackups(res.data || []);
-      }
-    } catch { /* not in electron */ }
-    setLoading(false);
-  };
-
-  const handleCreateBackup = async () => {
-    setBackingUp(true);
-    try {
-      if ((window as any).electronDB?.backup) {
-        await (window as any).electronDB.backup();
-        await loadBackups();
-      }
-    } catch {}
-    setBackingUp(false);
-  };
-
-  const handleRestore = async (backupPath: string) => {
-    if (!confirm('WARNING: Restoring will replace ALL current data with the backup. Cannot be undone.\n\nA safety backup will be created first.')) return;
-    setRestoring(true);
-    try {
-      const db = (window as any).electronDB;
-      if (db?.backup) await db.backup();
-      if (db?.restore) {
-        const res = await db.restore(backupPath);
-        if (res.success) {
-          alert('Database restored successfully. The application will now reload.');
-          window.location.reload();
-        } else {
-          alert(`Restore failed: ${res.error}`);
-        }
-      }
-    } catch (e: any) {
-      alert(`Restore failed: ${e.message}`);
-    }
-    setRestoring(false);
-  };
-
-  const handleExportBackup = async () => {
-    const db = (window as any).electronDB;
-    if (!db?.exportBackup) {
-      alert('Export backup is only available in the desktop app.');
-      return;
-    }
-    setExporting(true);
-    try {
-      const result = await db.exportBackup();
-      if (result.canceled) return;
-      if (result.success) {
-        const m = result.manifest;
-        alert(
-          `Unified backup exported successfully!\n\n` +
-          `File: ${result.path}\n` +
-          (m ? `App v${m.appVersion} · ${m.stores?.length ?? 0} store(s) · ${new Date(m.createdAt).toLocaleString()}` : '')
-        );
-      } else {
-        alert(`Export failed: ${result.error}`);
-      }
-    } catch (e: any) {
-      alert(`Export failed: ${e.message}`);
-    }
-    setExporting(false);
-  };
-
-  const handleImportBackup = async () => {
-    const db = (window as any).electronDB;
-    if (!db?.importBackup) {
-      alert('Import backup is only available in the desktop app.');
-      return;
-    }
-    if (!confirm('WARNING: Importing will REPLACE ALL current data.\n\nA safety backup will be created first.\n\nAre you sure?')) return;
-    setImporting(true);
-    try {
-      const result = await db.importBackup();
-      if (result.canceled) return;
-      if (result.success) {
-        const m = result.manifest;
-        alert(
-          `Database imported successfully. The application will now reload.\n\n` +
-          (m ? `Manifest: v${m.appVersion} · ${m.stores?.length ?? 0} store(s) · ${new Date(m.createdAt).toLocaleString()}` : '')
-        );
-        window.location.reload();
-      } else {
-        alert(`Import failed: ${result.error}`);
-      }
-    } catch (e: any) {
-      alert(`Import failed: ${e.message}`);
-    }
-    setImporting(false);
-  };
-
-  const formatSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
-  const formatDate = (iso: string) => {
-    try {
-      return new Date(iso).toLocaleString();
-    } catch { return iso; }
-  };
-
-  React.useEffect(() => { loadBackups(); }, []);
-
-  return (
-    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
-      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40">
-        <h3 className="text-lg font-bold text-foreground">Backup & Restore</h3>
-        <p className="text-sm text-muted-foreground mt-1">Create on-demand SQLite snapshots, or export/import a unified .merpbak bundle with a version manifest.</p>
-      </div>
-      <div className="p-6 sm:p-8 space-y-8">
-        {/* ── Action Buttons ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <button
-            onClick={handleCreateBackup}
-            disabled={backingUp}
-            className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50"
-          >
-            <Database className="h-4 w-4" />
-            {backingUp ? 'Backing up...' : 'Create Backup'}
-          </button>
-          <button
-            onClick={handleExportBackup}
-            disabled={exporting}
-            className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium bg-secondary text-secondary-foreground rounded-xl hover:bg-secondary/80 transition-colors disabled:opacity-50"
-          >
-            <FileDown className="h-4 w-4" />
-            {exporting ? 'Exporting...' : 'Export Unified Backup'}
-          </button>
-          <button
-            onClick={handleImportBackup}
-            disabled={importing}
-            className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium border-2 border-amber-400/50 text-amber-700 dark:text-amber-300 rounded-xl hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors disabled:opacity-50"
-          >
-            <FileUp className="h-4 w-4" />
-            {importing ? 'Importing...' : 'Import Unified Backup'}
-          </button>
-          <div className="flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground bg-muted/20 rounded-xl border border-dashed border-border/50">
-            <HardDrive className="h-4 w-4 shrink-0" />
-            <span>Daily auto-backup</span>
-          </div>
-        </div>
-
-        {/* ── Warning Info ── */}
-        <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium text-sm text-amber-800 dark:text-amber-300">Unified Backup Format (.merpbak)</p>
-              <p className="text-xs text-amber-600/70 dark:text-amber-400/70 mt-1">
-                Exports bundle the full SQLite database with a version manifest (app version, stores, timestamps, row counts, SHA-256).
-                Import validates integrity and schema compatibility, so restoring on another computer is fully deterministic.
-                A safety backup of the current database is always created automatically before restoring or importing.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Backup List ── */}
-        <div>
-          <h4 className="text-sm font-bold text-foreground mb-4 uppercase tracking-wider flex items-center gap-2">
-            <Database className="h-4 w-4" /> Saved Snapshots
-          </h4>
-
-          {loading ? (
-            <div className="p-8 text-center text-sm text-muted-foreground">Loading backups...</div>
-          ) : backups.length === 0 ? (
-            <div className="p-8 text-center text-sm text-muted-foreground border border-dashed border-border/50 rounded-xl">
-              No backups found. Create one to get started.
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-80 overflow-y-auto">
-              {backups.map((b, i) => (
-                <div key={i} className="flex items-center justify-between p-4 rounded-xl border border-border/50 bg-card hover:bg-muted/20 transition-colors">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-foreground truncate">{b.filename}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {formatDate(b.modifiedAt)} &middot; {formatSize(b.size)}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => handleRestore(b.path)}
-                    disabled={restoring}
-                    className="shrink-0 ml-4 px-3 py-1.5 text-xs font-medium border border-border text-foreground rounded-lg hover:bg-muted transition-colors disabled:opacity-50"
-                  >
-                    {restoring ? 'Restoring...' : 'Restore'}
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AdvancedTab({ onSave, showSavedToast }: { onSave: () => void, showSavedToast: boolean }) {
+}function AdvancedTab({ onSave, showSavedToast }: { onSave: () => void, showSavedToast: boolean }) {
   const { isAdmin } = useAuth();
   const wipeAllData = useERPStore(state => state.wipeAllData);
+  const wipeModules = useERPStore(state => state.wipeModules);
+  const [selectedWipe, setSelectedWipe] = useState<Record<string, boolean>>({});
+
+  const wipeCounts: Record<string, number> = {
+    categories: useERPStore(s => s.categories.length),
+    materials: useERPStore(s => s.materials.length),
+    products: useERPStore(s => s.products.length),
+    suppliers: useERPStore(s => s.suppliers.length),
+    customers: useERPStore(s => s.customers.length),
+    processors: useERPStore(s => s.processors.length),
+    purchases: useERPStore(s => s.purchases.length),
+    sales: useERPStore(s => s.sales.length),
+    processing: useERPStore(s => s.processingSends.length + s.processingReceipts.length + s.processorBills.length),
+    inventory: useERPStore(s => s.batches.length + s.inventoryMovements.length),
+    accounting: useERPStore(s => s.vouchers.length + s.journalEntries.length + s.accounts.length + s.accountSubtypes.length),
+  };
+
+  const selectedIds = Object.entries(selectedWipe)
+    .filter(([id, on]) => on && MODULE_WIPE_KEYS[id])
+    .map(([id]) => id);
+
+  const handleWipeSelected = () => {
+    if (!isAdmin) return alert('Only admins can wipe data');
+    if (selectedIds.length === 0) return alert('Select at least one module to wipe.');
+    const labels = selectedIds.map(id => WIPE_MODULE_LABELS[id]).join('\n• ');
+    if (confirm(`WARNING: This will permanently erase the following module data. Cannot be undone.\n\n• ${labels}\n\nAre you absolutely sure?`)) {
+      wipeModules(selectedIds);
+      setSelectedWipe({});
+      alert('Selected module data has been wiped. The application will now reload.');
+      window.location.reload();
+    }
+  };
 
   return (
     <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
@@ -881,6 +701,74 @@ function AdvancedTab({ onSave, showSavedToast }: { onSave: () => void, showSaved
           <h4 className="text-sm font-bold text-destructive uppercase tracking-wider flex items-center gap-2">
             <Trash2 className="h-4 w-4" /> Danger Zone
           </h4>
+
+          {/* Wipe Selected Modules */}
+          <div className="p-5 rounded-xl border border-destructive/30 bg-destructive/5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+              <div>
+                <p className="font-semibold text-sm text-foreground">Wipe Module Data</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Select one or more modules to wipe simultaneously — or one module on its own. Records are permanently deleted. This cannot be undone.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => {
+                    const all: Record<string, boolean> = {};
+                    Object.keys(MODULE_WIPE_KEYS).forEach(id => { all[id] = true; });
+                    setSelectedWipe(all);
+                  }}
+                  className="px-3 py-1.5 text-xs font-medium border border-border text-foreground rounded-lg hover:bg-muted transition-colors"
+                >
+                  Select All
+                </button>
+                <button
+                  onClick={() => setSelectedWipe({})}
+                  className="px-3 py-1.5 text-xs font-medium border border-border text-foreground rounded-lg hover:bg-muted transition-colors"
+                >
+                  Clear All
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {Object.entries(WIPE_MODULE_LABELS).map(([id, label]) => {
+                const count = wipeCounts[id] ?? 0;
+                return (
+                  <label
+                    key={id}
+                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selectedWipe[id] ? 'border-destructive/50 bg-destructive/10' : 'border-border/50 bg-card hover:bg-muted/20'}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={!!selectedWipe[id]}
+                      onChange={e => setSelectedWipe(prev => ({ ...prev, [id]: e.target.checked }))}
+                      className="h-4 w-4 rounded border-border accent-destructive"
+                    />
+                    <span className="text-sm font-medium text-foreground flex-1">{label}</span>
+                    <span className="text-xs text-muted-foreground tabular-nums">{count} records</span>
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="mt-4 flex items-center justify-between gap-4 flex-wrap">
+              <p className="text-xs text-muted-foreground">
+                {selectedIds.length === 0
+                  ? 'No modules selected.'
+                  : `${selectedIds.length} module${selectedIds.length > 1 ? 's' : ''} selected — wipe ${selectedIds.map(id => WIPE_MODULE_LABELS[id]).join(', ')}.`}
+              </p>
+              <button
+                onClick={handleWipeSelected}
+                disabled={selectedIds.length === 0}
+                className="shrink-0 px-4 py-2 text-sm font-medium bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <Trash2 className="h-4 w-4" /> Wipe Selected ({selectedIds.length})
+              </button>
+            </div>
+          </div>
+
+          {/* Wipe Everything */}
           <div className="p-5 rounded-xl border border-destructive/30 bg-destructive/5">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>

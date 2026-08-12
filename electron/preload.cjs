@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('electronDB', {
   backup: () => ipcRenderer.invoke('db:backup'),
   restore: (backupPath) => ipcRenderer.invoke('db:restore', backupPath),
   listBackups: () => ipcRenderer.invoke('db:listBackups'),
+  deleteBackup: (filename) => ipcRenderer.invoke('db:deleteBackup', filename),
   diag: () => ipcRenderer.invoke('db:diag'),
   isElectron: true,
 
