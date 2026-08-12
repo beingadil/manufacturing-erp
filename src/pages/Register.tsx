@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useSettingsStore } from '../store/useSettingsStore';
 
 function Register() {
-  const { dashboardName, logo } = useSettingsStore();
+  const { dashboardName, logo, tagline } = useSettingsStore();
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4 py-12">
@@ -17,6 +17,7 @@ function Register() {
             </div>
           )}
         </div>
+        {tagline && <p className="text-xs font-medium text-muted-foreground mb-1">{tagline}</p>}
         <h1 className="text-2xl font-bold tracking-tight text-foreground mb-4">Registration Disabled</h1>
         <p className="text-sm text-muted-foreground mb-8">
           This is an offline system. Registration is managed by the system administrator. Please contact your IT department for access.

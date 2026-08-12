@@ -213,19 +213,15 @@ function ProfileTab({ onSave, showSavedToast }: { onSave: () => void, showSavedT
 }
 
 function BrandingTab({ onSave, showSavedToast }: { onSave: () => void, showSavedToast: boolean }) {
-  const branding = useSettingsStore(state => ({
-    dashboardName: state.dashboardName,
-    tagline: state.tagline,
-    logo: state.logo,
-    logoPosition: state.logoPosition,
-    favicon: state.favicon,
-    primaryColor: state.primaryColor,
-    secondaryColor: state.secondaryColor
-  }));
-  const setBranding = useSettingsStore(state => state.setBranding);
-  const resetLogo = useSettingsStore(state => state.resetLogo);
-  
-  const [local, setLocal] = useState(branding);
+  // Subscribe to the WHOLE store (stable object reference), never an inline
+  // object-returning selector: `useSettingsStore(state => ({ ... }))` creates a
+  // fresh object on every render, which useSyncExternalStore treats as a state
+  // change -> infinite re-render -> "Maximum update depth exceeded" crash on
+  // this tab. Destructuring the full store is the same stable pattern the other
+  // settings tabs use.
+  const { dashboardName, tagline, logo, logoPosition, favicon, primaryColor, secondaryColor, setBranding, resetLogo } = useSettingsStore();
+
+  const [local, setLocal] = useState({ dashboardName, tagline, logo, logoPosition, favicon, primaryColor, secondaryColor });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {

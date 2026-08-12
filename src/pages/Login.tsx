@@ -12,7 +12,7 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
 
   const navigate = useNavigate();
-  const { dashboardName, logo } = useSettingsStore();
+  const { dashboardName, logo, tagline, logoPosition } = useSettingsStore();
   const { signIn } = useAuth();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -36,7 +36,9 @@ export function Login() {
     <div className="min-h-screen flex items-center justify-center bg-background px-6 py-12">
       <div className="w-full max-w-[420px] bg-card border border-border rounded-2xl p-8 md:p-10 animate-in fade-in zoom-in-95 duration-500 shadow-sm">
         <div className="mb-10">
-          <div className="flex items-center gap-3 mb-6">
+          {/* Brand block — logoPosition (left/center/right) is respected here so
+              the Branding tab setting is visible on the login screen. */}
+          <div className={cn("flex items-center gap-3 mb-6", logoPosition === 'center' ? 'justify-center' : logoPosition === 'right' ? 'justify-end' : 'justify-start')}>
             {logo ? (
               <img src={logo} alt="Logo" className="h-10 object-contain" />
             ) : (
@@ -46,7 +48,7 @@ export function Login() {
             )}
             <div>
               <h1 className="text-lg font-semibold tracking-tight text-foreground">{dashboardName}</h1>
-              <p className="text-xs text-muted-foreground">ERP Professional</p>
+              <p className="text-xs text-muted-foreground">{tagline || 'ERP Professional'}</p>
             </div>
           </div>
           <h2 className="text-2xl font-semibold tracking-tight text-foreground mb-2">Sign in</h2>
