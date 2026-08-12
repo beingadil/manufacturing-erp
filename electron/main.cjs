@@ -75,23 +75,17 @@ app.whenReady().then(() => {
 
   // Schedule daily backup (check if already done today)
   const today = new Date().toISOString().slice(0, 10);
-  const { execSync } = require('child_process');
-  const backupDir = require('path').join(require('path').dirname(require('fs').realpathSync(__filename)), '..', 'dist');
   try {
     const fs = require('fs');
-    const userDataPath = app.getPath('userData');
-    const backupsDir = require('path').join(userDataPath, 'backups');
-    if (fs.existsSync(backupsDir)) {
-      const files = fs.readdirSync(backupsDir).filter(f => f.includes(today));
-      if (files.length === 0) {
-        console.log('[Main] No backup for today, creating one...');
-        db.backupDatabase();
-      } else {
-        console.log('[Main] Backup for today already exists, skipping');
-      }
-    } else {
-      console.log('[Main] First launch, creating initial backup...');
+    const backupsDir = require('path').join(app.getPath('userData'), 'backups');
+    const files = fs.existsSync(backupsDir)
+      ? fs.readdirSync(backupsDir).filter(f => f.includes(today))
+      : [];
+    if (files.length === 0) {
+      console.log('[Main] No backup for today, creating one...');
       db.backupDatabase();
+    } else {
+      console.log('[Main] Backup for today already exists, skipping');
     }
   } catch (e) {
     console.warn('[Main] Backup schedule check failed (non-fatal):', e.message);
@@ -185,6 +179,15 @@ app.whenReady().then(() => {
       return { success: true, data: result };
     } catch (error) {
       return { success: false, error: error.message, data: [] };
+    }
+  });
+
+  ipcMain.handle('db:deleteBackup', async (event, filename) => {
+    try {
+      const result = db.deleteBackup(filename);
+      return result;
+    } catch (error) {
+      return { success: false, error: error.message };
     }
   });
 

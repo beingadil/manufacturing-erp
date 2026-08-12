@@ -252,32 +252,64 @@ function runIntegrityCheck() {
 
 function backupDatabase() {
   try {
-    const backupDir = path.join(app.getPath('userData'), 'backups');
     const fs = require('fs');
+    const dbPath = getDbPath();
+    if (!fs.existsSync(dbPath)) {
+      return { success: false, error: 'Database file not found at ' + dbPath };
+    }
+    const backupDir = path.join(app.getPath('userData'), 'backups');
     if (!fs.existsSync(backupDir)) {
       fs.mkdirSync(backupDir, { recursive: true });
     }
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const backupPath = path.join(backupDir, `manufacturing-erp-${timestamp}.sqlite.bak`);
 
-    db.backup(backupPath)
-      .then(() => {
-        console.log('[DB] Backup saved:', backupPath);
-        // Prune old backups (keep last 30)
-        try {
-          const files = fs.readdirSync(backupDir)
-            .filter(f => f.startsWith('manufacturing-erp-') && f.endsWith('.sqlite.bak'))
-            .sort().reverse();
-          if (files.length > 30) {
-            files.slice(30).forEach(f => fs.rmSync(path.join(backupDir, f), { force: true }));
-          }
-        } catch {}
-      })
-      .catch(err => console.error('[DB] Backup failed:', err));
+    // SYNCHRONOUS and guaranteed: force the WAL journal into the main .sqlite
+    // file, then copy that file. The backup is complete and consistent before
+    // this function returns — the caller can immediately trust success and
+    // list the new snapshot. (Previously this used the async db.backup()
+    // promise without awaiting it, so success was reported before the file
+    // existed and failures were silently swallowed.)
+    db.pragma('wal_checkpoint(TRUNCATE)');
+    fs.copyFileSync(dbPath, backupPath);
 
-    return { success: true, path: backupPath };
+    // Prune old backups (keep the newest 30)
+    try {
+      const files = fs.readdirSync(backupDir)
+        .filter(f => f.startsWith('manufacturing-erp-') && f.endsWith('.sqlite.bak'))
+        .sort().reverse();
+      if (files.length > 30) {
+        files.slice(30).forEach(f => fs.rmSync(path.join(backupDir, f), { force: true }));
+      }
+    } catch {}
+
+    const size = fs.statSync(backupPath).size;
+    console.log('[DB] Backup saved:', backupPath, `(${size} bytes)`);
+    return { success: true, path: backupPath, size };
   } catch (error) {
     console.error('[DB] Backup error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+function deleteBackup(filename) {
+  try {
+    const fs = require('fs');
+    const backupDir = path.join(app.getPath('userData'), 'backups');
+    // Only allow deleting files inside the backups directory (no path traversal)
+    const safe = path.basename(filename);
+    if (safe !== filename) {
+      return { success: false, error: 'Invalid backup filename' };
+    }
+    const target = path.join(backupDir, safe);
+    if (!fs.existsSync(target)) {
+      return { success: false, error: 'Backup not found' };
+    }
+    fs.rmSync(target, { force: true });
+    console.log('[DB] Backup deleted:', target);
+    return { success: true };
+  } catch (error) {
+    console.error('[DB] Delete backup error:', error);
     return { success: false, error: error.message };
   }
 }
@@ -594,4 +626,4 @@ function listBackups() {
   }
 }
 
-module.exports = { initializeDatabase, query, queryOne, execute, transaction, closeDatabase, runIntegrityCheck, backupDatabase, restoreDatabase, listBackups, exportBackupToPath, importBackupFromPath, exportUnifiedBackupToPath, importUnifiedBackupFromPath, createUpdateSafeBackup, restoreFromUpdateSafeBackup };
+module.exports = { initializeDatabase, query, queryOne, execute, transaction, closeDatabase, runIntegrityCheck, backupDatabase, deleteBackup, restoreDatabase, listBackups, exportBackupToPath, importBackupFromPath, exportUnifiedBackupToPath, importUnifiedBackupFromPath, createUpdateSafeBackup, restoreFromUpdateSafeBackup };

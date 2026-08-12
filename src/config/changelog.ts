@@ -20,6 +20,34 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.13',
+    date: '2026-08-12',
+    title: 'Reliable backup & restore, per-line voucher narration, and module wipes',
+    sections: [
+      {
+        title: '💾 Backup & Restore',
+        items: [
+          'Rebuilt backup/restore from scratch — creating a backup now writes the snapshot synchronously, so the file exists the moment the app says success (previously success was reported before the backup finished).',
+          'One consistent Backup & Restore screen everywhere (Settings and System Maintenance share the same component); the old duplicate tab, the placeholder “Archive” tab, and the simulated “Tools” tab were removed.',
+          'Snapshots can now be deleted from the list, and the newest 30 are kept automatically. Export/import of the portable .merpbak bundle (with SHA-256 integrity check) is unchanged and verified.',
+        ],
+      },
+      {
+        title: '📝 Voucher narration',
+        items: [
+          'Every voucher line now has its own narration field — Journal Voucher gained a Narration column and Cash/Bank payment & receipt rows accept a per-line description that shows in the ledger drill-down (falls back to the voucher-level narration when blank).',
+        ],
+      },
+      {
+        title: '🗑️ Delete & data management',
+        items: [
+          'Fixed the Purchase delete button — the confirmation dialog was never rendered; deleting now also reverses the linked voucher and stock correctly.',
+          'Settings → Advanced now has a Wipe Module Data panel: pick one or more modules (with live record counts) and wipe them together or individually, with automatic cleanup of their vouchers and stock trail.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.10',
     date: '2026-08-09',
     title: 'Fixed the stuck loading spinner after restart',

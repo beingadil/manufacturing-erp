@@ -12,9 +12,10 @@ declare global {
       transaction: (req: TransactionRequest) => Promise<DBResponse>;
       close: () => Promise<{ success: boolean }>;
       integrityCheck: () => Promise<{ success: boolean; details?: any[]; error?: string }>;
-      backup: () => Promise<{ success: boolean; path?: string; error?: string }>;
+      backup: () => Promise<{ success: boolean; path?: string; error?: string; size?: number }>;
       restore: (backupPath: string) => Promise<{ success: boolean; error?: string }>;
       listBackups: () => Promise<{ success: boolean; data?: any[]; error?: string }>;
+      deleteBackup: (filename: string) => Promise<{ success: boolean; error?: string }>;
       diag: () => Promise<{ success: boolean; data?: { path: string; exists: boolean; size: number }; error?: string }>;
       exportBackup: () => Promise<{ success: boolean; canceled?: boolean; path?: string; error?: string; manifest?: any }>;
       importBackup: () => Promise<{ success: boolean; canceled?: boolean; error?: string; safetyBackupPath?: string; manifest?: any }>;
