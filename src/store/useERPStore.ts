@@ -91,7 +91,41 @@ export interface ERPState {
   deleteVoucher: (voucherId: string) => void;
   cancelVoucher: (voucherId: string, reason?: string) => void;
   wipeAllData: () => void;
+  wipeModules: (moduleIds: string[]) => void;
 }
+
+/**
+ * Per-module wipe map. Each id clears exactly the store keys that belong to
+ * that module — master-data modules (categories, materials, ...) clear only
+ * their own records, while transaction modules also clear their ledger trail.
+ */
+export const MODULE_WIPE_KEYS: Record<string, (keyof ERPState)[]> = {
+  categories: ['categories'],
+  materials: ['materials'],
+  products: ['products'],
+  suppliers: ['suppliers'],
+  customers: ['customers'],
+  processors: ['processors'],
+  purchases: ['purchases'],
+  sales: ['sales'],
+  processing: ['processingSends', 'processingReceipts', 'processorBills'],
+  inventory: ['batches', 'inventoryMovements'],
+  accounting: ['vouchers', 'journalEntries', 'accounts', 'accountSubtypes'],
+};
+
+export const WIPE_MODULE_LABELS: Record<string, string> = {
+  categories: 'Categories',
+  materials: 'Raw Materials',
+  products: 'Products / Finished Goods',
+  suppliers: 'Suppliers',
+  customers: 'Customers',
+  processors: 'Processors',
+  purchases: 'Purchases',
+  sales: 'Sales',
+  processing: 'Processing (Sends / Receipts / Bills)',
+  inventory: 'Batches & Inventory Movements',
+  accounting: 'Accounting (Vouchers / Journal / Chart of Accounts)',
+};
 
 export const useERPStore = create<ERPState>()(
   persist(
@@ -168,6 +202,68 @@ export const useERPStore = create<ERPState>()(
           journalEntries: []
         });
       },
+
+      wipeModules: (moduleIds) => set((state) => {
+        const moduleSet = new Set(moduleIds);
+        const patch: Partial<ERPState> = {};
+        const wipeAccounting = moduleSet.has('accounting');
+        const wipeInventory = moduleSet.has('inventory');
+
+        // 1. Clear each module's own arrays (accounting/inventory handled below).
+        for (const id of moduleIds) {
+          for (const key of MODULE_WIPE_KEYS[id] || []) {
+            if (key === 'vouchers' || key === 'journalEntries' || key === 'batches' || key === 'inventoryMovements') continue;
+            (patch as any)[key] = [];
+          }
+        }
+
+        // 2. Cascade: wiping a transaction module also clears the batches and
+        //    inventory movements it created, so no orphan trail remains.
+        if (moduleSet.has('purchases') || moduleSet.has('sales') || moduleSet.has('processing')) {
+          if (!wipeInventory) {
+            const removedPurchaseIds = moduleSet.has('purchases')
+              ? new Set(state.purchases.map(p => p.id))
+              : null;
+            const movementModules = new Set<string>();
+            if (moduleSet.has('purchases')) movementModules.add('Purchase');
+            if (moduleSet.has('sales')) movementModules.add('Sale');
+            if (moduleSet.has('processing')) { movementModules.add('Dispatch'); movementModules.add('Receive'); }
+
+            if (removedPurchaseIds) {
+              patch.batches = state.batches.filter(b => !removedPurchaseIds.has(b.purchaseId));
+            }
+            patch.inventoryMovements = state.inventoryMovements.filter(m =>
+              !movementModules.has(m.module)
+              && !(removedPurchaseIds && m.batchId && removedPurchaseIds.has(m.batchId))
+            );
+          }
+
+          // 3. Also remove the auto-generated vouchers + journal entries of those
+          //    modules (unless the whole accounting module is being wiped).
+          if (!wipeAccounting) {
+            const sources = new Set<string>();
+            if (moduleSet.has('purchases')) sources.add('Purchase');
+            if (moduleSet.has('sales')) sources.add('Sales');
+            if (moduleSet.has('processing')) sources.add('Processing');
+            const removedVoucherIds = new Set(
+              state.vouchers.filter(v => sources.has(v.sourceModule || '')).map(v => v.id)
+            );
+            patch.vouchers = state.vouchers.filter(v => !sources.has(v.sourceModule || ''));
+            patch.journalEntries = state.journalEntries.filter(je => !removedVoucherIds.has(je.voucherId));
+          }
+        }
+
+        if (wipeInventory) {
+          patch.batches = [];
+          patch.inventoryMovements = [];
+        }
+        if (wipeAccounting) {
+          patch.vouchers = [];
+          patch.journalEntries = [];
+        }
+
+        return patch as Partial<ERPState>;
+      }),
       addModuleItem: (table, item) => set((state) => {
         // Map postgres table name to zustand store key
         const keyMap: Record<string, keyof ERPState> = {

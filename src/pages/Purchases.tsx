@@ -132,6 +132,7 @@ export function Purchases() {
   const handleDelete = () => {
     ErrorManagement.safeExecuteSync(() => {
       PurchaseService.delete(deleteModal.id);
+      setDeleteModal({ isOpen: false, id: '', no: '' });
     }, 'Purchase Delete');
   };
 
@@ -257,6 +258,15 @@ export function Purchases() {
           </div>
         </div>
       )}
+
+      <DeleteConfirmationModal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({ isOpen: false, id: '', no: '' })}
+        onConfirm={handleDelete}
+        title="Delete Purchase"
+        recordNo={deleteModal.no}
+        description="Are you sure you want to permanently delete this purchase? All linked accounting entries, vouchers, batches, and stock movements will be reversed automatically."
+      />
 
       <QuickAddSupplier 
         isOpen={isAddSupplierOpen} 
