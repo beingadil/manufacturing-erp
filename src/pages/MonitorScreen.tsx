@@ -217,8 +217,8 @@ export function MonitorScreen() {
                   itemStyle={{ color: 'hsl(var(--foreground))' }}
                 />
                 <Legend />
-                <Line type="monotone" dataKey="revenue" name="Revenue" stroke="#10b981" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="purchase" name="Purchase" stroke="#f43f5e" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="revenue" name="Revenue" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="purchase" name="Purchase" stroke="hsl(var(--chart-3))" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -233,16 +233,16 @@ export function MonitorScreen() {
                   contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}
                 />
                 <Legend />
-                <Bar dataKey="revenue" name="Revenue" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                <Bar dataKey="purchase" name="Cost" fill="#f43f5e" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                <Bar dataKey="revenue" name="Revenue" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                <Bar dataKey="purchase" name="Cost" fill="hsl(var(--chart-3))" radius={[4, 4, 0, 0]} maxBarSize={40} />
               </ComposedChart>
             </ResponsiveContainer>
           </ChartCard>
         </div>
 
         <div className="flex flex-col gap-6">
-          <RankCard title="Top Customers by A/R" data={rankings.customerRank} nameKey="name" valueKey="balanceReceivable" color="#fbbf24" />
-          <RankCard title="Top Suppliers by Purchase" data={rankings.supplierRank} nameKey="name" valueKey="amount" color="#3b82f6" />
+          <RankCard title="Top Customers by A/R" data={rankings.customerRank} nameKey="name" valueKey="balanceReceivable" color="hsl(var(--chart-4))" />
+          <RankCard title="Top Suppliers by Purchase" data={rankings.supplierRank} nameKey="name" valueKey="amount" color="hsl(var(--chart-2))" />
         </div>
       </div>
 

@@ -19,13 +19,13 @@
     --muted-foreground: 240 3.8% 46.1%;
     --accent: 240 4.8% 95.9%;
     --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 72% 44%;
     --destructive-foreground: 0 0% 98%;
-    --success: 142 71% 45%;
+    --success: 142 65% 30%;
     --success-foreground: 0 0% 98%;
-    --warning: 38 92% 50%;
+    --warning: 38 92% 33%;
     --warning-foreground: 0 0% 98%;
-    --info: 217 91% 60%;
+    --info: 217 80% 50%;
     --info-foreground: 0 0% 98%;
     --border: 240 5.9% 90%;
     --input: 240 5.9% 90%;
@@ -39,6 +39,18 @@
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+    --chart-1: 160 84% 39%;
+    --chart-2: 217 91% 60%;
+    --chart-3: 350 89% 60%;
+    --chart-4: 43 96% 56%;
+    --chart-5: 239 84% 67%;
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--muted-foreground)) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(var(--card)) 0%, hsl(var(--muted)) 100%);
+    --gradient-background: linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted) / 0.6) 100%);
+    --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.08);
+    --shadow-hover: 0 8px 24px -4px rgb(0 0 0 / 0.12), 0 4px 12px -4px rgb(0 0 0 / 0.06);
+    --education-blue: 217 91% 60%;
+    --education-green: 142 71% 45%;
   }
  
   .dark {
@@ -75,6 +87,18 @@
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+    --chart-1: 158 64% 52%;
+    --chart-2: 213 94% 68%;
+    --chart-3: 351 95% 71%;
+    --chart-4: 43 96% 56%;
+    --chart-5: 234 89% 74%;
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--secondary)) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(var(--card)) 0%, hsl(var(--muted)) 100%);
+    --gradient-background: linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted) / 0.6) 100%);
+    --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.4);
+    --shadow-hover: 0 8px 24px -4px rgb(0 0 0 / 0.6), 0 4px 12px -4px rgb(0 0 0 / 0.3);
+    --education-blue: 217 91% 65%;
+    --education-green: 142 71% 50%;
   }
 }
 
