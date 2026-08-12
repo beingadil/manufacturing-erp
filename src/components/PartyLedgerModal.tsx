@@ -174,7 +174,11 @@ export function PartyLedgerModal({ party, onClose }: PartyLedgerModalProps) {
                   </td>
                 </tr>
               )}
-              {rows.map(row => (
+              {/* Newest entry at the top; each row still carries its own running
+                  balance from the full ascending sequence, and the closing
+                  balance card is the FINAL running balance — never the latest
+                  entry's amount. */}
+              {[...rows].reverse().map(row => (
                 <tr key={row.id} className="hover:bg-muted/20 transition-colors">
                   <td className="py-3 px-6 text-sm text-foreground whitespace-nowrap">
                     {row.voucher?.date ? new Date(row.voucher.date).toLocaleDateString() : '—'}

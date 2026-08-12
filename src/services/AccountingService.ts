@@ -1,6 +1,7 @@
 import { useERPStore } from '../store/useERPStore';
 import { ValidationEngine, VoucherValidator, VoucherDTO } from '../lib/validation';
 import { BusinessWorkflowEngine } from '../lib/business/BusinessWorkflowEngine';
+import { AccountingEngine } from '../lib/accounting/AccountingEngine';
 
 export class AccountingService {
   static createVoucher(data: Omit<VoucherDTO, 'entries' | 'id'>, entries: VoucherDTO['entries']) {
@@ -21,6 +22,10 @@ export class AccountingService {
         narration: data.narration || ''
       };
       state.addVoucher(storeVoucherData as any, entries as any);
+      // Party balances are derived from the COMPLETE ledger — never from the
+      // latest entry. Recompute after every mutation so the stored balance can
+      // never drift from the ledger closing balance (spec §14, §17).
+      AccountingEngine.recomputePartyBalances();
     }, 'Voucher created');
   }
 
@@ -43,6 +48,7 @@ export class AccountingService {
       ValidationEngine.validate(new VoucherValidator(), voucherData, 'Voucher Update');
 
       state.updateVoucher(id, data as any, entries as any);
+      AccountingEngine.recomputePartyBalances();
     }, 'Voucher updated');
   }
 
@@ -50,6 +56,7 @@ export class AccountingService {
     return BusinessWorkflowEngine.executeWorkflow('Voucher Deletion', () => {
       const state = useERPStore.getState();
       state.deleteVoucher(id);
+      AccountingEngine.recomputePartyBalances();
     }, 'Voucher deleted');
   }
 
