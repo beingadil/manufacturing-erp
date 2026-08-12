@@ -415,7 +415,7 @@ export function DashboardLayout() {
           >
             {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
-          <div className="flex items-center gap-2 font-bold text-xl tracking-tight text-foreground">
+          <div className="flex items-center gap-2">
             {logo ? (
               <img src={logo} alt="Logo" className="h-8 object-contain" />
             ) : (
@@ -423,7 +423,11 @@ export function DashboardLayout() {
                 <span className="text-white text-sm">{dashboardName.substring(0, 3).toUpperCase()}</span>
               </div>
             )}
-            <span className="hidden sm:inline-block">{dashboardName}</span>
+            {/* Brand name + tagline — both come from Settings → Dashboard Branding */}
+            <div className="hidden sm:flex flex-col leading-tight">
+              <span className="font-bold text-lg tracking-tight text-foreground">{dashboardName}</span>
+              {tagline && <span className="text-[10px] font-medium text-muted-foreground truncate max-w-[240px]">{tagline}</span>}
+            </div>
           </div>
         </div>
 
