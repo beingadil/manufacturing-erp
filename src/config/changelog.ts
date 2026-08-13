@@ -20,6 +20,35 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.16',
+    date: '2026-08-13',
+    title: 'Unified module design system — KPI cards, redesigned tables & sidebar',
+    sections: [
+      {
+        title: '🎨 UI / Design System',
+        items: [
+          'One canonical KPI card pattern (src/components/ui/KpiCard) now drives every headline metric in the app — Dashboard, Balance Sheet “Where you stand”, P&L “At a glance”, every report template, and the new module stat strips.',
+          'Voucher pages redesigned — every voucher list now shows a KPI stat strip (Vouchers / Total Debit / Total Credit), and the entry modals match their page with accent bars, icon tiles, and the correct per-voucher-type color.',
+        ],
+      },
+      {
+        title: '📋 Tables across all modules',
+        items: [
+          'The shared DataTable (used by Categories, Raw Materials, Products, Customers, Suppliers, Processors, Purchases, Sales) gained: a sticky column header while scrolling, a filtered result-count pill, a clear-search button, aria-sort on sortable columns, First/Last page jump buttons, and a polished empty state.',
+          'Row action buttons are now one shared component — consistent 32px targets, hover tint by tone, and accessible labels everywhere instead of tiny unlabeled icons.',
+        ],
+      },
+      {
+        title: '🗂️ Module pages & navigation',
+        items: [
+          'Categories redesigned: gradient header tile, live stats (Total Categories / Materials in System / Uncategorized), a per-category materials count column, badge-style sync status, and a polished add/edit modal (autofocus, Escape-to-close).',
+          'Raw Materials, Products, Customers, Suppliers, and Processors all got matching gradient icon headers and 3-card KPI strips computed from real data (total payables/receivables, stock, inventory value).',
+          'Sidebar redesigned: active items get a primary tint + left accent bar, nav groups are separated by dividers, and every module shows a live record-count badge (categories, materials, products, customers, suppliers, processors, purchases, sales).',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.15',
     date: '2026-08-12',
     title: 'Accessible money text & theme-aware charts',
