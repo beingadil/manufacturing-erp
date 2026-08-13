@@ -641,16 +641,19 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
           /* ── SIMPLE MODES: counterparty rows (progressive disclosure) ────── */
           <>
             <div className="bg-card border border-border/50 rounded-xl shadow-sm">
-              <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between">
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">
-                    {rowsAreDebit ? 'Payment To' : 'Received From'}
-                  </label>
-                  <p className="text-xs text-muted-foreground/70 mt-0.5">
-                    {rowsAreDebit ? 'Who or what is this payment for?' : 'Who or what is this money from?'}
-                  </p>
+              <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className={cn('flex h-9 w-9 items-center justify-center rounded-lg border shrink-0', meta.soft)}>{meta.icon}</span>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">
+                      {rowsAreDebit ? 'Payment To' : 'Received From'}
+                    </label>
+                    <p className="text-xs text-muted-foreground/70 mt-0.5">
+                      {rowsAreDebit ? 'Who or what is this payment for?' : 'Who or what is this money from?'}
+                    </p>
+                  </div>
                 </div>
-                <span className="text-[10px] text-muted-foreground/60 font-medium">{ledgerHint}</span>
+                <span className="text-[10px] text-muted-foreground/60 font-medium shrink-0">{ledgerHint}</span>
               </div>
 
               <div className="divide-y divide-border/50">

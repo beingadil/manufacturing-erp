@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrency } from '../../../lib/utils';
+import { KpiCard } from '../../ui/KpiCard';
 import { BarChart3, ChevronRight, CircleDollarSign, Receipt, TrendingDown, TrendingUp } from 'lucide-react';
 
 export interface PLRow {
@@ -86,36 +87,29 @@ function PeriodSummary({ data }: { data: ProfitLossData }) {
       </h3>
 
       <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="rounded-xl bg-card border border-border/60 p-4">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <CircleDollarSign className="h-3.5 w-3.5 shrink-0" />
-            Revenue
-          </div>
-          <div className="mt-1.5 text-xl font-bold text-success tabular-nums">{formatCurrency(data.totalRevenue)}</div>
-          <div className="mt-0.5 text-[11px] text-muted-foreground/80">Money earned from sales</div>
-        </div>
-
-        <div className="rounded-xl bg-card border border-border/60 p-4">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Receipt className="h-3.5 w-3.5 shrink-0" />
-            Costs
-          </div>
-          <div className="mt-1.5 text-xl font-bold text-foreground tabular-nums">{formatCurrency(costs)}</div>
-          <div className="mt-0.5 text-[11px] text-muted-foreground/80">Cost of goods sold + operating expenses</div>
-        </div>
-
-        <div className="rounded-xl bg-card border border-primary/30 p-4">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            {netNegative
-              ? <TrendingDown className="h-3.5 w-3.5 text-destructive shrink-0" />
-              : <TrendingUp className="h-3.5 w-3.5 text-success shrink-0" />}
-            {netNegative ? 'Net loss' : 'Net profit'}
-          </div>
-          <div className={`mt-1.5 text-xl font-bold tabular-nums ${netNegative ? 'text-destructive' : netPositive ? 'text-success' : 'text-foreground'}`}>
-            {netNegative ? `−${formatCurrency(Math.abs(data.netProfit))}` : formatCurrency(data.netProfit)}
-          </div>
-          <div className="mt-0.5 text-[11px] text-muted-foreground/80">Revenue − costs</div>
-        </div>
+        <KpiCard
+          label="Revenue"
+          value={formatCurrency(data.totalRevenue)}
+          icon={CircleDollarSign}
+          iconClassName="text-success"
+          accent="text-success"
+          description="Money earned from sales"
+        />
+        <KpiCard
+          label="Costs"
+          value={formatCurrency(costs)}
+          icon={Receipt}
+          description="Cost of goods sold + operating expenses"
+        />
+        <KpiCard
+          label={netNegative ? 'Net loss' : 'Net profit'}
+          value={netNegative ? `−${formatCurrency(Math.abs(data.netProfit))}` : formatCurrency(data.netProfit)}
+          icon={netNegative ? TrendingDown : TrendingUp}
+          iconClassName={netNegative ? 'text-destructive' : 'text-success'}
+          accent={netNegative ? 'text-destructive' : netPositive ? 'text-success' : 'text-foreground'}
+          description="Revenue − costs"
+          className="border-primary/30"
+        />
       </div>
     </div>
   );

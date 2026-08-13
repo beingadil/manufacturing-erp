@@ -3,6 +3,7 @@ import { filterFinancialData } from "../lib/abac";
 import React, { useMemo, useState } from "react";
 import { useERPStore } from "../store/useERPStore";
 import { formatCurrency, formatNumber, cn } from "../lib/utils";
+import { KpiCard } from "../components/ui/KpiCard";
 import { ArrowRight, PackageSearch, Users, Truck, TrendingUp, AlertTriangle, CircleDollarSign, ArrowUpCircle, ArrowDownCircle, DollarSign, Landmark, Building2, Scale, Wallet, ArrowLeftRight, ShoppingCart, Banknote, Factory, Layers, Package } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
@@ -13,33 +14,6 @@ import { FinancialReportService } from '../lib/reporting/FinancialReportService'
 import { PositionSummary } from '../components/reports/financial/BalanceSheetStatement';
 
 type Preset = 'today' | 'week' | 'month' | 'year' | 'custom';
-
-interface MetricCardProps {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  sub?: React.ReactNode;
-  onClick?: () => void;
-  accent?: string;
-  valueClassName?: string;
-}
-
-function MetricCard({ icon, label, value, sub, onClick, accent = "text-primary", valueClassName }: MetricCardProps) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={!onClick}
-      className="rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col justify-between text-left transition-all hover:shadow-md hover:border-primary/30 disabled:cursor-default disabled:hover:border-border disabled:hover:shadow-sm"
-    >
-      <div className="flex items-center gap-3 text-muted-foreground mb-2">
-        <span className={cn("h-5 w-5", accent)}>{icon}</span>
-        <span className="text-sm font-medium">{label}</span>
-      </div>
-      <div className={cn("text-2xl font-bold text-foreground", valueClassName)}>{value}</div>
-      {sub && <div className="mt-2 text-xs text-muted-foreground space-y-0.5">{sub}</div>}
-    </button>
-  );
-}
 
 export function Dashboard() {
   const { profile, isAdmin, dataPolicies } = useAuth();
@@ -211,52 +185,52 @@ export function Dashboard() {
           <span className="text-xs text-muted-foreground bg-muted/40 border border-border rounded-full px-3 py-1">As of {asOfLabel}</span>
         </div>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          <MetricCard
-            icon={<CircleDollarSign className="h-5 w-5 text-emerald-500" />}
+          <KpiCard
+            icon={CircleDollarSign}
+            iconClassName="text-emerald-500"
             label="Cash in Hand"
             value={formatCurrency(summary.cashInHand)}
-            sub={<span className="flex justify-between"><span>Period receipts</span><span className="font-medium text-success">{formatCurrency(summary.periodCashReceipts)}</span></span>}
+            description={<span className="flex justify-between"><span>Period receipts</span><span className="font-medium text-success">{formatCurrency(summary.periodCashReceipts)}</span></span>}
             onClick={() => navigate('/accounting/cashbook')}
-            accent="text-emerald-500"
           />
-          <MetricCard
-            icon={<Landmark className="h-5 w-5 text-blue-500" />}
+          <KpiCard
+            icon={Landmark}
+            iconClassName="text-blue-500"
             label="Bank Balance"
             value={formatCurrency(summary.bankTotal)}
-            sub={bankSub}
+            description={bankSub}
             onClick={() => navigate('/accounting/general-ledger')}
-            accent="text-blue-500"
           />
-          <MetricCard
-            icon={<Banknote className="h-5 w-5 text-slate-400" />}
+          <KpiCard
+            icon={Banknote}
+            iconClassName="text-slate-400"
             label="Cheques in Hand"
             value="—"
-            sub={<span>Not tracked — cheque workflow not implemented (audit finding)</span>}
-            accent="text-slate-400"
+            description={<span>Not tracked — cheque workflow not implemented (audit finding)</span>}
           />
-          <MetricCard
-            icon={<Users className="h-5 w-5 text-teal-500" />}
+          <KpiCard
+            icon={Users}
+            iconClassName="text-teal-500"
             label="Accounts Receivable"
             value={formatCurrency(summary.receivables.total)}
-            sub={<span>{summary.receivables.customersOutstanding} customer{summary.receivables.customersOutstanding === 1 ? '' : 's'} outstanding</span>}
+            description={<span>{summary.receivables.customersOutstanding} customer{summary.receivables.customersOutstanding === 1 ? '' : 's'} outstanding</span>}
             onClick={() => navigate(arControlAccount ? `/ledgers?id=${arControlAccount.id}` : '/ledgers')}
-            accent="text-teal-500"
           />
-          <MetricCard
-            icon={<Truck className="h-5 w-5 text-amber-500" />}
+          <KpiCard
+            icon={Truck}
+            iconClassName="text-amber-500"
             label="Accounts Payable"
             value={formatCurrency(summary.payables.total)}
-            sub={<span>{summary.payables.suppliersOutstanding} supplier{summary.payables.suppliersOutstanding === 1 ? '' : 's'} outstanding</span>}
+            description={<span>{summary.payables.suppliersOutstanding} supplier{summary.payables.suppliersOutstanding === 1 ? '' : 's'} outstanding</span>}
             onClick={() => navigate(apControlAccount ? `/ledgers?id=${apControlAccount.id}` : '/ledgers')}
-            accent="text-amber-500"
           />
-          <MetricCard
-            icon={<PackageSearch className="h-5 w-5 text-violet-500" />}
+          <KpiCard
+            icon={PackageSearch}
+            iconClassName="text-violet-500"
             label="Inventory Value"
             value={formatCurrency(summary.inventory.total)}
-            sub={inventorySub}
+            description={inventorySub}
             onClick={() => navigate('/materials')}
-            accent="text-violet-500"
           />
         </div>
       </section>
@@ -368,51 +342,51 @@ export function Dashboard() {
           <span className="text-xs text-muted-foreground bg-muted/40 border border-border rounded-full px-3 py-1">Current operational stock · As of {asOfLabel}</span>
         </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard
-            icon={<Layers className="h-5 w-5 text-violet-500" />}
+          <KpiCard
+            icon={Layers}
+            iconClassName="text-violet-500"
             label="Raw Material Inventory"
             value={`${formatNumber(summary.inventory.rawPcs)} PCS`}
-            sub={<>
+            description={<>
               <div className="flex justify-between"><span>Value</span><span className="font-medium text-foreground/80">{formatCurrency(summary.inventory.rawMaterials)}</span></div>
               <div className="text-muted-foreground/70">At actual purchase cost (per batch)</div>
             </>}
             onClick={() => navigate('/materials')}
-            accent="text-violet-500"
           />
-          <MetricCard
-            icon={<Factory className="h-5 w-5 text-orange-500" />}
+          <KpiCard
+            icon={Factory}
+            iconClassName="text-orange-500"
             label="WIP / At Processor"
             value={`${formatNumber(summary.inventory.wipPcs)} PCS`}
-            sub={<>
+            description={<>
               <div className="flex justify-between"><span>Value</span><span className="font-medium text-foreground/80">{formatCurrency(summary.inventory.atProcessor)}</span></div>
               <div className="text-muted-foreground/70">At purchase cost of the batch dispatched</div>
             </>}
             onClick={() => navigate('/processing')}
-            accent="text-orange-500"
           />
-          <MetricCard
-            icon={<Package className="h-5 w-5 text-sky-500" />}
+          <KpiCard
+            icon={Package}
+            iconClassName="text-sky-500"
             label="Finished Goods"
             value={`${formatNumber(summary.inventory.finishedPcs)} PCS`}
-            sub={<>
+            description={<>
               <div className="flex justify-between"><span>Value</span><span className="font-medium text-foreground/80">{formatCurrency(summary.inventory.finishedGoods)}</span></div>
               <div className="text-muted-foreground/70">At purchase cost of the producing batch</div>
             </>}
             onClick={() => navigate('/products')}
-            accent="text-sky-500"
           />
-          <MetricCard
-            icon={<PackageSearch className="h-5 w-5 text-emerald-500" />}
+          <KpiCard
+            icon={PackageSearch}
+            iconClassName="text-emerald-500"
             label="Total Inventory"
             value={formatCurrency(summary.inventory.total)}
-            sub={<>
+            description={<>
               <div className="flex justify-between"><span>Raw + WIP + Finished</span><span className="font-medium text-foreground/80">{formatCurrency(summary.inventory.rawMaterials + summary.inventory.atProcessor + summary.inventory.finishedGoods)}</span></div>
               <div className={summary.inventory.reconciled ? 'text-muted-foreground/70' : 'text-destructive'}>
                 {summary.inventory.reconciled ? 'Reconciled with inventory valuation' : 'Mismatch — check batch/stock state'}
               </div>
             </>}
             onClick={() => navigate('/reports')}
-            accent="text-emerald-500"
           />
         </div>
       </section>
