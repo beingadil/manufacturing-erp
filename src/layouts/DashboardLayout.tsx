@@ -23,17 +23,26 @@ const NavAccordionItem: React.FC<{ item: any, onClose?: () => void }> = ({ item,
         to={item.path}
         onClick={onClose}
         className={({ isActive }) => cn(
-          "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 group",
+          "group relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
           isActive 
-            ? "bg-muted text-foreground" 
+            ? "bg-primary/10 text-primary" 
             : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
         )}
       >
+        <span className={cn(
+          "absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full transition-all duration-200",
+          location.pathname === item.path ? "bg-primary" : "bg-transparent"
+        )} />
         <item.icon className={cn(
           "h-4 w-4 shrink-0 transition-colors duration-200",
-          location.pathname === item.path ? "text-foreground" : "text-muted-foreground/80 group-hover:text-foreground"
+          location.pathname === item.path ? "text-primary" : "text-muted-foreground/80 group-hover:text-foreground"
         )} />
         {item.label}
+        {item.badge != null && item.badge > 0 && (
+          <span className="ml-auto inline-flex min-w-[20px] items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
+            {item.badge}
+          </span>
+        )}
       </NavLink>
     );
   }
@@ -45,14 +54,14 @@ const NavAccordionItem: React.FC<{ item: any, onClose?: () => void }> = ({ item,
         className={cn(
           "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 group",
           isActive 
-            ? "text-foreground font-semibold" 
+            ? "text-primary font-semibold bg-primary/5" 
             : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
         )}
       >
         <div className="flex items-center gap-3">
           <item.icon className={cn(
             "h-4 w-4 shrink-0 transition-colors duration-200",
-            isActive ? "text-foreground" : "text-muted-foreground/80 group-hover:text-foreground"
+            isActive ? "text-primary" : "text-muted-foreground/80 group-hover:text-foreground"
           )} />
           {item.label}
         </div>
@@ -71,13 +80,18 @@ const NavAccordionItem: React.FC<{ item: any, onClose?: () => void }> = ({ item,
               to={sub.path}
               onClick={onClose}
               className={({ isActive }) => cn(
-                "block px-3 py-2 rounded-md text-sm transition-colors duration-200",
+                "flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-200",
                 isActive 
-                  ? "bg-muted text-foreground font-medium" 
+                  ? "bg-primary/10 text-primary font-medium" 
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
               )}
             >
               {sub.label}
+              {sub.badge != null && sub.badge > 0 && (
+                <span className="ml-auto inline-flex min-w-[18px] items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground/80">
+                  {sub.badge}
+                </span>
+              )}
             </NavLink>
           ))}
         </div>
@@ -323,6 +337,18 @@ export function DashboardLayout() {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { dashboardName, tagline, logo, logoPosition, profilePhoto, theme, setTheme } = useSettingsStore();
+
+  // Live record counts for the nav badges (data-dense sidebar)
+  const badgeCounts = {
+    categories: useERPStore(s => s.categories.length),
+    materials: useERPStore(s => s.materials.length),
+    products: useERPStore(s => s.products.length),
+    customers: useERPStore(s => s.customers.length),
+    suppliers: useERPStore(s => s.suppliers.length),
+    processors: useERPStore(s => s.processors.length),
+    purchases: useERPStore(s => s.purchases.length),
+    sales: useERPStore(s => s.sales.length),
+  };
   const isDarkMode = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   // Initialize realtime sync across master modules
@@ -345,12 +371,12 @@ export function DashboardLayout() {
           path: "/master",
           requiredModule: "Master Data",
           subItems: [
-            { label: "Categories", path: "/categories" },
-            { label: "Raw Materials", path: "/materials" },
-            { label: "Products", path: "/products" },
-            { label: "Customers", path: "/customers" },
-            { label: "Suppliers", path: "/suppliers" },
-            { label: "Processors", path: "/processors" }
+            { label: "Categories", path: "/categories", badge: badgeCounts.categories },
+            { label: "Raw Materials", path: "/materials", badge: badgeCounts.materials },
+            { label: "Products", path: "/products", badge: badgeCounts.products },
+            { label: "Customers", path: "/customers", badge: badgeCounts.customers },
+            { label: "Suppliers", path: "/suppliers", badge: badgeCounts.suppliers },
+            { label: "Processors", path: "/processors", badge: badgeCounts.processors }
           ]
         }
       ]
@@ -358,9 +384,9 @@ export function DashboardLayout() {
     {
       title: "Operations",
       items: [
-        { icon: ShoppingCart, label: "Purchases", path: "/purchases", requiredModule: "Purchases" },
+        { icon: ShoppingCart, label: "Purchases", path: "/purchases", requiredModule: "Purchases", badge: badgeCounts.purchases },
         { icon: Factory, label: "Processing", path: "/processing", requiredModule: "Processing" },
-        { icon: DollarSign, label: "Sales", path: "/sales", requiredModule: "Sales" },
+        { icon: DollarSign, label: "Sales", path: "/sales", requiredModule: "Sales", badge: badgeCounts.sales },
         { icon: Users, label: "Ledgers", path: "/ledgers", requiredModule: "Ledgers" },
       ]
     },
@@ -482,10 +508,11 @@ export function DashboardLayout() {
         "fixed top-16 left-0 bottom-0 w-64 bg-card border-r border-border overflow-y-auto z-30 transition-transform duration-300 ease-in-out lg:translate-x-0 scrollbar-hide",
         isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
       )}>
-        <nav className="p-4 space-y-6">
+        <nav className="p-4 space-y-4">
           {navGroups.map((group, idx) => (
             <div key={idx} className="space-y-1">
-              <h4 className="px-3 text-xs font-bold uppercase tracking-wider text-muted-foreground/80 mb-2">
+              {idx > 0 && <div className="h-px bg-border/60 my-3" />}
+              <h4 className="px-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70 mb-2">
                 {group.title}
               </h4>
               {group.items.filter(item => !item.requiredModule || hasPermission(item.requiredModule, 'View')).map((item) => (
@@ -501,7 +528,7 @@ export function DashboardLayout() {
             onClick={() => setIsMobileMenuOpen(false)}
             className={({ isActive }) => cn(
               "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors group",
-              isActive ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+              isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
             )}
           >
             <Settings className="h-4 w-4 shrink-0 transition-colors duration-200" />
