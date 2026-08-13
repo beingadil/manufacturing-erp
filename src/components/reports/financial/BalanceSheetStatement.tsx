@@ -1,7 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrency } from '../../../lib/utils';
-import { ChevronRight, Scale, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
+import { KpiCard } from '../../ui/KpiCard';
+import { ChevronRight, HandCoins, Scale, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 
 export interface StatementRow {
   id: string;
@@ -93,35 +94,29 @@ export function PositionSummary({ data, title = 'Your position — in plain word
       </h3>
 
       <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="rounded-xl bg-card border border-border/60 p-4">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Wallet className="h-3.5 w-3.5 shrink-0" />
-            Money you put in
-          </div>
-          <div className="mt-1.5 text-xl font-bold text-foreground tabular-nums">{formatCurrency(invested)}</div>
-          <div className="mt-0.5 text-[11px] text-muted-foreground/80">Your capital + earlier profits kept in the business</div>
-        </div>
-
-        <div className="rounded-xl bg-card border border-border/60 p-4">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            {profitNegative
-              ? <TrendingDown className="h-3.5 w-3.5 text-destructive shrink-0" />
-              : <TrendingUp className="h-3.5 w-3.5 text-success shrink-0" />}
-            {profitNegative ? 'Loss this period' : 'Profit this period'}
-          </div>
-          <div className={`mt-1.5 text-xl font-bold tabular-nums ${profitNegative ? 'text-destructive' : profitPositive ? 'text-success' : 'text-foreground'}`}>
-            {profitNegative ? `−${formatCurrency(Math.abs(profit))}` : formatCurrency(profit)}
-          </div>
-          <div className="mt-0.5 text-[11px] text-muted-foreground/80">Sales − cost of goods − all expenses</div>
-        </div>
-
-        <div className="rounded-xl bg-card border border-primary/30 p-4">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            What&apos;s yours today
-          </div>
-          <div className="mt-1.5 text-xl font-bold text-primary tabular-nums">{formatCurrency(yours)}</div>
-          <div className="mt-0.5 text-[11px] text-muted-foreground/80">Your put-in + profit − losses</div>
-        </div>
+        <KpiCard
+          label="Money you put in"
+          value={formatCurrency(invested)}
+          icon={Wallet}
+          description="Your capital + earlier profits kept in the business"
+        />
+        <KpiCard
+          label={profitNegative ? 'Loss this period' : 'Profit this period'}
+          value={profitNegative ? `−${formatCurrency(Math.abs(profit))}` : formatCurrency(profit)}
+          icon={profitNegative ? TrendingDown : TrendingUp}
+          iconClassName={profitNegative ? 'text-destructive' : 'text-success'}
+          accent={profitNegative ? 'text-destructive' : profitPositive ? 'text-success' : 'text-foreground'}
+          description="Sales − cost of goods − all expenses"
+        />
+        <KpiCard
+          label="What's yours today"
+          value={formatCurrency(yours)}
+          icon={HandCoins}
+          iconClassName="text-primary"
+          accent="text-primary"
+          description="Your put-in + profit − losses"
+          className="border-primary/30"
+        />
       </div>
     </div>
   );

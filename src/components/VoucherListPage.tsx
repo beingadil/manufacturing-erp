@@ -1,11 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { useERPStore } from '../store/useERPStore';
 import { Voucher } from '../types/erp';
-import { Search, Plus, Eye, Pencil, XCircle, Trash2, FileText, CheckCircle2 } from 'lucide-react';
+import { Search, Plus, Eye, Pencil, XCircle, Trash2, FileText, CheckCircle2, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { KpiCard } from './ui/KpiCard';
 import { VoucherDetailModal } from './VoucherDetailModal';
 import { VoucherEditorModal, VoucherPageKind } from './VoucherEditorModal';
 import { AccountingEngine } from '../lib/accounting/AccountingEngine';
+import { ACCENT_BTN, ACCENT_SOFT, ACCENT_BAR, ACCENT_HEAD, KIND_ICON } from './voucherAccents';
 
 interface VoucherListPageProps {
   kind: VoucherPageKind;
@@ -15,40 +17,6 @@ interface VoucherListPageProps {
   /** Voucher types shown on this page. For JV, system module vouchers are excluded. */
 }
 
-const ACCENT_BTN: Record<string, string> = {
-  rose: 'bg-rose-600 hover:bg-rose-500',
-  emerald: 'bg-emerald-600 hover:bg-emerald-500',
-  sky: 'bg-sky-600 hover:bg-sky-500',
-  amber: 'bg-amber-600 hover:bg-amber-500',
-};
-
-const ACCENT_SOFT: Record<string, string> = {
-  rose: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-800',
-  emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800',
-  sky: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/30 dark:text-sky-400 dark:border-sky-800',
-  amber: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800',
-};
-
-const ACCENT_BAR: Record<string, string> = {
-  rose: 'from-rose-600 to-rose-400',
-  emerald: 'from-emerald-600 to-emerald-400',
-  sky: 'from-sky-600 to-sky-400',
-  amber: 'from-amber-600 to-amber-400',
-};
-
-const ACCENT_HEAD: Record<string, string> = {
-  rose: 'text-rose-700 dark:text-rose-300',
-  emerald: 'text-emerald-700 dark:text-emerald-300',
-  sky: 'text-sky-700 dark:text-sky-300',
-  amber: 'text-amber-700 dark:text-amber-300',
-};
-
-const VOUCHER_ICON: Record<string, any> = {
-  rose: '💳',
-  emerald: '💰',
-  sky: '🏦',
-  amber: '📝',
-};
 
 export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPageProps) {
   const { vouchers, journalEntries, accounts } = useERPStore();
@@ -61,6 +29,8 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editVoucherId, setEditVoucherId] = useState<string | undefined>();
   const [viewVoucherId, setViewVoucherId] = useState<string | null>(null);
+
+  const KindIcon = KIND_ICON[kind];
 
   const matchedTypes = useMemo(() => {
     switch (kind) {
@@ -135,8 +105,8 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
       {/* Header */}
       <div className="p-6 border-b border-border/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
         <div className="flex items-center gap-3">
-          <div className={cn('flex h-11 w-11 items-center justify-center rounded-xl text-2xl border shadow-sm', ACCENT_SOFT[accent])}>
-            {VOUCHER_ICON[accent]}
+          <div className={cn('flex h-11 w-11 items-center justify-center rounded-xl border shadow-sm', ACCENT_SOFT[accent])}>
+            <KindIcon className="h-5 w-5" />
           </div>
           <div>
             <h2 className={cn('text-xl font-bold', ACCENT_HEAD[accent])}>{title}</h2>
@@ -195,24 +165,34 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
         </span>
       </div>
 
-      {/* Stat chips */}
-      <div className="px-4 py-3 border-b border-border/50 flex flex-wrap items-center gap-3 shrink-0 bg-card">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="text-muted-foreground/70 font-medium uppercase tracking-wider">Showing</span>
-          <span className="font-mono font-semibold text-foreground">{filteredVouchers.length}</span>
-          <span>in selected range</span>
+      {/* Stat strip */}
+      <div className="px-4 py-3 border-b border-border/50 shrink-0 bg-card">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <KpiCard
+            label="Vouchers in range"
+            value={filteredVouchers.length}
+            size="sm"
+            icon={FileText}
+            description="Shown for the selected filters"
+          />
+          <KpiCard
+            label="Total Debit"
+            value={`PKR ${totals.debit.toLocaleString()}`}
+            size="sm"
+            icon={ArrowDownLeft}
+            iconClassName="text-success"
+            accent="text-success"
+          />
+          <KpiCard
+            label="Total Credit"
+            value={`PKR ${totals.credit.toLocaleString()}`}
+            size="sm"
+            icon={ArrowUpRight}
+            iconClassName="text-destructive"
+            accent="text-destructive"
+          />
         </div>
-        <div className="h-4 w-px bg-border/60" />
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-muted-foreground/70 uppercase tracking-wider">Total Debit</span>
-          <span className="font-mono font-semibold text-success">PKR {totals.debit.toLocaleString()}</span>
-        </div>
-        <div className="h-4 w-px bg-border/60" />
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-muted-foreground/70 uppercase tracking-wider">Total Credit</span>
-          <span className="font-mono font-semibold text-destructive">PKR {totals.credit.toLocaleString()}</span>
-        </div>
-        <div className="ml-auto">
+        <div className="flex justify-end mt-2">
           <button
             onClick={() => { setDateFrom(''); setDateTo(''); }}
             className="text-xs text-muted-foreground hover:text-primary font-medium transition-colors"
@@ -227,14 +207,14 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
         <table className="w-full text-left border-collapse">
           <thead className="sticky top-0 bg-card z-10">
             <tr className="border-b border-border/50 bg-muted/30">
-              <th className="py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Date</th>
-              <th className="py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Voucher No</th>
-              <th className="py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Reference</th>
-              <th className="py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Narration</th>
-              <th className="py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Debit</th>
-              <th className="py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Credit</th>
-              <th className="py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
-              <th className="py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Actions</th>
+              <th className="py-2.5 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Date</th>
+              <th className="py-2.5 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Voucher No</th>
+              <th className="py-2.5 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Reference</th>
+              <th className="py-2.5 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Narration</th>
+              <th className="py-2.5 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Debit</th>
+              <th className="py-2.5 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Credit</th>
+              <th className="py-2.5 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
+              <th className="py-2.5 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
@@ -250,15 +230,15 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
               const entries = journalEntries.filter(je => je.voucherId === v.id);
               return (
                 <tr key={v.id} className={cn('hover:bg-muted/20 transition-colors group', v.status === 'Cancelled' && 'opacity-60')}>
-                  <td className="py-3 px-6 text-sm text-foreground whitespace-nowrap">{new Date(v.date).toLocaleDateString()}</td>
-                  <td className="py-3 px-6 text-sm font-medium text-foreground">
+                  <td className="py-2.5 px-4 text-sm text-foreground whitespace-nowrap">{new Date(v.date).toLocaleDateString()}</td>
+                  <td className="py-2.5 px-4 text-sm font-medium text-foreground">
                     <button className="hover:text-primary hover:underline" onClick={() => setViewVoucherId(v.id)}>{v.voucherNo}</button>
                   </td>
-                  <td className="py-3 px-6 text-sm text-muted-foreground">{v.referenceNo || '-'}</td>
-                  <td className="py-3 px-6 text-sm text-muted-foreground max-w-[240px] truncate">{v.narration || '-'}</td>
-                  <td className="py-3 px-6 text-sm text-right font-medium text-success">{v.totalDebit > 0 ? v.totalDebit.toLocaleString() : ''}</td>
-                  <td className="py-3 px-6 text-sm text-right font-medium text-destructive">{v.totalCredit > 0 ? v.totalCredit.toLocaleString() : ''}</td>
-                  <td className="py-3 px-6">
+                  <td className="py-2.5 px-4 text-sm text-muted-foreground">{v.referenceNo || '-'}</td>
+                  <td className="py-2.5 px-4 text-sm text-muted-foreground max-w-[240px] truncate">{v.narration || '-'}</td>
+                  <td className="py-2.5 px-4 text-sm text-right font-medium text-success">{v.totalDebit > 0 ? v.totalDebit.toLocaleString() : ''}</td>
+                  <td className="py-2.5 px-4 text-sm text-right font-medium text-destructive">{v.totalCredit > 0 ? v.totalCredit.toLocaleString() : ''}</td>
+                  <td className="py-2.5 px-4">
                     <span className={cn(
                       'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium',
                       v.status === 'Posted' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'
@@ -268,7 +248,7 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
                       {v.status}
                     </span>
                   </td>
-                  <td className="py-3 px-6 text-right whitespace-nowrap">
+                  <td className="py-2.5 px-4 text-right whitespace-nowrap">
                     <div className="flex items-center justify-end gap-1.5">
                       <button
                         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground border border-border/60 transition-all active:scale-95"
