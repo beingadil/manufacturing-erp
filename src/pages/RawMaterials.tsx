@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from "react";
 import { useERPStore } from "../store/useERPStore";
 import { cn } from "../lib/utils";
-import { Plus, PackageSearch, X, Pencil } from "lucide-react";
+import { Plus, PackageSearch, X, Pencil, Trash2, Layers, Wallet } from "lucide-react";
 import { Link } from "react-router-dom";
-import { DataTable, Column } from "../components/DataTable";
+import { DataTable, Column, RowActionButton } from "../components/DataTable";
+import { KpiCard } from '../components/ui/KpiCard';
 
 import { MaterialService } from '../services/MaterialService';
 import { toast } from 'sonner';
@@ -237,21 +238,21 @@ export function RawMaterials() {
       label: "Actions",
       align: "right",
       render: (item) => (
-        <div className="flex items-center justify-end space-x-2">
-          <button
+        <div className="flex items-center justify-end gap-1">
+          <RowActionButton
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); openEditModal(item); }}
-            className="text-muted-foreground/80 hover:text-primary transition-colors p-1"
-            title="Edit Material"
+            label={`Edit ${item.name}`}
+            tone="primary"
           >
-            <Pencil className="h-4 w-4" />
-          </button>
-          <button
+            <Pencil />
+          </RowActionButton>
+          <RowActionButton
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteClick(item); }}
-            className="text-muted-foreground/80 hover:text-destructive transition-colors p-1"
-            title="Delete"
+            label={`Delete ${item.name}`}
+            tone="destructive"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-trash-2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
-          </button>
+            <Trash2 />
+          </RowActionButton>
         </div>
       )
     },
@@ -277,36 +278,50 @@ export function RawMaterials() {
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteDialog({ ...deleteDialog, isOpen: false })}
       />
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-foreground">Raw Materials</h2>
-          <p className="text-sm text-muted-foreground mt-1">Manage raw material items in your inventory.</p>
-        </div>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Add Material
-          </button>
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-md">
+            <PackageSearch className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">Raw Materials</h2>
+            <p className="text-sm text-muted-foreground mt-0.5">Manage raw material items in your inventory.</p>
+          </div>
         </div>
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors"
+        >
+          <Plus className="h-4 w-4" />
+          Add Material
+        </button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-          <div className="text-xs text-muted-foreground uppercase tracking-wide">Total Materials</div>
-          <div className="text-xl font-bold text-foreground mt-1">{formatNumber(enrichedMaterials.length)}</div>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-          <div className="text-xs text-muted-foreground uppercase tracking-wide">Total Raw Stock</div>
-          <div className="text-xl font-bold text-foreground mt-1">{formatNumber(enrichedMaterials.reduce((s, m) => s + (m.stockPcs || 0), 0))} <span className="text-sm font-medium text-muted-foreground">PCS</span></div>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-          <div className="text-xs text-muted-foreground uppercase tracking-wide">Total Inventory Value</div>
-          <div className="text-xl font-bold text-success mt-1">{formatCurrency(enrichedMaterials.reduce((s, m) => s + (m.value || 0), 0))}</div>
-          <div className="text-xs text-muted-foreground mt-0.5">Raw stock valued at actual purchase cost (per batch)</div>
-        </div>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <KpiCard
+          label="Total Materials"
+          value={formatNumber(enrichedMaterials.length)}
+          icon={<PackageSearch className="h-5 w-5" />}
+          iconClassName="text-emerald-500"
+          size="sm"
+        />
+        <KpiCard
+          label="Total Raw Stock"
+          value={formatNumber(enrichedMaterials.reduce((s, m) => s + (m.stockPcs || 0), 0))}
+          icon={<Layers className="h-5 w-5" />}
+          iconClassName="text-teal-500"
+          size="sm"
+          description="PCS in raw stock across all materials"
+        />
+        <KpiCard
+          label="Total Inventory Value"
+          value={formatCurrency(enrichedMaterials.reduce((s, m) => s + (m.value || 0), 0))}
+          icon={<Wallet className="h-5 w-5" />}
+          iconClassName="text-emerald-500"
+          accent="text-success"
+          size="sm"
+          description="Raw stock valued at actual purchase cost (per batch)"
+        />
       </div>
 
       <DataTable

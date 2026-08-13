@@ -7,7 +7,7 @@ import { ErrorManagement } from '../lib/validation';
 import { PurchaseService } from '../services/PurchaseService';
 import { Plus, FileText, X } from "lucide-react";
 import { formatCurrency } from "../lib/utils";
-import { DataTable, Column } from "../components/DataTable";
+import { DataTable, Column, RowActionButton } from "../components/DataTable";
 import { SearchableSelect } from "../components/SearchableSelect";
 import { QuickAddSupplier, QuickAddMaterial } from "../components/QuickAddModals";
 import { VoucherHistoryTab } from "../components/VoucherHistoryTab";
@@ -110,21 +110,26 @@ export function Purchases() {
     { key: "amount", label: "Amount", align: "right", sortable: true, render: (item) => <span className="font-medium text-destructive">{formatCurrency(item.amount)}</span> },
     { key: "voucherNo", label: "Voucher #", sortable: true, render: (item) => item.voucherNo ? <Link to="/accounting/cashbook" className="font-mono text-xs text-primary hover:underline">{item.voucherNo}</Link> : <span className="text-muted-foreground/30 text-xs">—</span> }
     ,{ key: "actions", label: "Actions", align: "right", render: (item) => (
-      <div className="flex justify-end gap-2">
-        <button 
+      <div className="flex justify-end gap-1">
+        <RowActionButton
           onClick={() => {
             const supplier = useERPStore.getState().suppliers.find(s => s.id === item.supplierId);
             const material = useERPStore.getState().materials.find(m => m.id === item.materialId);
             generatePurchaseInvoicePDF(item, supplier, material);
           }}
-          className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors" 
-          title="Print Invoice"
+          label={`Print invoice for ${item.purchaseNo}`}
         >
-          <Printer className="h-4 w-4" />
-        </button>
-        <button className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors" title="View"><Eye className="h-4 w-4" /></button>
-        <button onClick={() => handleEditClick(item)} className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors" title="Edit"><Edit className="h-4 w-4" /></button>
-        <button onClick={() => setDeleteModal({isOpen: true, id: item.id, no: item.purchaseNo})} className="p-1.5 hover:bg-destructive/10 text-destructive rounded-md transition-colors" title="Delete"><Trash2 className="h-4 w-4" /></button>
+          <Printer />
+        </RowActionButton>
+        <RowActionButton label={`View ${item.purchaseNo}`}>
+          <Eye />
+        </RowActionButton>
+        <RowActionButton onClick={() => handleEditClick(item)} label={`Edit ${item.purchaseNo}`} tone="primary">
+          <Edit />
+        </RowActionButton>
+        <RowActionButton onClick={() => setDeleteModal({isOpen: true, id: item.id, no: item.purchaseNo})} label={`Delete ${item.purchaseNo}`} tone="destructive">
+          <Trash2 />
+        </RowActionButton>
       </div>
     ) }
   ];
