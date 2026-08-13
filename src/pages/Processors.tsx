@@ -1,9 +1,10 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useERPStore } from "../store/useERPStore";
-import { formatCurrency, cn } from "../lib/utils";
-import { Plus, UserCog, X, Pencil } from "lucide-react";
-import { DataTable, Column } from "../components/DataTable";
+import { formatCurrency, formatNumber, cn } from "../lib/utils";
+import { Plus, UserCog, X, Pencil, Wallet, CircleDollarSign } from "lucide-react";
+import { DataTable, Column, RowActionButton } from "../components/DataTable";
+import { KpiCard } from '../components/ui/KpiCard';
 import { PartyLedgerModal } from "../components/PartyLedgerModal";
 import { toast } from "sonner";
 
@@ -104,9 +105,9 @@ export function Processors() {
       align: "right",
       render: (item) => (
         <div className="flex justify-end items-center gap-2">
-          <button onClick={() => openEditModal(item)} className="p-1.5 text-muted-foreground/80 hover:text-primary transition-colors" title="Edit Processor">
-            <Pencil className="h-4 w-4" />
-          </button>
+          <RowActionButton onClick={() => openEditModal(item)} label={`Edit ${item.name}`} tone="primary">
+            <Pencil />
+          </RowActionButton>
           <button onClick={() => setLedgerParty({ id: item.id, name: item.name, kind: 'Processor' })} className="px-3 py-1.5 text-xs font-semibold text-primary bg-primary/10 border border-primary/20 rounded-md hover:bg-primary/20 transition-all">View Ledger</button>
           <button onClick={() => navigate(`/ledgers?tab=Processor&id=${item.id}&action=pay`)} className="px-3 py-1.5 text-xs font-semibold text-foreground bg-card border border-border rounded-md hover:bg-muted/40 transition-all">Pay</button>
         </div>
@@ -116,16 +117,48 @@ export function Processors() {
   
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-foreground">Processors</h2>
-          <p className="text-sm text-muted-foreground mt-1">Manage external processing units and their balances.</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-fuchsia-500 to-purple-600 text-white shadow-md">
+            <UserCog className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">Processors</h2>
+            <p className="text-sm text-muted-foreground mt-0.5">Manage external processing units and their balances.</p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <button onClick={() => setIsModalOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
             <Plus className="h-4 w-4" /> Create New
           </button>
         </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <KpiCard
+          label="Total Processors"
+          value={formatNumber(processors.length)}
+          icon={<UserCog className="h-5 w-5" />}
+          iconClassName="text-fuchsia-500"
+          size="sm"
+        />
+        <KpiCard
+          label="Total Payable"
+          value={formatCurrency(processors.reduce((s, p) => s + (p.balancePayable || 0), 0))}
+          icon={<Wallet className="h-5 w-5" />}
+          iconClassName="text-purple-500"
+          accent="text-destructive"
+          size="sm"
+          description="Outstanding balance across all processors"
+        />
+        <KpiCard
+          label="Processors with Balance"
+          value={formatNumber(processors.filter(p => (p.balancePayable || 0) > 0).length)}
+          icon={<CircleDollarSign className="h-5 w-5" />}
+          iconClassName="text-fuchsia-500"
+          size="sm"
+          description="Processors currently owed money"
+        />
       </div>
 
       <DataTable

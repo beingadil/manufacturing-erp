@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from "react";
 import { useERPStore } from "../store/useERPStore";
-import { Plus, X, Pencil, Trash2 } from "lucide-react";
-import { DataTable, Column } from "../components/DataTable";
-import { formatCurrency } from "../lib/utils";
+import { Plus, X, Pencil, Trash2, Package, Boxes } from "lucide-react";
+import { DataTable, Column, RowActionButton } from "../components/DataTable";
+import { formatCurrency, formatNumber } from "../lib/utils";
+import { KpiCard } from '../components/ui/KpiCard';
 import { SearchableSelect } from "../components/SearchableSelect";
 import { QuickAddMaterial } from "../components/QuickAddModals";
 import { DeleteConfirmationModal } from "../components/DeleteConfirmationModal";
@@ -116,21 +117,21 @@ export function FinishedGoods() {
       label: "Actions",
       align: "right",
       render: (item) => (
-        <div className="flex items-center justify-end space-x-2">
-          <button
+        <div className="flex items-center justify-end gap-1">
+          <RowActionButton
             onClick={() => openEditModal(item)}
-            className="text-muted-foreground/80 hover:text-primary transition-colors p-1"
-            title="Edit Product"
+            label={`Edit ${item.name}`}
+            tone="primary"
           >
-            <Pencil className="h-4 w-4" />
-          </button>
-          <button
+            <Pencil />
+          </RowActionButton>
+          <RowActionButton
             onClick={() => setDeleteModal({ isOpen: true, id: item.id, no: item.name })}
-            className="text-muted-foreground/80 hover:text-destructive transition-colors p-1"
-            title="Delete Product"
+            label={`Delete ${item.name}`}
+            tone="destructive"
           >
-            <Trash2 className="h-4 w-4" />
-          </button>
+            <Trash2 />
+          </RowActionButton>
         </div>
       )
     }
@@ -138,14 +139,45 @@ export function FinishedGoods() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-foreground">Products</h2>
-          <p className="text-sm text-muted-foreground mt-1">Manage final products linked to raw materials.</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 text-white shadow-md">
+            <Package className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">Products</h2>
+            <p className="text-sm text-muted-foreground mt-0.5">Manage final products linked to raw materials.</p>
+          </div>
         </div>
         <button onClick={() => setIsModalOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
           <Plus className="h-4 w-4" /> Add Product
         </button>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <KpiCard
+          label="Total Products"
+          value={formatNumber(enrichedProducts.length)}
+          icon={<Package className="h-5 w-5" />}
+          iconClassName="text-sky-500"
+          size="sm"
+        />
+        <KpiCard
+          label="Products In Stock"
+          value={formatNumber(enrichedProducts.filter(p => (p.availableStock || 0) > 0).length)}
+          icon={<Boxes className="h-5 w-5" />}
+          iconClassName="text-blue-500"
+          size="sm"
+          description="Products with processed stock available"
+        />
+        <KpiCard
+          label="Total Available Stock"
+          value={formatNumber(enrichedProducts.reduce((s, p) => s + (p.availableStock || 0), 0))}
+          icon={<Boxes className="h-5 w-5" />}
+          iconClassName="text-sky-500"
+          size="sm"
+          description="PCS of finished goods ready to sell"
+        />
       </div>
 
       <DataTable

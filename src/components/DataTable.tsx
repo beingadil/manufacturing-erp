@@ -1,5 +1,16 @@
 import React, { useState, useMemo, useEffect, memo } from "react";
-import { ChevronUp, ChevronDown, Search, ChevronLeft, ChevronRight, FileText } from "lucide-react";
+import {
+  ChevronUp,
+  ChevronDown,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  FileText,
+  X
+} from "lucide-react";
+import { cn } from "../lib/utils";
 
 export interface Column<T> {
   key: string;
@@ -17,10 +28,20 @@ interface DataTableProps<T> {
   persistKey?: string;
   emptyStateMessage?: string;
   emptyStateIcon?: React.ReactNode;
+  /** Optional secondary hint rendered under the empty-state message. */
+  emptyStateHint?: string;
   defaultSortKey?: string;
   itemsPerPageOptions?: number[];
 }
 
+/**
+ * Shared DataTable — one table component across every ERP module.
+ *
+ * Design basis (ui-ux-pro-max, Data-Dense Dashboard): compact toolbar,
+ * sticky column header while scrolling, 150ms row hover, WCAG AA contrast,
+ * aria-sort on sortable columns, and 32px+ icon-button targets via
+ * <RowActionButton/>.
+ */
 function DataTableInner<T extends Record<string, any>>({
   data,
   columns,
@@ -29,6 +50,7 @@ function DataTableInner<T extends Record<string, any>>({
   persistKey,
   emptyStateMessage = "No data found",
   emptyStateIcon = <FileText className="h-8 w-8 mb-3 mx-auto text-muted-foreground/40" />,
+  emptyStateHint,
   defaultSortKey,
   itemsPerPageOptions = [10, 25, 50, 100]
 }: DataTableProps<T>) {
@@ -111,44 +133,69 @@ function DataTableInner<T extends Record<string, any>>({
     return sortedData.slice(startIndex, startIndex + itemsPerPage);
   }, [sortedData, safeCurrentPage, itemsPerPage]);
 
+  const paginationBtn =
+    "p-2 rounded-lg border border-border text-muted-foreground hover:bg-muted/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-150";
+
   return (
     <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col">
-      <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-card">
+      <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-card">
         {searchKeys && searchKeys.length > 0 ? (
           <div className="relative flex-1 w-full sm:max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/80" />
             <input
               type="text"
+              aria-label={searchPlaceholder}
               placeholder={searchPlaceholder}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full h-10 pl-9 pr-4 bg-muted/40 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+              className="w-full h-10 pl-9 pr-8 bg-muted/40 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
             />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground/70 hover:bg-muted hover:text-foreground transition-colors duration-150"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         ) : (
           <div />
         )}
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Show</span>
-          <select
-            value={itemsPerPage}
-            onChange={(e) => setItemsPerPage(Number(e.target.value))}
-            className="h-10 px-3 bg-muted/40 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-          >
-            {itemsPerPageOptions.map(opt => (
-              <option key={opt} value={opt}>{opt}</option>
-            ))}
-          </select>
+        <div className="flex items-center gap-3">
+          <span className="hidden sm:inline-flex items-center rounded-full bg-muted/60 px-2.5 py-1 text-xs font-medium text-muted-foreground">
+            {sortedData.length} {sortedData.length === 1 ? 'item' : 'items'}
+          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Show</span>
+            <select
+              aria-label="Rows per page"
+              value={itemsPerPage}
+              onChange={(e) => setItemsPerPage(Number(e.target.value))}
+              className="h-10 px-3 bg-muted/40 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              {itemsPerPageOptions.map(opt => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
       
-      <div className="overflow-x-auto">
+      <div className="overflow-auto max-h-[65vh]">
         <table className="w-full text-sm text-left whitespace-nowrap">
-          <thead className="text-xs text-muted-foreground bg-muted/40 border-b border-border/50">
+          <thead className="sticky top-0 z-10 text-xs text-muted-foreground bg-muted/70 backdrop-blur-sm border-b border-border/50">
             <tr>
               {columns.map((col) => (
                 <th 
                   key={col.key} 
+                  aria-sort={
+                    sortConfig?.key === col.key
+                      ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending')
+                      : 'none'
+                  }
                   className={`px-6 py-4 font-medium ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : ''}`}
                 >
                   {col.sortable ? (
@@ -171,7 +218,7 @@ function DataTableInner<T extends Record<string, any>>({
           </thead>
           <tbody className="divide-y divide-border/50">
             {paginatedData.map((item, idx) => (
-              <tr key={item.id || idx} className="transition-colors hover:bg-muted/40">
+              <tr key={item.id || idx} className="transition-colors duration-150 hover:bg-muted/40">
                 {columns.map((col) => (
                   <td 
                     key={col.key} 
@@ -187,6 +234,9 @@ function DataTableInner<T extends Record<string, any>>({
                 <td colSpan={columns.length} className="px-6 py-12 text-center text-muted-foreground">
                   {emptyStateIcon}
                   <p className="text-sm font-medium text-foreground">{emptyStateMessage}</p>
+                  {emptyStateHint && (
+                    <p className="text-xs text-muted-foreground/70 mt-1">{emptyStateHint}</p>
+                  )}
                 </td>
               </tr>
             )}
@@ -199,23 +249,41 @@ function DataTableInner<T extends Record<string, any>>({
           <div className="text-sm text-muted-foreground">
             Showing <span className="font-medium text-foreground">{(safeCurrentPage - 1) * itemsPerPage + 1}</span> to <span className="font-medium text-foreground">{Math.min(safeCurrentPage * itemsPerPage, sortedData.length)}</span> of <span className="font-medium text-foreground">{sortedData.length}</span> results
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={safeCurrentPage === 1}
+              aria-label="First page"
+              className={paginationBtn}
+            >
+              <ChevronsLeft className="h-4 w-4" />
+            </button>
             <button
               onClick={() => setCurrentPage((p: number) => Math.max(1, p - 1))}
               disabled={safeCurrentPage === 1}
-              className="p-2 rounded-lg border border-border text-muted-foreground hover:bg-muted/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              aria-label="Previous page"
+              className={paginationBtn}
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <div className="text-sm font-medium text-foreground">
+            <div className="text-sm font-medium text-foreground px-2">
               Page {safeCurrentPage} of {totalPages}
             </div>
             <button
               onClick={() => setCurrentPage((p: number) => Math.min(totalPages, p + 1))}
               disabled={safeCurrentPage === totalPages}
-              className="p-2 rounded-lg border border-border text-muted-foreground hover:bg-muted/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              aria-label="Next page"
+              className={paginationBtn}
             >
               <ChevronRight className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={safeCurrentPage === totalPages}
+              aria-label="Last page"
+              className={paginationBtn}
+            >
+              <ChevronsRight className="h-4 w-4" />
             </button>
           </div>
         </div>
@@ -226,3 +294,37 @@ function DataTableInner<T extends Record<string, any>>({
 
 // Memoized version for better performance with large datasets
 export const DataTable = memo(DataTableInner) as typeof DataTableInner;
+
+/** Shared icon-only action button for table rows — 32px target, 150ms hover, accessible label. */
+export function RowActionButton({
+  onClick,
+  label,
+  tone = "neutral",
+  children,
+  className,
+}: {
+  onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  /** Accessible name (aria-label) and tooltip. */
+  label: string;
+  tone?: "neutral" | "primary" | "destructive";
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className={cn(
+        "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-150 [&>svg]:h-4 [&>svg]:w-4",
+        tone === "neutral" && "text-muted-foreground/80 hover:bg-muted hover:text-foreground",
+        tone === "primary" && "text-muted-foreground/80 hover:bg-primary/10 hover:text-primary",
+        tone === "destructive" && "text-muted-foreground/80 hover:bg-destructive/10 hover:text-destructive",
+        className
+      )}
+    >
+      {children}
+    </button>
+  );
+}
