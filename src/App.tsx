@@ -18,7 +18,6 @@ import { Settings } from './pages/Settings';
 import { Purchases } from './pages/Purchases';
 import { Sales } from './pages/Sales';
 import { Suppliers } from './pages/Suppliers';
-import { SystemMaintenance } from './pages/SystemMaintenance';
 import { Customers } from './pages/Customers';
 import { Reports } from './pages/Reports';
 import Categories from './pages/Categories';
@@ -29,11 +28,9 @@ import { CashReceiptVoucher } from './pages/finance/CashReceiptVoucher';
 import { BankReceiptVoucher } from './pages/finance/BankReceiptVoucher';
 import { JournalVoucher } from './pages/finance/JournalVoucher';
 import { CashBookPage } from './pages/finance/CashBookPage';
-import { SystemHealthDashboard } from './pages/SystemHealth';
 import { AuthProvider } from './contexts/AuthContext';
 import { RouteGuard } from './components/common/RouteGuard';
 import { Login } from './pages/Login';
-import { UserManagement } from './pages/UserManagement';
 import { useSettingsStore } from './store/useSettingsStore';
 import { Toaster } from '@/components/ui/sonner';
 import UpdateManager from '@/components/UpdateManager';
@@ -159,10 +156,9 @@ export default function App() {
           <Route path="accounting/profit-loss" element={<RouteGuard requireModule="Accounting" requireAction="View"><Accounting /></RouteGuard>} />
           <Route path="accounting/balance-sheet" element={<RouteGuard requireModule="Accounting" requireAction="View"><Accounting /></RouteGuard>} />
           <Route path="accounting/cash-flow" element={<RouteGuard requireModule="Accounting" requireAction="View"><Accounting /></RouteGuard>} />
-          <Route path="users" element={<RouteGuard requireModule="Users" requireAction="View"><UserManagement /></RouteGuard>} />
-          <Route path="maintenance" element={<RouteGuard requireModule="Settings" requireAction="View"><SystemMaintenance /></RouteGuard>} />
           <Route path="settings" element={<RouteGuard requireModule="Settings" requireAction="View"><Settings /></RouteGuard>} />
-          <Route path="settings/health" element={<RouteGuard requireModule="Settings" requireAction="View"><SystemHealthDashboard /></RouteGuard>} />
+          <Route path="users" element={<Navigate to="/settings" replace />} />
+          <Route path="maintenance" element={<Navigate to="/settings" replace />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
         <Route path="/monitor" element={<MonitorScreen />} />

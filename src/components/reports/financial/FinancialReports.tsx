@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { GeneralLedgerReport } from './GeneralLedgerReport';
 import { CashbookReport } from './CashbookReport';
 import { BankBookReport } from './BankBookReport';
@@ -13,8 +13,6 @@ import { ReceivableAgingReport } from './ReceivableAgingReport';
 import { PayableAgingReport } from './PayableAgingReport';
 import { ExpenseAnalysis } from './ExpenseAnalysis';
 import { RevenueAnalysis } from './RevenueAnalysis';
-
-const Placeholder = ({ name }: {name:string}) => <div className="p-8 text-center text-muted-foreground">{name} Report will be implemented here.</div>;
 
 export function FinancialReports({ activeReport }: { activeReport: string }) {
   switch (activeReport) {
@@ -32,6 +30,6 @@ export function FinancialReports({ activeReport }: { activeReport: string }) {
     case 'payable-aging': return <PayableAgingReport />;
     case 'expense-analysis': return <ExpenseAnalysis />;
     case 'revenue-analysis': return <RevenueAnalysis />;
-    default: return <Placeholder name={activeReport} />;
+    default: return null;
   }
 }

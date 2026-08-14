@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   DownloadCloud, AlertTriangle, CheckCircle2, Database, FileDown, FileUp,
   HardDrive, Loader2, Trash2, Info, Monitor,
@@ -189,7 +189,7 @@ export function BackupRestoreTab() {
   // ── Non-desktop notice (plain browser / dev server) ───────────────────────
   if (!isDesktop) {
     return (
-      <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
         <div className="p-6 border-b border-border/50 bg-muted/40">
           <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
             <Database className="h-5 w-5 text-primary" />
@@ -212,7 +212,7 @@ export function BackupRestoreTab() {
   return (
     <div className="space-y-6">
       {/* ── Action Buttons ── */}
-      <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
         <div className="p-6 border-b border-border/50 bg-muted/40">
           <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
             <Database className="h-5 w-5 text-primary" />
@@ -246,7 +246,7 @@ export function BackupRestoreTab() {
             <button
               onClick={handleImportBackup}
               disabled={busy !== null}
-              className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium border-2 border-amber-400/50 text-amber-700 dark:text-amber-300 rounded-xl hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors disabled:opacity-50"
+              className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium border border-warning/40 text-warning rounded-xl hover:bg-warning/10 transition-colors disabled:opacity-50"
             >
               {busy === 'import' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
               {busy === 'import' ? 'Importing...' : 'Import Backup'}
@@ -260,12 +260,12 @@ export function BackupRestoreTab() {
       </div>
 
       {/* ── Import/Export integrity note ── */}
-      <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+      <div className="p-4 rounded-xl bg-warning/10 border border-warning/30">
         <div className="flex items-start gap-3">
-          <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+          <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
           <div>
-            <p className="font-medium text-sm text-amber-800 dark:text-amber-300">How restore works</p>
-            <p className="text-xs text-amber-600/70 dark:text-amber-400/70 mt-1">
+            <p className="font-medium text-sm text-warning">How restore works</p>
+            <p className="text-xs text-muted-foreground mt-1">
               Restoring or importing replaces the entire database with the chosen file.
               A safety backup of your current data is always created first, and the
               app reloads when the restore finishes. Importing a{' '}
@@ -324,7 +324,7 @@ export function BackupRestoreTab() {
       )}
 
       {/* ── Snapshot list ── */}
-      <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
         <div className="p-6 border-b border-border/50 bg-muted/40 flex items-center justify-between">
           <div>
             <h3 className="text-lg font-bold text-foreground">Saved Snapshots</h3>
@@ -355,7 +355,7 @@ export function BackupRestoreTab() {
                     <button
                       onClick={() => handleDeleteBackup(b)}
                       disabled={busy !== null}
-                      className="p-2 text-muted-foreground hover:text-red-600 hover:bg-destructive/10 rounded-lg transition-colors disabled:opacity-50"
+                      className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors disabled:opacity-50"
                       title="Delete snapshot"
                     >
                       <Trash2 className="h-4 w-4" />

@@ -1,28 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Desktop } from '@/lib/desktop/DesktopInterop';
 import { useERPStore } from '@/store/useERPStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { SQLiteStorageAdapter } from '@/database/sqlite/SQLiteStorageAdapter';
-import { Server, Cpu, HardDrive, Database, ListOrdered, FileJson, Beaker, Play, RefreshCw, ShieldCheck } from 'lucide-react';
-import { DataSimulator } from '@/lib/qa/DataSimulator';
-import { toast } from 'sonner';
-import { getVersionInfo, IS_PRODUCTION, ENVIRONMENT } from '@/config/version';
+import { Server, Cpu, HardDrive, Database, ListOrdered, FileJson } from 'lucide-react';
+import { getVersionInfo, IS_PRODUCTION } from '@/config/version';
 
 export function SystemDiagnosticsTab() {
   const [dbSize, setDbSize] = useState<string>('Calculating...');
-  
-  // QA & Simulation State
-  const [simCustomers, setSimCustomers] = useState('100');
-  const [simSuppliers, setSimSuppliers] = useState('50');
-  const [simPurchases, setSimPurchases] = useState('500');
-  const [simSales, setSimSales] = useState('500');
-  const [simDays, setSimDays] = useState('365');
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [simProgress, setSimProgress] = useState<string[]>([]);
-  const [isCertifying, setIsCertifying] = useState(false);
 
   const state = useERPStore();
   const settings = useSettingsStore();
@@ -67,45 +53,12 @@ export function SystemDiagnosticsTab() {
     { label: 'Finished Products', value: state.products.length },
     { label: 'Vouchers', value: state.vouchers.length },
     { label: 'Journal Entries', value: state.journalEntries.length },
-    { label: 'Vouchers', value: state.vouchers.length },
-    { label: 'Journal Entries', value: state.journalEntries.length },
     { label: 'Inventory Movements', value: state.inventoryMovements.length },
     { label: 'Purchases', value: state.purchases.length },
     { label: 'Sales', value: state.sales.length },
     { label: 'Processing Dispatches', value: state.processingSends.length },
     { label: 'Processing Receipts', value: state.processingReceipts.length },
   ];
-
-  const handleRunSimulation = async () => {
-    setIsSimulating(true);
-    setSimProgress([]);
-    const handleProgress = (msg: string) => {
-      setSimProgress(prev => [...prev, msg]);
-    };
-    
-    await DataSimulator.simulateData({
-      customers: parseInt(simCustomers) || 0,
-      suppliers: parseInt(simSuppliers) || 0,
-      purchases: parseInt(simPurchases) || 0,
-      sales: parseInt(simSales) || 0,
-      daysRange: parseInt(simDays) || 30
-    }, handleProgress);
-    
-    setIsSimulating(false);
-    toast.success('Simulation Complete');
-  };
-
-  const handleRunCertification = async () => {
-    setIsCertifying(true);
-    setSimProgress([]);
-    const handleProgress = (msg: string) => {
-      setSimProgress(prev => [...prev, msg]);
-    };
-    
-    await DataSimulator.runCertificationChecks(handleProgress);
-    setIsCertifying(false);
-    toast.success('Certification Complete');
-  };
 
   return (
     <div className="space-y-6">
@@ -156,70 +109,6 @@ export function SystemDiagnosticsTab() {
         </CardContent>
       </Card>
     </div>
-
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Beaker className="h-5 w-5 text-primary" />
-          Enterprise QA & Data Simulation
-        </CardTitle>
-        <CardDescription>Generate stress-testing data and run production certification (Phase 11)</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="space-y-4">
-            <h3 className="text-sm font-medium">Data Simulator</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-xs">Customers to Generate</label>
-                <Input type="number" value={simCustomers} onChange={e => setSimCustomers(e.target.value)} disabled={isSimulating} />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs">Suppliers to Generate</label>
-                <Input type="number" value={simSuppliers} onChange={e => setSimSuppliers(e.target.value)} disabled={isSimulating} />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs">Purchases to Generate</label>
-                <Input type="number" value={simPurchases} onChange={e => setSimPurchases(e.target.value)} disabled={isSimulating} />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs">Sales to Generate</label>
-                <Input type="number" value={simSales} onChange={e => setSimSales(e.target.value)} disabled={isSimulating} />
-              </div>
-              <div className="space-y-2 col-span-2">
-                <label className="text-xs">Spread across past days</label>
-                <Input type="number" value={simDays} onChange={e => setSimDays(e.target.value)} disabled={isSimulating} />
-              </div>
-            </div>
-            <div className="flex gap-2 pt-2">
-              <Button onClick={handleRunSimulation} disabled={isSimulating || isCertifying} className="w-full">
-                {isSimulating ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />}
-                Run Stress Test Simulation
-              </Button>
-            </div>
-          </div>
-          
-          <div className="space-y-4">
-            <h3 className="text-sm font-medium">Enterprise Certification</h3>
-            <p className="text-sm text-muted-foreground">
-              Runs deep reconciliation checks across Accounting and Inventory engines to ensure no data anomalies exist.
-            </p>
-            <Button variant="outline" onClick={handleRunCertification} disabled={isSimulating || isCertifying} className="w-full border-primary/20 hover:bg-primary/5 text-primary">
-              {isCertifying ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <ShieldCheck className="h-4 w-4 mr-2" />}
-              Run Full QA Certification
-            </Button>
-
-            <div className="mt-4 p-3 bg-muted/30 rounded-md border h-[180px] overflow-y-auto text-xs font-mono">
-              {simProgress.length === 0 ? (
-                <span className="text-muted-foreground">Output console...</span>
-              ) : (
-                simProgress.map((msg, i) => <div key={i} className="mb-1">{msg}</div>)
-              )}
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
     </div>
   );
 }

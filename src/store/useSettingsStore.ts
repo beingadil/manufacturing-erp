@@ -23,15 +23,6 @@ export interface SettingsState {
   // Preferences
   theme: 'light' | 'dark' | 'system';
   setTheme: (theme: 'light' | 'dark' | 'system') => void;
-  language: string;
-  timezone: string;
-  notificationsEnabled: boolean;
-  privacyMode: boolean;
-  setPreferences: (data: Partial<SettingsState>) => void;
-
-  // Security (UI State)
-  twoFactorEnabled: boolean;
-  setTwoFactor: (enabled: boolean) => void;
 
   // Voucher Numbering
   voucherYearlyReset: boolean;
@@ -60,14 +51,6 @@ export const useSettingsStore = create<SettingsState>()(
 
       theme: 'system',
       setTheme: (theme) => set({ theme }),
-      language: 'en-US',
-      timezone: 'UTC',
-      notificationsEnabled: true,
-      privacyMode: false,
-      setPreferences: (data) => set((state) => ({ ...state, ...data })),
-
-      twoFactorEnabled: false,
-      setTwoFactor: (twoFactorEnabled) => set({ twoFactorEnabled }),
 
       voucherYearlyReset: true,
       voucherPrefixes: {
