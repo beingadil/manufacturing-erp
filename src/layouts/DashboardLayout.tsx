@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Monitor, PackageSearch, ShoppingCart, Users, Settings, Shield, Bell, Search, Menu, X, FileText, Truck, UserCog, Briefcase, Wallet, Moon, Sun, Database, Factory, Banknote, Calculator, ChevronDown, ChevronRight, DollarSign, BarChart3 } from "lucide-react";
-import { cn, formatCurrency } from "../lib/utils";
+import { LayoutDashboard, Monitor, PackageSearch, ShoppingCart, Users, Settings, Bell, Search, Menu, X, FileText, Truck, UserCog, Briefcase, Wallet, Moon, Sun, Database, Factory, Calculator, ChevronDown, ChevronRight, DollarSign, BarChart3 } from "lucide-react";
+import { cn, } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
 import { useSettingsStore } from "../store/useSettingsStore";
 import { useAuth } from "../contexts/AuthContext";
@@ -333,10 +333,10 @@ function NotificationBell() {
 }
 
 export function DashboardLayout() {
-  const { user, profile, isAdmin, hasPermission, signOut } = useAuth();
+  const { user, profile, hasPermission, signOut } = useAuth();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { dashboardName, tagline, logo, logoPosition, profilePhoto, theme, setTheme } = useSettingsStore();
+  const { dashboardName, tagline, logo, profilePhoto, theme, setTheme } = useSettingsStore();
 
   // Live record counts for the nav badges (data-dense sidebar)
   const badgeCounts = {
@@ -416,13 +416,6 @@ export function DashboardLayout() {
         { icon: BarChart3, label: "Reports", path: "/reports", requiredModule: "Reports" },
       ]
     },
-    ...(hasPermission('Users', 'View') || hasPermission('Settings', 'View') ? [{
-      title: "System Admin",
-      items: [
-        ...(hasPermission('Users', 'View') ? [{ icon: Shield, label: "Access Management", path: "/users", requiredModule: "Users" }] : []),
-        ...(hasPermission('Settings', 'View') ? [{ icon: Database, label: "System Maintenance", path: "/maintenance", requiredModule: "Settings" }] : []),
-      ]
-    }] : [])
   ];
 
   useEffect(() => {

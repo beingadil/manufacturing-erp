@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Loader2, Search } from 'lucide-react';
 import { useAccessStore } from '@/store/useAccessStore';
 import { AuditLog } from '@/types/access';

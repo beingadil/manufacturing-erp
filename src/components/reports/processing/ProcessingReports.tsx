@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { ProcessingDispatchReport } from './ProcessingDispatchReport';
 import { ProcessingReceiveReport } from './ProcessingReceiveReport';
 import { PendingProcessingReport } from './PendingProcessingReport';
@@ -9,8 +9,6 @@ import { ProcessingEfficiency } from './ProcessingEfficiency';
 import { ProcessingLossReport } from './ProcessingLossReport';
 import { ProcessorPerformance } from './ProcessorPerformance';
 import { PendingPCSReport } from './PendingPCSReport';
-
-const Placeholder = ({ name }: {name:string}) => <div className="p-8 text-center text-muted-foreground">{name} Report will be implemented here.</div>;
 
 export function ProcessingReports({ activeReport }: { activeReport: string }) {
   switch (activeReport) {
@@ -24,6 +22,6 @@ export function ProcessingReports({ activeReport }: { activeReport: string }) {
     case 'processing-loss': return <ProcessingLossReport />;
     case 'processor-performance': return <ProcessorPerformance />;
     case 'pending-pcs': return <PendingPCSReport />;
-    default: return <Placeholder name={activeReport} />;
+    default: return null;
   }
 }

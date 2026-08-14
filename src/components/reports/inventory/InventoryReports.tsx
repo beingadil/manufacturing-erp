@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { CurrentStockReport } from './CurrentStockReport';
 import { StockMovement } from './StockMovement';
 import { RawMaterialStock } from './RawMaterialStock';
@@ -12,8 +12,6 @@ import { InventoryAging } from './InventoryAging';
 import { InventoryTurnover } from './InventoryTurnover';
 import { StockAdjustmentReport } from './StockAdjustmentReport';
 import { StockLedger } from './StockLedger';
-
-const Placeholder = ({ name }: {name:string}) => <div className="p-8 text-center text-muted-foreground">{name} Report will be implemented here.</div>;
 
 export function InventoryReports({ activeReport }: { activeReport: string }) {
   switch (activeReport) {
@@ -30,6 +28,6 @@ export function InventoryReports({ activeReport }: { activeReport: string }) {
     case 'inventory-turnover': return <InventoryTurnover />;
     case 'stock-adjustment': return <StockAdjustmentReport />;
     case 'stock-ledger': return <StockLedger />;
-    default: return <Placeholder name={activeReport} />;
+    default: return null;
   }
 }

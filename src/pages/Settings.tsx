@@ -1,22 +1,22 @@
 import React, { useState, useRef } from "react";
-import { 
-  User, Image as ImageIcon, Palette, Bell, Shield, Download, Upload,
-  Save, CheckCircle2, Lock, Smartphone, Key, Globe, Clock, Monitor, Trash2,
-  Database, Activity, Hash, Info, ExternalLink, RotateCw, DownloadCloud,
-  AlertCircle, FileDown, FileUp, HardDrive, AlertTriangle,
-  Sparkles, ChevronDown, ChevronRight
+import {
+  User, Image as ImageIcon, Palette, Bell,
+  Save, CheckCircle2, Monitor, Trash2,
+  Database, Hash, Info, ExternalLink, RotateCw, DownloadCloud,
+  AlertCircle,
+  Sparkles, ChevronDown, ChevronRight, Settings as SettingsIcon,
+  Users, Wrench
 } from "lucide-react";
 import { SeedChartOfAccountsButton } from "@/components/settings/SeedChartOfAccountsButton";
-import { BackupRestoreTab } from "@/components/maintenance/BackupRestoreTab";
+import { AccessManagementPanel } from "@/components/access/AccessManagementPanel";
+import { SystemMaintenancePanel } from "@/components/maintenance/SystemMaintenancePanel";
 import { cn } from "../lib/utils";
 import { useSettingsStore } from "../store/useSettingsStore";
 import { useERPStore, MODULE_WIPE_KEYS, WIPE_MODULE_LABELS } from "../store/useERPStore";
-import { useNavigate } from "react-router-dom";
 
 import { useAuth } from '../contexts/AuthContext';
 import { APP_VERSION, BUILD_NUMBER, RELEASE_DATE, DATABASE_SCHEMA_VERSION } from '../config/version';
 import { CHANGELOG, type ChangelogEntry } from '../config/changelog';
-import { Loader2 } from 'lucide-react';
 
 export function Settings() {
   const [activeTab, setActiveTab] = useState('profile');
@@ -31,19 +31,23 @@ export function Settings() {
     { id: 'profile', label: 'User Profile', icon: User },
     { id: 'branding', label: 'Dashboard Branding', icon: Palette },
     { id: 'preferences', label: 'Preferences', icon: Bell },
-    { id: 'security', label: 'Security', icon: Shield },
-    { id: 'backup', label: 'Backup & Restore', icon: Database },
+    { id: 'access', label: 'Access Management', icon: Users },
+    { id: 'maintenance', label: 'System Maintenance', icon: Wrench },
     { id: 'advanced', label: 'Advanced Features', icon: Monitor },
     { id: 'voucher', label: 'Voucher Numbering', icon: Hash },
-    { id: 'health', label: 'System Health', icon: Activity },
     { id: 'about', label: 'About & Updates', icon: Info },
   ];
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto animate-in fade-in duration-500 pb-20">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight text-foreground">Settings</h2>
-        <p className="text-sm text-muted-foreground mt-1">Manage your account, branding, security, and application preferences.</p>
+    <div className="space-y-8 max-w-6xl mx-auto animate-in fade-in duration-300 pb-20">
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <SettingsIcon className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-foreground leading-tight">Settings</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">Manage your account, branding, security, and application preferences.</p>
+        </div>
       </div>
 
       <div className="flex flex-col md:flex-row gap-8">
@@ -55,13 +59,16 @@ export function Settings() {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  "flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-all whitespace-nowrap md:whitespace-normal",
+                  "relative flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors duration-150 whitespace-nowrap md:whitespace-normal",
                   activeTab === tab.id 
-                    ? "bg-primary text-primary-foreground shadow-md" 
+                    ? "bg-primary/10 text-primary" 
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >
-                <tab.icon className={cn("h-4 w-4", activeTab === tab.id ? "text-primary-foreground/80" : "text-muted-foreground/80")} />
+                {activeTab === tab.id && (
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-primary" aria-hidden="true" />
+                )}
+                <tab.icon className={cn("h-4 w-4", activeTab === tab.id ? "text-primary" : "text-muted-foreground/80")} />
                 {tab.label}
               </button>
             ))}
@@ -73,38 +80,11 @@ export function Settings() {
           {activeTab === 'profile' && <ProfileTab onSave={handleSave} showSavedToast={showSavedToast} />}
           {activeTab === 'branding' && <BrandingTab onSave={handleSave} showSavedToast={showSavedToast} />}
           {activeTab === 'preferences' && <PreferencesTab onSave={handleSave} showSavedToast={showSavedToast} />}
-          {activeTab === 'security' && <SecurityTab onSave={handleSave} showSavedToast={showSavedToast} />}
-          {activeTab === 'backup' && <BackupRestoreTab />}
-          {activeTab === 'advanced' && <AdvancedTab onSave={handleSave} showSavedToast={showSavedToast} />}
+          {activeTab === 'access' && <AccessManagementPanel />}
+          {activeTab === 'maintenance' && <SystemMaintenancePanel />}
+          {activeTab === 'advanced' && <AdvancedTab />}
           {activeTab === 'voucher' && <VoucherNumberingTab onSave={handleSave} showSavedToast={showSavedToast} />}
-          {activeTab === 'health' && <HealthTab />}
           {activeTab === 'about' && <AboutUpdatesTab />}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function HealthTab() {
-  const navigate = useNavigate();
-  return (
-    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
-      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40">
-        <h3 className="text-lg font-bold text-foreground">System Health Check</h3>
-        <p className="text-sm text-muted-foreground mt-1">Run diagnostics and verify database integrity.</p>
-      </div>
-      <div className="p-6 sm:p-8">
-        <div className="p-6 bg-muted/30 rounded-xl border border-border flex items-center justify-between">
-          <div>
-            <h4 className="font-semibold text-foreground">Full Diagnostics</h4>
-            <p className="text-sm text-muted-foreground mt-1">Verify database integrity, orphan records, and voucher balances.</p>
-          </div>
-          <button 
-            onClick={() => navigate('/settings/health')}
-            className="px-6 py-2 bg-primary text-primary-foreground font-medium rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2"
-          >
-            <Activity className="h-4 w-4" /> Run System Check
-          </button>
         </div>
       </div>
     </div>
@@ -147,12 +127,8 @@ function ProfileTab({ onSave, showSavedToast }: { onSave: () => void, showSavedT
   };
 
   return (
-    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
-      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40">
-        <h3 className="text-lg font-bold text-foreground">User Profile</h3>
-        <p className="text-sm text-muted-foreground mt-1">Update your personal information and profile photo.</p>
-      </div>
-      <div className="p-6 sm:p-8 space-y-6">
+    <SettingsCard title="User Profile" subtitle="Update your personal information and profile photo." icon={User}>
+      <div className="space-y-6">
         {/* Photo Upload */}
         <div className="flex items-center gap-6">
           <div className="h-24 w-24 rounded-full overflow-hidden bg-muted border border-border flex items-center justify-center shrink-0">
@@ -208,7 +184,7 @@ function ProfileTab({ onSave, showSavedToast }: { onSave: () => void, showSavedT
         
         <SaveFooter onSave={handleSave} showSavedToast={showSavedToast} />
       </div>
-    </div>
+    </SettingsCard>
   );
 }
 
@@ -242,12 +218,8 @@ function BrandingTab({ onSave, showSavedToast }: { onSave: () => void, showSaved
   };
 
   return (
-    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
-      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40">
-        <h3 className="text-lg font-bold text-foreground">Dashboard Branding & Logo</h3>
-        <p className="text-sm text-muted-foreground mt-1">Customize the application name, tagline, logo, and colors.</p>
-      </div>
-      <div className="p-6 sm:p-8 space-y-8">
+    <SettingsCard title="Dashboard Branding & Logo" subtitle="Customize the application name, tagline, logo, and colors." icon={Palette}>
+      <div className="space-y-8">
         
         {/* Basic Info */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -414,28 +386,20 @@ function BrandingTab({ onSave, showSavedToast }: { onSave: () => void, showSaved
 
         <SaveFooter onSave={handleSave} showSavedToast={showSavedToast} />
       </div>
-    </div>
+    </SettingsCard>
   );
 }
 
 function PreferencesTab({ onSave, showSavedToast }: { onSave: () => void, showSavedToast: boolean }) {
   const { theme, setTheme } = useSettingsStore();
-  const { language, timezone, notificationsEnabled, privacyMode, setPreferences } = useSettingsStore();
-  
-  const [local, setLocal] = useState({ language, timezone, notificationsEnabled, privacyMode });
 
   const handleSave = () => {
-    setPreferences(local);
     onSave();
   };
 
   return (
-    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
-      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40">
-        <h3 className="text-lg font-bold text-foreground">User Preferences</h3>
-        <p className="text-sm text-muted-foreground mt-1">Customize your experience, notifications, and language settings.</p>
-      </div>
-      <div className="p-6 sm:p-8 space-y-8">
+    <SettingsCard title="User Preferences" subtitle="Customize your appearance and theme." icon={Bell}>
+      <div className="space-y-8">
         
         {/* Appearance */}
         <div>
@@ -462,159 +426,13 @@ function PreferencesTab({ onSave, showSavedToast }: { onSave: () => void, showSa
           </div>
         </div>
 
-        {/* Region & Language */}
-        <div className="space-y-4 pt-6 border-t border-border/50">
-          <h4 className="text-sm font-bold text-foreground uppercase tracking-wider">Region & Language</h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Globe className="h-4 w-4 text-muted-foreground" /> Language
-              </label>
-              <select 
-                value={local.language}
-                onChange={e => setLocal(p => ({ ...p, language: e.target.value }))}
-                className="w-full rounded-xl border border-border bg-card px-4 py-3 text-sm font-medium focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
-              >
-                <option value="en-US">English (US)</option>
-                <option value="en-GB">English (UK)</option>
-                <option value="ur-PK">Urdu (Pakistan)</option>
-                <option value="zh-CN">Chinese (Simplified)</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Clock className="h-4 w-4 text-muted-foreground" /> Timezone
-              </label>
-              <select 
-                value={local.timezone}
-                onChange={e => setLocal(p => ({ ...p, timezone: e.target.value }))}
-                className="w-full rounded-xl border border-border bg-card px-4 py-3 text-sm font-medium focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
-              >
-                <option value="UTC">UTC (Coordinated Universal Time)</option>
-                <option value="Asia/Karachi">Asia/Karachi (PKT)</option>
-                <option value="Asia/Shanghai">Asia/Shanghai (CST)</option>
-                <option value="America/New_York">America/New_York (EST)</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Toggles */}
-        <div className="space-y-4 pt-6 border-t border-border/50">
-          <h4 className="text-sm font-bold text-foreground uppercase tracking-wider">Notifications & Privacy</h4>
-          
-          <div className="flex items-center justify-between p-4 rounded-xl border border-border/50 bg-muted/20">
-            <div>
-              <p className="font-semibold text-sm text-foreground">Email & In-App Notifications</p>
-              <p className="text-xs text-muted-foreground mt-1">Receive alerts for low stock and system updates.</p>
-            </div>
-            <Toggle 
-              checked={local.notificationsEnabled} 
-              onChange={(c) => setLocal(p => ({ ...p, notificationsEnabled: c }))} 
-            />
-          </div>
-          
-          <div className="flex items-center justify-between p-4 rounded-xl border border-border/50 bg-muted/20">
-            <div>
-              <p className="font-semibold text-sm text-foreground">Enhanced Privacy Mode</p>
-              <p className="text-xs text-muted-foreground mt-1">Hide sensitive financial figures by default.</p>
-            </div>
-            <Toggle 
-              checked={local.privacyMode} 
-              onChange={(c) => setLocal(p => ({ ...p, privacyMode: c }))} 
-            />
-          </div>
-        </div>
-
         <SaveFooter onSave={handleSave} showSavedToast={showSavedToast} />
       </div>
-    </div>
+    </SettingsCard>
   );
 }
 
-function SecurityTab({ onSave, showSavedToast }: { onSave: () => void, showSavedToast: boolean }) {
-  const { twoFactorEnabled, setTwoFactor } = useSettingsStore();
-  const [password, setPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-
-  const handlePasswordChange = () => {
-    if (!password || !newPassword) return alert('Please enter both passwords');
-    alert('Password changed successfully (Mocked)');
-    setPassword('');
-    setNewPassword('');
-  };
-
-  return (
-    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
-      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40">
-        <h3 className="text-lg font-bold text-foreground">Security Settings</h3>
-        <p className="text-sm text-muted-foreground mt-1">Manage your password, 2FA, devices, and API keys.</p>
-      </div>
-      <div className="p-6 sm:p-8 space-y-8">
-        
-        {/* Change Password */}
-        <div>
-          <h4 className="text-sm font-bold text-foreground mb-4 uppercase tracking-wider flex items-center gap-2">
-            <Lock className="h-4 w-4" /> Password
-          </h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <input 
-              type="password" 
-              placeholder="Current Password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              className="w-full rounded-xl border border-border bg-card px-4 py-3 text-sm font-medium focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors" 
-            />
-            <input 
-              type="password" 
-              placeholder="New Password"
-              value={newPassword}
-              onChange={e => setNewPassword(e.target.value)}
-              className="w-full rounded-xl border border-border bg-card px-4 py-3 text-sm font-medium focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors" 
-            />
-          </div>
-          <button 
-            onClick={handlePasswordChange}
-            className="mt-4 px-4 py-2 text-sm font-medium bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 transition-colors"
-          >
-            Update Password
-          </button>
-        </div>
-
-        {/* 2FA */}
-        <div className="space-y-4 pt-6 border-t border-border/50">
-          <h4 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
-            <Smartphone className="h-4 w-4" /> Two-Factor Authentication
-          </h4>
-          <div className="flex items-center justify-between p-4 rounded-xl border border-border/50 bg-muted/20">
-            <div>
-              <p className="font-semibold text-sm text-foreground">Authenticator App</p>
-              <p className="text-xs text-muted-foreground mt-1">Use an app like Google Authenticator or Authy.</p>
-            </div>
-            <Toggle 
-              checked={twoFactorEnabled} 
-              onChange={setTwoFactor} 
-            />
-          </div>
-        </div>
-
-        {/* Mocked Sections */}
-        <div className="space-y-4 pt-6 border-t border-border/50">
-          <h4 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
-            <Key className="h-4 w-4" /> API Keys & Devices
-          </h4>
-          <div className="p-4 rounded-xl border border-border bg-card text-center py-8">
-            <p className="text-sm text-muted-foreground">Active Devices: 1 (MacBook Pro)</p>
-            <button className="mt-4 px-4 py-2 text-sm font-medium border border-border text-foreground rounded-lg hover:bg-muted transition-colors">
-              Manage Devices
-            </button>
-          </div>
-        </div>
-
-      </div>
-    </div>
-  );
-}function AdvancedTab({ onSave, showSavedToast }: { onSave: () => void, showSavedToast: boolean }) {
+function AdvancedTab() {
   const { isAdmin } = useAuth();
   const wipeAllData = useERPStore(state => state.wipeAllData);
   const wipeModules = useERPStore(state => state.wipeModules);
@@ -651,12 +469,8 @@ function SecurityTab({ onSave, showSavedToast }: { onSave: () => void, showSaved
   };
 
   return (
-    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
-      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40">
-        <h3 className="text-lg font-bold text-foreground">Advanced Features</h3>
-        <p className="text-sm text-muted-foreground mt-1">Backup data, manage integrations, and advanced system configuration.</p>
-      </div>
-      <div className="p-6 sm:p-8 space-y-8">
+    <SettingsCard title="Advanced Features" subtitle="Backup data, manage integrations, and advanced system configuration." icon={Monitor}>
+      <div className="space-y-8">
         
         {/* Demo Data */}
         <div>
@@ -790,31 +604,8 @@ function SecurityTab({ onSave, showSavedToast }: { onSave: () => void, showSaved
           </div>
         </div>
 
-        {/* Integrations (Mocked) */}
-        <div className="space-y-4 pt-6 border-t border-border/50">
-          <h4 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
-            <Globe className="h-4 w-4" /> Integrations & Domains
-          </h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="p-4 rounded-xl border border-border/50 flex justify-between items-center opacity-70">
-              <div>
-                <p className="font-semibold text-sm">Third-party Integrations</p>
-                <p className="text-xs text-muted-foreground">Connect with external APIs</p>
-              </div>
-              <span className="text-xs bg-muted px-2 py-1 rounded">Coming Soon</span>
-            </div>
-            <div className="p-4 rounded-xl border border-border/50 flex justify-between items-center opacity-70">
-              <div>
-                <p className="font-semibold text-sm">Custom Domain</p>
-                <p className="text-xs text-muted-foreground">app.yourcompany.com</p>
-              </div>
-              <span className="text-xs bg-muted px-2 py-1 rounded">Coming Soon</span>
-            </div>
-          </div>
-        </div>
-
       </div>
-    </div>
+    </SettingsCard>
   );
 }
 
@@ -843,12 +634,8 @@ function VoucherNumberingTab({ onSave, showSavedToast }: { onSave: () => void, s
   };
 
   return (
-    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
-      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40">
-        <h3 className="text-lg font-bold text-foreground">Voucher Numbering</h3>
-        <p className="text-sm text-muted-foreground mt-1">Configure custom prefixes per voucher type and toggle yearly sequence reset.</p>
-      </div>
-      <div className="p-6 sm:p-8 space-y-8">
+    <SettingsCard title="Voucher Numbering" subtitle="Configure custom prefixes per voucher type and toggle yearly sequence reset." icon={Hash}>
+      <div className="space-y-8">
         
         {/* Yearly Reset Toggle */}
         <div className="flex items-center justify-between p-5 rounded-xl border border-border/50 bg-muted/20">
@@ -924,7 +711,7 @@ function VoucherNumberingTab({ onSave, showSavedToast }: { onSave: () => void, s
 
         <SaveFooter onSave={handleSave} showSavedToast={showSavedToast} />
       </div>
-    </div>
+    </SettingsCard>
   );
 }
 
@@ -983,12 +770,8 @@ function AboutUpdatesTab() {
   }, [isElectron]);
 
   return (
-    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
-      <div className="p-6 sm:p-8 border-b border-border/50 bg-muted/40">
-        <h3 className="text-lg font-bold text-foreground">About & Updates</h3>
-        <p className="text-sm text-muted-foreground mt-1">Version information and automatic update management.</p>
-      </div>
-      <div className="p-6 sm:p-8 space-y-8">
+    <SettingsCard title="About & Updates" subtitle="Version information and automatic update management." icon={Info}>
+      <div className="space-y-8">
         
         {/* Version Info */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -1028,12 +811,12 @@ function AboutUpdatesTab() {
 
         {/* Electron Detection */}
         {!isElectron && (
-          <div className="p-5 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
+          <div className="p-5 rounded-xl border border-warning/30 bg-warning/10">
             <div className="flex items-center gap-3">
-              <Info className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+              <Info className="h-5 w-5 text-warning shrink-0" />
               <div>
-                <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">Desktop App Required</p>
-                <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                <p className="text-sm font-semibold text-warning">Desktop App Required</p>
+                <p className="text-xs text-muted-foreground mt-1">
                   Auto-updates are only available in the desktop version. 
                   You are viewing this in a browser — download the app to receive automatic updates.
                 </p>
@@ -1080,27 +863,27 @@ function AboutUpdatesTab() {
             {updateStatus && (
               <div className={`p-4 rounded-xl border ${
                 updateStatus.status === 'up-to-date' 
-                  ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30'
+                  ? 'border-success/30 bg-success/10'
                   : updateStatus.status === 'available' || updateStatus.status === 'downloaded'
-                  ? 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30'
+                  ? 'border-info/30 bg-info/10'
                   : updateStatus.status === 'downloading'
-                  ? 'border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30'
+                  ? 'border-info/30 bg-info/10'
                   : updateStatus.status === 'error'
-                  ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30'
+                  ? 'border-destructive/30 bg-destructive/10'
                   : 'border-border/50 bg-muted/20'
               }`}>
                 <div className="flex items-center gap-3">
-                  {updateStatus.status === 'checking' && <RotateCw className="h-5 w-5 text-blue-500 animate-spin shrink-0" />}
-                  {updateStatus.status === 'up-to-date' && <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />}
-                  {updateStatus.status === 'available' && <DownloadCloud className="h-5 w-5 text-blue-500 shrink-0" />}
-                  {updateStatus.status === 'downloaded' && <CheckCircle2 className="h-5 w-5 text-blue-500 shrink-0" />}
-                  {updateStatus.status === 'downloading' && <RotateCw className="h-5 w-5 text-violet-500 animate-spin shrink-0" />}
-                  {updateStatus.status === 'error' && <AlertCircle className="h-5 w-5 text-red-500 shrink-0" />}
+                  {updateStatus.status === 'checking' && <RotateCw className="h-5 w-5 text-info animate-spin shrink-0" />}
+                  {updateStatus.status === 'up-to-date' && <CheckCircle2 className="h-5 w-5 text-success shrink-0" />}
+                  {updateStatus.status === 'available' && <DownloadCloud className="h-5 w-5 text-info shrink-0" />}
+                  {updateStatus.status === 'downloaded' && <CheckCircle2 className="h-5 w-5 text-success shrink-0" />}
+                  {updateStatus.status === 'downloading' && <RotateCw className="h-5 w-5 text-info animate-spin shrink-0" />}
+                  {updateStatus.status === 'error' && <AlertCircle className="h-5 w-5 text-destructive shrink-0" />}
 
                   <div className="flex-1 min-w-0">
                     <p className={`text-sm font-semibold ${
-                      updateStatus.status === 'up-to-date' ? 'text-emerald-800 dark:text-emerald-200' :
-                      updateStatus.status === 'error' ? 'text-red-800 dark:text-red-200' :
+                      updateStatus.status === 'up-to-date' ? 'text-success' :
+                      updateStatus.status === 'error' ? 'text-destructive' :
                       'text-foreground'
                     }`}>
                       {updateStatus.message}
@@ -1108,7 +891,7 @@ function AboutUpdatesTab() {
                     {updateStatus.status === 'downloading' && typeof updateStatus.percent === 'number' && (
                       <div className="mt-2 w-full bg-muted rounded-full h-2 overflow-hidden">
                         <div 
-                          className="h-full bg-gradient-to-r from-blue-500 to-violet-500 rounded-full transition-all duration-300"
+                          className="h-full bg-primary rounded-full transition-all duration-300"
                           style={{ width: `${updateStatus.percent}%` }}
                         />
                       </div>
@@ -1147,17 +930,11 @@ function AboutUpdatesTab() {
                 <p className="text-xs text-muted-foreground">Download the latest version</p>
               </div>
             </a>
-            <div className="flex items-center gap-3 p-4 rounded-xl border border-border/50 bg-muted/10 opacity-70">
-              <ExternalLink className="h-5 w-5 text-muted-foreground shrink-0" />
-              <div>
-                <p className="text-sm font-semibold text-foreground">Documentation</p>
-                <p className="text-xs text-muted-foreground">User guide & API reference</p>
-              </div>
-            </div>
+
           </div>
         </div>
       </div>
-    </div>
+    </SettingsCard>
   );
 }
 
@@ -1232,7 +1009,7 @@ function SaveFooter({ onSave, showSavedToast }: { onSave: () => void, showSavedT
   return (
     <div className="pt-6 mt-8 flex items-center justify-end gap-4 border-t border-border/50">
       {showSavedToast && (
-        <span className="flex items-center gap-2 text-sm font-medium text-emerald-600 animate-in fade-in slide-in-from-right-4">
+        <span className="flex items-center gap-2 text-sm font-medium text-success animate-in fade-in slide-in-from-right-4">
           <CheckCircle2 className="h-4 w-4" />
           Changes saved successfully
         </span>
@@ -1251,9 +1028,11 @@ function SaveFooter({ onSave, showSavedToast }: { onSave: () => void, showSavedT
 function Toggle({ checked, onChange }: { checked: boolean, onChange: (c: boolean) => void }) {
   return (
     <button
+      role="switch"
+      aria-checked={checked}
       onClick={() => onChange(!checked)}
       className={cn(
-        "w-11 h-6 rounded-full transition-colors relative flex items-center px-1 shrink-0",
+        "w-11 h-6 rounded-full transition-colors duration-150 relative flex items-center px-1 shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         checked ? "bg-primary" : "bg-muted-foreground/30"
       )}
     >
@@ -1264,5 +1043,42 @@ function Toggle({ checked, onChange }: { checked: boolean, onChange: (c: boolean
         )} 
       />
     </button>
+  );
+}
+
+// Shared settings card — single chrome definition so every tab in Settings
+// renders the same card anatomy (per the component-system minimal pattern:
+// token palette, radius hierarchy, no decorative gradient).
+function SettingsCard({
+  title,
+  subtitle,
+  icon: Icon,
+  right,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  icon?: React.ComponentType<{ className?: string }>;
+  right?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
+      <div className="p-6 border-b border-border/50 bg-muted/40 flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3 min-w-0">
+          {Icon && (
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Icon className="h-4 w-4" />
+            </div>
+          )}
+          <div className="min-w-0">
+            <h3 className="text-lg font-bold text-foreground leading-tight">{title}</h3>
+            {subtitle && <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>}
+          </div>
+        </div>
+        {right}
+      </div>
+      <div className="p-6">{children}</div>
+    </div>
   );
 }

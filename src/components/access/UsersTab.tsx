@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Loader2, Plus, Search, Pencil, Trash2, Lock, Mail, UserCog } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Loader2, Plus, Search, Pencil, Trash2, Lock, } from 'lucide-react';
 import { useAccessStore, hashPassword } from '@/store/useAccessStore';
 import { UserRow, Role } from '@/types/access';
 import { DataTable, Column } from '@/components/DataTable';
