@@ -25,29 +25,8 @@ export function isCashOrBankAccount(account: Pick<Account, 'subtypeId'>, subtype
   return isCashAccount(account, subtypes) || isBankAccount(account, subtypes);
 }
 
-export function isReceivableAccount(account: Pick<Account, 'subtypeId'>, subtypes: AccountSubtype[]): boolean {
-  return getSubtypeName(account, subtypes) === 'Accounts Receivable';
-}
-
-export function isPayableAccount(account: Pick<Account, 'subtypeId'>, subtypes: AccountSubtype[]): boolean {
-  return getSubtypeName(account, subtypes) === 'Accounts Payable';
-}
-
 export function isAssetAccount(account: Pick<Account, 'type'>): boolean {
   return account.type === 'Assets';
-}
-
-export function isLiabilityAccount(account: Pick<Account, 'type'>): boolean {
-  return account.type === 'Liabilities';
-}
-
-export function isEquityAccount(account: Pick<Account, 'type'>): boolean {
-  return account.type === 'Equity';
-}
-
-/** Revenue + Other Income */
-export function isIncomeAccount(account: Pick<Account, 'type'>): boolean {
-  return account.type === 'Revenue' || account.type === 'Other Income';
 }
 
 /** Expenses + COGS + Other Expenses */
@@ -72,22 +51,6 @@ export function getBankAccounts(accounts: Account[], subtypes: AccountSubtype[])
 
 export function getCashBankAccounts(accounts: Account[], subtypes: AccountSubtype[]): Account[] {
   return accounts.filter(a => isCashOrBankAccount(a, subtypes));
-}
-
-export function getReceivableAccounts(accounts: Account[], subtypes: AccountSubtype[]): Account[] {
-  return accounts.filter(a => isReceivableAccount(a, subtypes));
-}
-
-export function getPayableAccounts(accounts: Account[], subtypes: AccountSubtype[]): Account[] {
-  return accounts.filter(a => isPayableAccount(a, subtypes));
-}
-
-/**
- * Party-linked accounts (customers/suppliers/processors carry linkedEntityId).
- * These are sub-ledger accounts nested under the AR/AP control accounts.
- */
-export function getLinkedPartyAccounts(accounts: Account[]): Account[] {
-  return accounts.filter(a => Boolean(a.linkedEntityId));
 }
 
 /**
