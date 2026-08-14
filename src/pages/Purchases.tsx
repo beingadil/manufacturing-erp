@@ -2,10 +2,9 @@ import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
 import { Eye, Edit, Trash2, Printer } from 'lucide-react';
 import React, { useState, useMemo } from "react";
 import { useERPStore } from "../store/useERPStore";
-import { toast } from 'sonner';
 import { ErrorManagement } from '../lib/validation';
 import { PurchaseService } from '../services/PurchaseService';
-import { Plus, FileText, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { formatCurrency } from "../lib/utils";
 import { DataTable, Column, RowActionButton } from "../components/DataTable";
 import { SearchableSelect } from "../components/SearchableSelect";
@@ -43,8 +42,6 @@ export function Purchases() {
   const [weightUnit, setWeightUnit] = useState<"KGs" | "Tons">("KGs");
   const [ratePerUnit, setRatePerUnit] = useState("");
   const [weightPerPiece, setWeightPerPiece] = useState("");
-
-  const selectedMaterial = materials.find(m => m.id === materialId);
 
   const calculatedPcsPreview = useMemo(() => {
     if (!weight || isNaN(parseFloat(weight)) || !weightPerPiece || isNaN(parseFloat(weightPerPiece))) return 0;

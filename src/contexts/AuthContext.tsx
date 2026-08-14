@@ -59,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => !!(window as any).__HYDRATION_COMPLETE__
   );
 
-  const { seedDefaults, users, roles, rolePermissions, verifyPassword } = useAccessStore();
+  const { seedDefaults } = useAccessStore();
 
   // Super admin synthetic profile — used whenever the super admin signs in
   const buildSuperAdminSession = () => {

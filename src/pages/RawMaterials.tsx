@@ -14,7 +14,7 @@ import { InventoryCalculationService } from '../lib/business/InventoryCalculatio
 import { formatCurrency, formatNumber } from '../lib/utils';
 
 export function RawMaterials() {
-  const { materials, categories, purchases, processingSends, processingReceipts, batches, addRawMaterial, removeModuleItem } = useERPStore();
+  const { materials, categories, purchases, processingSends, processingReceipts, batches } = useERPStore();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<any | null>(null);

@@ -1,12 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatNumber } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
 import { Clock } from 'lucide-react';
-import { differenceInDays } from 'date-fns';
 import { InventoryReportService } from "../../../lib/reporting/InventoryReportService";
 
 export function InventoryAging() {
-  const [dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });
+  const [_dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });
   const [search, setSearch] = useState('');
 
   const data = useMemo(() => InventoryReportService.getInventoryAgingData(search), [search]);

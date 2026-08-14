@@ -15,7 +15,7 @@ import { getSystemAccountBySubtype, getSystemInventoryAccount, getSystemCOGSAcco
  */
 export const createCRUDActions = (
   set: StoreApi<ERPState>['setState'],
-  get: StoreApi<ERPState>['getState'],
+  _get: StoreApi<ERPState>['getState'],
   afterMutation?: () => void
 ) => ({
   deletePurchase: (id: string) => {
@@ -78,12 +78,10 @@ export const createCRUDActions = (
       const oldPurchase = state.purchases.find(p => p.id === id);
       if (!oldPurchase) return state;
 
-      const weightInKg = UnitConversionService.convertToKg(data.weight, data.weightUnit);
       const newCalculatedPcs = UnitConversionService.calculatePcsFromWeight(data.weight, data.weightUnit, data.weightPerPiece);
       const newAmount = data.weight * data.ratePerUnit;
 
       const diffPcs = newCalculatedPcs - oldPurchase.calculatedPcs;
-      const diffAmount = newAmount - oldPurchase.amount;
 
       // Update Purchase
       const updatedPurchases = state.purchases.map(p => 
@@ -205,7 +203,6 @@ export const createCRUDActions = (
 
       const newTotalAmount = data.pcsSold * data.pricePerPiece;
       const diffPcs = data.pcsSold - oldSale.pcsSold;
-      const diffAmount = newTotalAmount - oldSale.totalAmount;
 
       const updatedSales = state.sales.map(s => 
         s.id === id ? { ...s, ...data, totalAmount: newTotalAmount } : s
@@ -585,7 +582,6 @@ export const createCRUDActions = (
       if (!oldBill) return state;
 
       const newTotalAmount = data.totalAmount;
-      const diffAmount = newTotalAmount - oldBill.totalAmount;
 
       const updatedBills = state.processorBills.map(b =>
         b.id === id ? { ...b, ...data } : b

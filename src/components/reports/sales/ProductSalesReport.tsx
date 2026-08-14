@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatCurrency, formatNumber } from '../../../lib/utils';
 import { ReportFilterBar } from '../common/ReportFilterBar';
 import { DataTable, Column } from '../../DataTable';

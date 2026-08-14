@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatCurrency } from '../../../lib/utils';
 import { ReportFilterBar } from '../common/ReportFilterBar';
 import { DataTable, Column } from '../../DataTable';
@@ -10,7 +10,7 @@ import { format } from 'date-fns';
 import { SalesReportService } from "../../../lib/reporting/SalesReportService";
 
 export function CustomerOutstandingReport() {
-  const [dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });
+  const [_dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });
   const [search, setSearch] = useState('');
 
   const data = useMemo(() => SalesReportService.getCustomerOutstandingReportData(search), [search]);

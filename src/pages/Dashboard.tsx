@@ -1,6 +1,6 @@
 import { useAuth } from "../contexts/AuthContext";
 import { filterFinancialData } from "../lib/abac";
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useERPStore } from "../store/useERPStore";
 import { formatCurrency, formatNumber, cn } from "../lib/utils";
 import { KpiCard } from "../components/ui/KpiCard";

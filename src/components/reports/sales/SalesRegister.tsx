@@ -1,9 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatCurrency, formatNumber } from '../../../lib/utils';
 import { ReportFilterBar } from '../common/ReportFilterBar';
 import { DataTable, Column } from '../../DataTable';
 import { ReportKPICard } from '../common/ReportKPICard';
-import { DollarSign, Hash, Users, Package, ShoppingCart } from 'lucide-react';
+import { DollarSign, Hash, Users, ShoppingCart } from 'lucide-react';
 import { generateEnterpriseDocument } from '../../../lib/pdfEngine';
 import { exportToExcel, exportToCSV } from '../../../lib/exportUtils';
 import { format } from 'date-fns';

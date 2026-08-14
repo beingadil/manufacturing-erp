@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { KpiCard } from '../../ui/KpiCard';
 import type { LucideIcon } from 'lucide-react';
 

@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from "react";
-import { Check, ChevronsUpDown, Plus, Search, X } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Check, ChevronsUpDown, Plus, Search, } from "lucide-react";
 import { cn } from "../lib/utils";
 
 export interface Option {

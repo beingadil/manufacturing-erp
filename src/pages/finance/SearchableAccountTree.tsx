@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useERPStore } from '../../store/useERPStore';
-import { Search, ChevronRight, ChevronDown, Folder, FolderOpen, Check, FileText } from 'lucide-react';
+import { Search, ChevronRight, ChevronDown, FolderOpen, Check, FileText } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { Account, AccountSubtype, AccountType } from '../../types/erp';
 

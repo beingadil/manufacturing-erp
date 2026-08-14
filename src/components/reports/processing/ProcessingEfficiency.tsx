@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
-import { formatCurrency, formatNumber } from '../../../lib/utils';
+import { useMemo, useState } from 'react';
+import { formatNumber } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
-import { Factory, Percent, Activity } from 'lucide-react';
+import { Factory, Percent, } from 'lucide-react';
 import { ProcessingReportService } from "../../../lib/reporting/ProcessingReportService";
 
 export function ProcessingEfficiency() {

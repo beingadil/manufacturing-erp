@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatNumber } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
-import { Factory, AlertCircle, Percent } from 'lucide-react';
+import { Factory, AlertCircle, } from 'lucide-react';
 import { ProcessingReportService } from "../../../lib/reporting/ProcessingReportService";
 
 export function ProcessingLossReport() {

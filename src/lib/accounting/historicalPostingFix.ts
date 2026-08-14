@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { Account, AccountSubtype, Batch, JournalEntry, Product, Sale, Voucher } from '../../types/erp';
-import { getSystemCOGSAccount, getSystemInventoryAccount } from './accountClassification';
+import { getSystemCOGSAccount, } from './accountClassification';
 
 /**
  * One-time data-fix for historical postings created before the accounting

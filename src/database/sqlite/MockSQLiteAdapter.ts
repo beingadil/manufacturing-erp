@@ -14,19 +14,19 @@ export class MockSQLiteAdapter implements ISQLiteAdapter {
     this.isInitialized = true;
   }
 
-  async query<T = any>(sql: string, params?: any[]): Promise<T[]> {
+  async query<T = any>(_sql: string, _params?: any[]): Promise<T[]> {
     if (!this.isInitialized) throw new Error('Database not initialized');
     // Logger.info('SQLite.query', sql, JSON.stringify(params));
     return [];
   }
 
-  async queryOne<T = any>(sql: string, params?: any[]): Promise<T | null> {
+  async queryOne<T = any>(_sql: string, _params?: any[]): Promise<T | null> {
     if (!this.isInitialized) throw new Error('Database not initialized');
     // Logger.info('SQLite.queryOne', sql, JSON.stringify(params));
     return null;
   }
 
-  async execute(sql: string, params?: any[]): Promise<{ changes: number; lastInsertRowid: number | string }> {
+  async execute(_sql: string, _params?: any[]): Promise<{ changes: number; lastInsertRowid: number | string }> {
     if (!this.isInitialized) throw new Error('Database not initialized');
     // Logger.info('SQLite.execute', sql, JSON.stringify(params));
     return { changes: 1, lastInsertRowid: Date.now() };

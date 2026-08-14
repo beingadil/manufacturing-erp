@@ -1,8 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatNumber } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
 import { PackageSearch, Activity } from 'lucide-react';
-import { format } from 'date-fns';
 import { InventoryReportService } from "../../../lib/reporting/InventoryReportService";
 
 export function StockLedger() {

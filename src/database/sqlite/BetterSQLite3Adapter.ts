@@ -43,7 +43,7 @@ export class BetterSQLite3Adapter implements ISQLiteAdapter {
     return typeof window !== 'undefined' && !!window.electronDB;
   }
 
-  async initialize(dbPath?: string): Promise<void> {
+  async initialize(_dbPath?: string): Promise<void> {
     if (!this.isElectron()) {
       throw new Error('Electron environment not detected. Cannot initialize BetterSQLite3Adapter.');
     }
@@ -86,7 +86,7 @@ export class BetterSQLite3Adapter implements ISQLiteAdapter {
     const operations: { type: 'query' | 'execute'; sql: string; params?: any[] }[] = [];
     
     const tx: ISQLiteTransaction = {
-      query: async <T = any>(sql: string, params?: any[]) => {
+      query: async <_T = any>(sql: string, params?: any[]) => {
         operations.push({ type: 'query', sql, params });
         // Warning: This architecture means we can't read the result of a query 
         // to determine the next query *within* the same transaction callback on the frontend.

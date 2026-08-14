@@ -15,7 +15,9 @@
     "rules": {
       "recommended": false,
       "correctness": {
-        "noUndeclaredDependencies": "error"
+        "noUndeclaredDependencies": "error",
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error"
       },
       "suspicious": {
         "noRedeclare": "error"

@@ -1,4 +1,4 @@
-export function filterFinancialData(data: any[], profile: any, isAdmin: boolean, policies: any[]) {
+export function filterFinancialData(data: any[], _profile: any, isAdmin: boolean, policies: any[]) {
   if (isAdmin) return data;
   
   // Default fallback: if no policy is defined, they see nothing

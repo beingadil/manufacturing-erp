@@ -1,10 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useERPStore } from '../store/useERPStore';
 import { useAuth } from '../contexts/AuthContext';
 import { filterFinancialData } from '../lib/abac';
-import { Voucher, SourceModule } from '../types/erp';
+import { SourceModule } from '../types/erp';
 import { formatCurrency } from '../lib/utils';
-import { Search, Filter, FileText, ChevronRight, Download, Printer, Pencil } from 'lucide-react';
+import { Search, FileText, ChevronRight, Download, Printer, Pencil } from 'lucide-react';
 import { VoucherDetailModal } from './VoucherDetailModal';
 import { CashbookEntryModal } from './CashbookEntryModal';
 
@@ -14,7 +14,7 @@ interface VoucherHistoryTabProps {
 
 export function VoucherHistoryTab({ sourceModule }: VoucherHistoryTabProps) {
   const { profile, isAdmin, dataPolicies } = useAuth();
-  const { vouchers, journalEntries, accounts } = useERPStore();
+  const { vouchers } = useERPStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useERPStore } from '../../../store/useERPStore';
 import { formatCurrency } from '../../../lib/utils';
 import { GenericReportTemplate } from './GenericReportTemplate';
@@ -10,12 +10,10 @@ interface DrillDownVoucherListProps {
   accountId?: string;
   startDate?: string;
   endDate?: string;
-  supplierId?: string;
-  customerId?: string;
 }
 
-export function DrillDownVoucherList({ accountId, startDate, endDate, supplierId, customerId }: DrillDownVoucherListProps) {
-  const { vouchers, journalEntries, accounts } = useERPStore();
+export function DrillDownVoucherList({ accountId, startDate, endDate }: DrillDownVoucherListProps) {
+  const { vouchers, journalEntries } = useERPStore();
   const [search, setSearch] = useState('');
   const [localDateRange, setLocalDateRange] = useState({ start: startDate || '', end: endDate || '' });
 

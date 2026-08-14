@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useERPStore } from '../store/useERPStore';
 import { ArrowLeft, Package, History, ArrowRightLeft, Target, Clock, ArrowDown, ArrowUp } from 'lucide-react';
@@ -8,8 +8,8 @@ import { format } from 'date-fns';
 export function MaterialDetail() {
   const { id } = useParams<{ id: string }>();
   const { 
-    materials, categories, purchases, batches, processingSends, 
-    processingReceipts, products, sales, inventoryMovements,
+    materials, categories, batches, processingSends, 
+    products, sales, inventoryMovements,
     suppliers, processors
   } = useERPStore();
 
@@ -24,17 +24,9 @@ export function MaterialDetail() {
     return (inventoryMovements || []).filter(m => m.materialId === id).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [inventoryMovements, id]);
 
-  const materialPurchases = useMemo(() => {
-    return purchases.filter(p => p.materialId === id).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [purchases, id]);
-
   const materialSends = useMemo(() => {
     return processingSends.filter(s => s.materialId === id).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [processingSends, id]);
-
-  const materialReceipts = useMemo(() => {
-    return processingReceipts.filter(r => r.materialId === id).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [processingReceipts, id]);
 
   const materialProducts = useMemo(() => {
     return products.filter(p => p.materialId === id);
