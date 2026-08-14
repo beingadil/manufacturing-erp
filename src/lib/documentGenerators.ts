@@ -2,44 +2,6 @@ import { generateEnterpriseDocument } from './pdfEngine';
 import { formatCurrency, formatNumber } from './utils';
 import { format } from 'date-fns';
 
-export function generateVoucherPDF(voucher: any, entries: any[], accounts: any[], users: any[]) {
-  const accountMap = new Map(accounts.map(a => [a.id, a.name]));
-  
-  const formattedEntries = entries.map(e => ({
-    ...e,
-    accountName: accountMap.get(e.accountId) || 'Unknown Account',
-    debitStr: e.debit > 0 ? formatCurrency(e.debit) : '',
-    creditStr: e.credit > 0 ? formatCurrency(e.credit) : ''
-  }));
-
-  generateEnterpriseDocument({
-    title: voucher.type.toUpperCase(),
-    documentNo: voucher.voucherNo,
-    infoBlock: [
-      [
-        { label: 'Date', value: format(new Date(voucher.date), 'dd-MMM-yyyy') },
-        { label: 'Reference', value: voucher.referenceNo || 'N/A' }
-      ],
-      [
-        { label: 'Status', value: voucher.status },
-        { label: 'Module', value: voucher.sourceModule }
-      ]
-    ],
-    tables: [{
-      columns: [
-        { header: 'Account', dataKey: 'accountName' },
-        { header: 'Narration', dataKey: 'narration' },
-        { header: 'Debit', dataKey: 'debitStr', align: 'right' },
-        { header: 'Credit', dataKey: 'creditStr', align: 'right' }
-      ],
-      rows: formattedEntries,
-      summaryRows: [[
-        { accountName: 'TOTAL', debitStr: formatCurrency(voucher.totalDebit), creditStr: formatCurrency(voucher.totalCredit) }
-      ]]
-    }]
-  });
-}
-
 export function generateLedgerStatementPDF(partyName: string, partyType: string, transactions: any[], balance: number) {
   generateEnterpriseDocument({
     title: `${partyType.toUpperCase()} LEDGER STATEMENT`,

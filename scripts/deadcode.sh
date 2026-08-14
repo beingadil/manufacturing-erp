@@ -12,7 +12,6 @@
 #   .d.ts / .test.ts / .spec.ts / .cjs / vite.config
 #   /ui/ (shadcn re-exports tree-shaken by bundler)
 #   AppWrapper (used in main.tsx, ts-prune false positive)
-#   SQLiteMainHandler (used from electron/main.cjs, not in tsconfig scope)
 #   ReportContext (internal to ReportEngine)
 #   (used in module) — radix-ui style self-referential exports
 
@@ -37,7 +36,7 @@ done
 
 # Known false positives — items that are actually used elsewhere
 # or re-exported for bundler tree-shaking.
-BASE_SKIP='(default$|\.d\.ts$|\.test\.ts$|\.spec\.ts$|vite\.config|\.cjs$|/ui/|AppWrapper|SQLiteMainHandler|ReportContext|\(used in module\)|CurrentStock|DispatchRegister|ReceiveRegister|SupplierPurchaseSummary|CustomerOutstandingReport|CustomerSalesSummary|TopSellingProducts|ValidationLevel|ValidationMessage|ValidationResult|IValidator|FieldValidators|BusinessValidators|ErrorManagement|ValidationEngine|PurchaseDTO|PurchaseValidator|SalesDTO|SalesValidator|ProcessingDispatchDTO|ProcessingDispatchValidator|ProcessingReceiveDTO|ProcessingReceiveValidator|VoucherDTO|VoucherValidator|Sidebar|RELEASE_DATE|DATABASE_SCHEMA_VERSION|isElectron|moduleIcon|moduleDisplayName|actionDisplayName|logAuditEvent|PermissionAction)'
+BASE_SKIP='(default$|\.d\.ts$|\.test\.ts$|\.spec\.ts$|vite\.config|\.cjs$|/ui/|AppWrapper|ReportContext|\(used in module\)|CurrentStock|DispatchRegister|ReceiveRegister|SupplierPurchaseSummary|CustomerOutstandingReport|CustomerSalesSummary|TopSellingProducts|ValidationLevel|ValidationMessage|ValidationResult|IValidator|FieldValidators|BusinessValidators|ErrorManagement|ValidationEngine|PurchaseDTO|PurchaseValidator|SalesDTO|SalesValidator|ProcessingDispatchDTO|ProcessingDispatchValidator|ProcessingReceiveDTO|ProcessingReceiveValidator|VoucherDTO|VoucherValidator|Sidebar|RELEASE_DATE|DATABASE_SCHEMA_VERSION|isElectron|moduleIcon|moduleDisplayName|actionDisplayName|logAuditEvent|PermissionAction)'
 
 if [ -n "$ALLOW_EXTRAS" ]; then
   SKIP="$BASE_SKIP$ALLOW_EXTRAS"
