@@ -2,7 +2,7 @@ import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
 import { Eye, Edit, Trash2, Printer } from 'lucide-react';
 import React, { useState, useMemo } from "react";
 import { useERPStore } from "../store/useERPStore";
-import { Plus, ArrowRight, ArrowLeft, CheckCircle2, X } from "lucide-react";
+import { ArrowRight, ArrowLeft, CheckCircle2, X } from "lucide-react";
 import { DataTable, Column } from "../components/DataTable";
 import { formatCurrency } from "../lib/utils";
 import { SearchableSelect } from "../components/SearchableSelect";
@@ -16,7 +16,7 @@ import { ProcessingService } from '../services/ProcessingService';
 export function JobWork() {
   const { 
     materials, processors, processingSends, processingReceipts, processorBills, vouchers,
-    addProcessingSend, addProcessingReceipt, addProcessorBill, batches 
+    batches 
   } = useERPStore();
   
   const [activeTab, setActiveTab] = useState<"Send" | "Receive" | "Billing" | "Vouchers">("Send");
@@ -75,7 +75,7 @@ export function JobWork() {
     }
 
     if (editSendId) {
-      useERPStore.getState().updateProcessingSend(editSendId, {
+      ProcessingService.updateDispatch(editSendId, {
         processorId: sendProcessorId,
         materialId: sendMaterialId,
         batchId: sendBatchId || undefined,
@@ -85,7 +85,7 @@ export function JobWork() {
         remarks: sendNote
       });
     } else {
-      addProcessingSend({
+      ProcessingService.dispatch({
         processorId: sendProcessorId,
         materialId: sendMaterialId,
         batchId: sendBatchId || undefined,
@@ -189,13 +189,13 @@ export function JobWork() {
     e.preventDefault();
     if (!billProcessorId || selectedReceiptsForBill.length === 0) return;
     if (editBillId) {
-      useERPStore.getState().updateProcessorBill(editBillId, {
+      ProcessingService.updateBill(editBillId, {
         processorId: billProcessorId,
         date: billDate,
         receiptIds: selectedReceiptsForBill
       });
     } else {
-      addProcessorBill({
+      ProcessingService.createBill({
         processorId: billProcessorId,
         date: billDate,
         receiptIds: selectedReceiptsForBill,
@@ -333,10 +333,9 @@ export function JobWork() {
 
   
   const handleDelete = () => {
-    const store = useERPStore.getState();
-    if (deleteModal.type === 'send') store.deleteProcessingSend(deleteModal.id);
-    else if (deleteModal.type === 'receipt') store.deleteProcessingReceipt(deleteModal.id);
-    else if (deleteModal.type === 'bill') store.deleteProcessorBill(deleteModal.id);
+    if (deleteModal.type === 'send') ProcessingService.deleteDispatch(deleteModal.id);
+    else if (deleteModal.type === 'receipt') ProcessingService.deleteReceive(deleteModal.id);
+    else if (deleteModal.type === 'bill') ProcessingService.deleteBill(deleteModal.id);
   };
   
   return (

@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { useERPStore } from './useERPStore';
-import { AccountingService } from '../services/AccountingService';
 import { AccountingEngine } from '../lib/accounting/AccountingEngine';
 
 /**
@@ -96,9 +95,9 @@ describe('party balances derive from the COMPLETE ledger', () => {
     expect(s.suppliers[0].balancePayable).toBe(276000);
     expect(s.suppliers[0].balancePayable).toBe(ledgerBalance(supplierAccount.id));
 
-    // Full payment of Rs 276,000 via the cash payment flow (AccountingService
+    // Full payment of Rs 276,000 via the cash payment flow (AccountingEngine
     // posts the voucher AND recomputes the party balance from the ledger).
-    AccountingService.createVoucher(
+    AccountingEngine.createVoucher(
       { date: '2026-08-02', type: 'Cash Payment' as any, sourceModule: 'Cashbook' as any, narration: 'Full payment' },
       [
         { accountId: supplierAccount.id, debit: 276000, credit: 0 },
@@ -119,7 +118,7 @@ describe('party balances derive from the COMPLETE ledger', () => {
     const paymentVoucher = s.vouchers.find(v => v.type === 'Cash Payment')!;
 
     // Edit the payment from 276,000 to 100,000 — true payable = 276,000 − 100,000
-    AccountingService.updateVoucher(
+    AccountingEngine.updateVoucher(
       paymentVoucher.id,
       { date: paymentVoucher.date },
       [
@@ -138,7 +137,7 @@ describe('party balances derive from the COMPLETE ledger', () => {
     const s = useERPStore.getState();
     const paymentVoucher = s.vouchers.find(v => v.type === 'Cash Payment')!;
 
-    AccountingService.deleteVoucher(paymentVoucher.id);
+    AccountingEngine.deleteVoucher(paymentVoucher.id);
 
     const st = useERPStore.getState();
     expect(ledgerBalance(supplierAccount.id)).toBe(276000);
@@ -162,7 +161,7 @@ describe('party balances derive from the COMPLETE ledger', () => {
     expect(st.customers[0].balanceReceivable).toBe(ledgerBalance(customerAccount.id));
 
     // Partial cash receipt of 100,000
-    AccountingService.createVoucher(
+    AccountingEngine.createVoucher(
       { date: '2026-08-08', type: 'Cash Receipt' as any, sourceModule: 'Cashbook' as any, narration: 'Partial receipt' },
       [
         { accountId: 'acct-cash', debit: 100000, credit: 0 },
@@ -188,7 +187,7 @@ describe('party balances derive from the COMPLETE ledger', () => {
     expect(st.processors[0].balancePayable).toBe(5000);
 
     // Pay the processor in full
-    AccountingService.createVoucher(
+    AccountingEngine.createVoucher(
       { date: '2026-08-10', type: 'Cash Payment' as any, sourceModule: 'Cashbook' as any, narration: 'Processor payment' },
       [
         { accountId: processorAccount.id, debit: 5000, credit: 0 },

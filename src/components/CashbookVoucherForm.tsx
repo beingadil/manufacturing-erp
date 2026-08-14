@@ -2,14 +2,14 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useERPStore } from '../store/useERPStore';
 import { SearchableSelect } from './SearchableSelect';
 import { SearchableAccountTree } from '../pages/finance/SearchableAccountTree';
-import { AccountingService } from '../services/AccountingService';
+import { AccountingEngine } from '../lib/accounting/AccountingEngine';
 import { DocumentNumberingService } from '../lib/business/DocumentNumberingService';
 import { ErrorManagement } from '../lib/validation';
 import { cn } from '../lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 import { Plus, Trash2, CheckCircle2, Info, Send, RotateCcw, X, Banknote, Landmark, BookOpen } from 'lucide-react';
 import { getCashAccounts, getBankAccounts } from '../lib/accounting/accountClassification';
-import type { VoucherType } from '../types/erp';
+import type { SourceModule, VoucherType } from '../types/erp';
 
 /**
  * Purpose-specific voucher form (spec §4–8).
@@ -57,7 +57,7 @@ interface CashbookVoucherFormProps {
   editVoucherId?: string;
   defaultAccountId?: string;
   /** sourceModule tag written onto created vouchers (defaults to 'Cashbook'). */
-  sourceModule?: string;
+  sourceModule?: SourceModule;
   onSaved?: () => void;
   onCancel?: () => void;
 }
@@ -358,9 +358,9 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
       }));
       ErrorManagement.safeExecuteSync(() => {
         if (isEditing) {
-          AccountingService.updateVoucher(editVoucherId, { date, referenceNo: referenceNo || undefined, narration }, entries as any);
+          AccountingEngine.updateVoucher(editVoucherId, { date, referenceNo: referenceNo || undefined, narration }, entries as any);
         } else {
-          AccountingService.createVoucher({
+          AccountingEngine.createVoucher({
             date, type: meta.voucherType, referenceNo: referenceNo || undefined, sourceModule: sourceModule || 'Manual', narration,
           }, entries as any);
         }
@@ -432,16 +432,16 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
 
     ErrorManagement.safeExecuteSync(() => {
       if (isEditing) {
-        AccountingService.updateVoucher(editVoucherId, { date, referenceNo: referenceNo || undefined, narration }, entries as any);
+        AccountingEngine.updateVoucher(editVoucherId, { date, referenceNo: referenceNo || undefined, narration }, entries as any);
       } else {
-        AccountingService.createVoucher({
+        AccountingEngine.createVoucher({
           date, type: meta.voucherType, referenceNo: referenceNo || undefined, sourceModule: sourceModule || 'Cashbook', narration,
         }, entries as any);
       }
 
-      // NOTE: party balances are NOT adjusted here — AccountingService already
-      // runs AccountingEngine.recomputePartyBalances(), which derives every
-      // balance from the linked account's COMPLETE ledger (spec §14).
+      // NOTE: party balances are NOT adjusted here — AccountingEngine already
+      // runs recomputePartyBalances(), which derives every balance from the
+      // linked account's COMPLETE ledger (spec §14).
 
       alert(`${meta.voucherType} ${voucherNo} saved!`);
       if (onSaved) onSaved();

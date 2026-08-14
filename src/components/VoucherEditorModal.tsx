@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { CashbookVoucherForm, VoucherFormMode } from './CashbookVoucherForm';
 import { ACCENT_BAR, ACCENT_SOFT, KIND_ACCENT, KIND_ICON } from './voucherAccents';
+import type { SourceModule } from '../types/erp';
 
 export type VoucherPageKind = VoucherFormMode;
 
@@ -22,7 +23,7 @@ const TITLES: Record<VoucherPageKind, string> = {
   journal: 'Journal Voucher',
 };
 
-const SOURCE_MODULE: Record<VoucherPageKind, string> = {
+const SOURCE_MODULE: Record<VoucherPageKind, SourceModule> = {
   'cash-payment': 'Cashbook',
   'bank-payment': 'Cashbook',
   'cash-receipt': 'Cashbook',
