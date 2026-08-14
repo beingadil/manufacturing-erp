@@ -4,6 +4,7 @@ import {
   ProcessingDispatchValidator, ProcessingDispatchDTO,
   ProcessingReceiveValidator, ProcessingReceiveDTO 
 } from '../lib/validation';
+import type { ProcessorBill } from '../types/erp';
 import { BusinessWorkflowEngine } from '../lib/business/BusinessWorkflowEngine';
 
 export class ProcessingService {
@@ -54,4 +55,24 @@ export class ProcessingService {
     }, 'Receive deleted');
   }
 
+  static createBill(data: Omit<ProcessorBill, 'id' | 'billNo' | 'totalAmount'>) {
+    return BusinessWorkflowEngine.executeWorkflow('Processor Bill Creation', () => {
+      const state = useERPStore.getState();
+      state.addProcessorBill(data);
+    }, 'Bill saved successfully');
+  }
+
+  static updateBill(id: string, data: Partial<ProcessorBill>) {
+    return BusinessWorkflowEngine.executeWorkflow('Update Processor Bill', () => {
+      const state = useERPStore.getState();
+      state.updateProcessorBill(id, data);
+    }, 'Bill updated successfully');
+  }
+
+  static deleteBill(id: string) {
+    return BusinessWorkflowEngine.executeWorkflow('Delete Processor Bill', () => {
+      const state = useERPStore.getState();
+      state.deleteProcessorBill(id);
+    }, 'Bill deleted successfully');
+  }
 }

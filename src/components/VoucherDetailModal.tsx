@@ -1,13 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useERPStore } from '../store/useERPStore';
 import { X, FileText, CheckCircle2, History, AlertCircle, Edit, Trash2 } from 'lucide-react';
 import { formatCurrency } from '../lib/utils';
-import { JournalEntry } from '../types/erp';
 import { ErrorManagement } from '../lib/validation';
-import { AccountingService } from '../services/AccountingService';
+import { AccountingEngine } from '../lib/accounting/AccountingEngine';
 
 export function VoucherDetailModal({ voucherId, onClose }: { voucherId: string, onClose: () => void }) {
-  const { vouchers, journalEntries, accounts, deleteVoucher } = useERPStore();
+  const { vouchers, journalEntries, accounts } = useERPStore();
   const [activeTab, setActiveTab] = useState<'entries' | 'audit'>('entries');
   
   const voucher = vouchers.find(v => v.id === voucherId);
@@ -21,7 +20,7 @@ export function VoucherDetailModal({ voucherId, onClose }: { voucherId: string, 
   const handleDelete = () => {
     if (window.confirm("Are you sure you want to delete this voucher? This will reverse its accounting impact.")) {
       ErrorManagement.safeExecuteSync(() => {
-        AccountingService.deleteVoucher(voucher.id);
+        AccountingEngine.deleteVoucher(voucher.id);
         onClose();
       }, 'Voucher Delete');
     }
@@ -179,7 +178,7 @@ export function VoucherDetailModal({ voucherId, onClose }: { voucherId: string, 
                 </div>
               ) : (
                 <div className="relative border-l-2 border-border ml-4 space-y-8 pb-4">
-                  {voucher.versionHistory.map((audit, index) => (
+                  {voucher.versionHistory.map((audit) => (
                     <div key={audit.id} className="relative pl-6">
                       <div className={`absolute -left-[9px] top-1 w-4 h-4 rounded-full border-2 border-card ${
                         audit.action === 'Created' ? 'bg-success' :
