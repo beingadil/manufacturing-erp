@@ -1,5 +1,5 @@
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
-import React, { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { useERPStore } from "../store/useERPStore";
 import { cn } from "../lib/utils";

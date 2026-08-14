@@ -1,8 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatCurrency, formatNumber } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
-import { Scale, DollarSign, Activity, Percent } from 'lucide-react';
-import { format } from 'date-fns';
+import { DollarSign, Activity, Percent } from 'lucide-react';
 import { PurchaseReportService } from "../../../lib/reporting/PurchaseReportService";
 
 export function PurchaseComparisonReport() {

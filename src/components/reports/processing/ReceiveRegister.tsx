@@ -1,6 +1,5 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { formatCurrency, formatNumber } from '../../../lib/utils';
-import { format } from 'date-fns';
 import { ReportFilterBar } from '../common/ReportFilterBar';
 import { ReportKPICard } from '../common/ReportKPICard';
 import { DataTable, Column } from '../../DataTable';

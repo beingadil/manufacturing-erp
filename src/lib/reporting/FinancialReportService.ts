@@ -1,6 +1,5 @@
 import { useERPStore } from '../../store/useERPStore';
 import { ReportEngine } from './ReportEngine';
-import { FinancialCalculationService } from '../business/FinancialCalculationService';
 import { AccountingEngine } from '../accounting/AccountingEngine';
 import type { Account } from '../../types/erp';
 

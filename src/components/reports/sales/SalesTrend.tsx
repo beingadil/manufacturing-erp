@@ -1,8 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatCurrency, formatNumber } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
 import { Activity, DollarSign, Calendar } from 'lucide-react';
-import { format } from 'date-fns';
 import { SalesReportService } from "../../../lib/reporting/SalesReportService";
 
 export function SalesTrend() {

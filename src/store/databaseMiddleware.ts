@@ -15,7 +15,7 @@ type DatabaseMiddlewareImpl = <T>(
   name?: string
 ) => StateCreator<T, [], []>;
 
-export const databaseMiddlewareImpl: DatabaseMiddlewareImpl = (f, name) => (set, get, api) => {
+export const databaseMiddlewareImpl: DatabaseMiddlewareImpl = (f, _name) => (set, get, api) => {
   const loggedSet: typeof set = (...a) => {
     const nextStateRaw = typeof a[0] === 'function' ? (a[0] as Function)(get()) : a[0];
     const prevState = get() as any;

@@ -1,7 +1,7 @@
 import { useERPStore } from '../../store/useERPStore';
 import { VoucherValidator, ValidationEngine, VoucherDTO } from '../validation';
 import { BusinessWorkflowEngine } from '../business/BusinessWorkflowEngine';
-import { isDebitNormalAccount, isReceivableAccount, isPayableAccount } from './accountClassification';
+import { isDebitNormalAccount, } from './accountClassification';
 import type { Account, AccountSubtype, JournalEntry, SourceModule, Voucher, VoucherType } from '../../types/erp';
 
 export interface VoucherLine {
@@ -214,7 +214,7 @@ export class AccountingEngine {
    */
   static recomputePartyBalances(): void {
     const state = useERPStore.getState();
-    const { accounts, accountSubtypes, suppliers, customers, processors, journalEntries, vouchers } = state;
+    const { accounts, suppliers, customers, processors, journalEntries, vouchers } = state;
 
     const balances = AccountingEngine.getAccountBalances(accounts, journalEntries, vouchers);
 
@@ -257,7 +257,7 @@ export class AccountingEngine {
   /** Trial balance from the engine — must balance (spec §19). */
   static getTrialBalance(
     accounts: Account[],
-    subtypes: AccountSubtype[],
+    _subtypes: AccountSubtype[],
     entries: JournalEntry[],
     vouchers: Voucher[],
     asOfDate?: string

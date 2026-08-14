@@ -1,11 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatNumber } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
 import { Factory, AlertCircle } from 'lucide-react';
 import { ProcessingReportService } from "../../../lib/reporting/ProcessingReportService";
 
 export function PendingPCSReport() {
-  const [dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });
+  const [_dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });
   const [search, setSearch] = useState('');
 
   const data = useMemo(() => ProcessingReportService.getPendingPCSReportData(search), [search]);

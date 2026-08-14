@@ -19,9 +19,9 @@ export class SeedDataService {
 
     const cat1 = store.addCategory({ name: 'Raw Materials', description: 'Primary raw materials', type: 'material', status: 'Active' });
     const cat2 = store.addCategory({ name: 'Finished Products', description: 'Manufactured goods for sale', type: 'product', status: 'Active' });
-    const cat3 = store.addCategory({ name: 'Packing Materials', description: 'Materials for packaging', type: 'material', status: 'Active' });
-    const cat4 = store.addCategory({ name: 'Consumables', description: 'Consumable workshop items', type: 'material', status: 'Active' });
-    const cat5 = store.addCategory({ name: 'Services', description: 'External services', type: 'service', status: 'Active' });
+    store.addCategory({ name: 'Packing Materials', description: 'Materials for packaging', type: 'material', status: 'Active' });
+    store.addCategory({ name: 'Consumables', description: 'Consumable workshop items', type: 'material', status: 'Active' });
+    store.addCategory({ name: 'Services', description: 'External services', type: 'service', status: 'Active' });
 
     const m1 = store.addRawMaterial({ code: 'RM-STL-001', name: 'Steel Sheet 3mm', categoryId: cat1, unit: 'Kg', minStockLevel: 500, status: 'Active', description: 'Mild steel sheet 3mm thickness', currentStock: 2000 });
     const m2 = store.addRawMaterial({ code: 'RM-CPR-002', name: 'Copper Wire 14AWG', categoryId: cat1, unit: 'Kg', minStockLevel: 200, status: 'Active', description: 'Copper winding wire 14 AWG', currentStock: 800 });

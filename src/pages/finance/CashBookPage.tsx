@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useERPStore } from '../../store/useERPStore';
 import { CashBookEngine, CashBookRow } from '../../lib/finance/CashBookEngine';
 import { getCashAccounts } from '../../lib/accounting/accountClassification';
-import { ArrowUpCircle, ArrowDownCircle, CalendarDays } from 'lucide-react';
+import { ArrowDownCircle, CalendarDays } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 /**

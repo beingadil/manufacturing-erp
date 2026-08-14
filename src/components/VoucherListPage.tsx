@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useERPStore } from '../store/useERPStore';
 import { Voucher } from '../types/erp';
 import { Search, Plus, Eye, Pencil, XCircle, Trash2, FileText, CheckCircle2, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
@@ -227,7 +227,6 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
               </tr>
             )}
             {filteredVouchers.map(v => {
-              const entries = journalEntries.filter(je => je.voucherId === v.id);
               return (
                 <tr key={v.id} className={cn('hover:bg-muted/20 transition-colors group', v.status === 'Cancelled' && 'opacity-60')}>
                   <td className="py-2.5 px-4 text-sm text-foreground whitespace-nowrap">{new Date(v.date).toLocaleDateString()}</td>

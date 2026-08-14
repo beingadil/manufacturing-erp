@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatCurrency, formatNumber } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
-import { Factory, DollarSign, Activity } from 'lucide-react';
+import { DollarSign, Activity } from 'lucide-react';
 import { format } from 'date-fns';
 import { ProcessingReportService } from "../../../lib/reporting/ProcessingReportService";
 

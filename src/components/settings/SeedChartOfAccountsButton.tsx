@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Database, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 

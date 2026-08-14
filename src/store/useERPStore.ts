@@ -11,7 +11,7 @@ import {
   MaterialCategory, RawMaterial, Processor, Supplier, Customer, 
   Purchase, ProcessingSend, ProcessingReceipt, Product, Sale,
   Batch, InventoryMovement, ProcessorBill,
-  AccountSubtype, Account, Voucher, JournalEntry, AccountType,
+  AccountSubtype, Account, Voucher, JournalEntry, 
   CompanySettings, DocumentSettings
 } from '../types/erp';
 import { migrateERPState } from './erpMigration';
@@ -572,7 +572,6 @@ export const useERPStore = create<ERPState>()(
       addPurchase: (data) => {
         set((state) => {
         const purchaseNo = DocumentNumberingService.nextDocumentNumber(state.purchases, 'purchaseNo', 'PO', data.date);
-        const weightInKg = UnitConversionService.convertToKg(data.weight, data.weightUnit);
         const calculatedPcs = UnitConversionService.calculatePcsFromWeight(data.weight, data.weightUnit, data.weightPerPiece);
         const amount = data.weight * data.ratePerUnit;
 

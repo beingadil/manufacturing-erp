@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Calendar as CalendarIcon, SlidersHorizontal, Download, Printer, FileText, Table } from 'lucide-react';
+import { Search, Calendar as CalendarIcon, SlidersHorizontal, } from 'lucide-react';
 import { ReportExportBar } from './ReportExportBar';
 
 interface ReportFilterBarProps {

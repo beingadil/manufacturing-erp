@@ -1,5 +1,5 @@
-import React from 'react';
-import { Download, Printer, Copy, FileText, FileSpreadsheet } from 'lucide-react';
+
+import { Download, Printer, FileText, FileSpreadsheet } from 'lucide-react';
 
 interface ReportExportBarProps {
   onPrint?: () => void;

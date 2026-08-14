@@ -1,23 +1,21 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useERPStore } from "../store/useERPStore";
-import { useAuth } from "../contexts/AuthContext";
+
 import { AccountingEngine } from "../lib/accounting/AccountingEngine";
-import { filterFinancialData } from "../lib/abac";
 import { formatCurrency, cn } from "../lib/utils";
-import { Download, Wallet } from "lucide-react";
+import { Wallet } from "lucide-react";
 import { DataTable, Column } from "../components/DataTable";
 import { SearchableSelect } from "../components/SearchableSelect";
 
 export function Ledgers() {
-  const { profile, isAdmin, dataPolicies } = useAuth();
   const { 
     processors, suppliers, customers, materials,
     processingSends, processingReceipts,
     accounts, journalEntries, vouchers, accountSubtypes
   } = useERPStore();
   
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, _setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   
   // If navigating from legacy links with tab and id:

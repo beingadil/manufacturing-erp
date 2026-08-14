@@ -2,7 +2,6 @@ import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
 import { Eye, Edit, Trash2, Printer } from 'lucide-react';
 import React, { useState, useMemo } from "react";
 import { useERPStore } from "../store/useERPStore";
-import { toast } from 'sonner';
 import { ErrorManagement } from '../lib/validation';
 import { SalesService } from '../services/SalesService';
 import { Plus, X } from "lucide-react";

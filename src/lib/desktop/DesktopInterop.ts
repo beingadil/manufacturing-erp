@@ -34,7 +34,7 @@ class BrowserStorageService implements IStorageService {
 }
 
 class BrowserFileService implements IFileService {
-  async saveFile(content: Blob | string, filename: string, options?: SaveFileOptions): Promise<boolean> {
+  async saveFile(content: Blob | string, filename: string, _options?: SaveFileOptions): Promise<boolean> {
     try {
       const blob = typeof content === 'string' ? new Blob([content], { type: 'text/plain' }) : content;
       const url = URL.createObjectURL(blob);
@@ -87,12 +87,12 @@ class BrowserFileService implements IFileService {
 }
 
 class BrowserPrintService implements IPrintService {
-  async print(options?: PrintOptions): Promise<boolean> {
+  async print(_options?: PrintOptions): Promise<boolean> {
     window.print();
     return true;
   }
   
-  async printToPDF(options?: PrintOptions): Promise<Uint8Array | Blob> {
+  async printToPDF(_options?: PrintOptions): Promise<Uint8Array | Blob> {
     throw new Error('Not implemented in browser. Use PDF engine directly.');
   }
 }

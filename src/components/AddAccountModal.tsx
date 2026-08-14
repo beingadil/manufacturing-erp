@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { useERPStore } from '../store/useERPStore';
-import { v4 as uuidv4 } from 'uuid';
-import { AccountType, AccountSubtype } from '../types/erp';
+import { AccountType, } from '../types/erp';
 
 interface Props {
   isOpen: boolean;

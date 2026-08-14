@@ -1,8 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatCurrency } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
 import { Users, DollarSign, FileText } from 'lucide-react';
-import { format } from 'date-fns';
 import { PurchaseReportService } from "../../../lib/reporting/PurchaseReportService";
 
 export function SupplierLedgerSummary() {

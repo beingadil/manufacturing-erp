@@ -11,7 +11,7 @@ interface BaseModalProps {
 export function QuickAddCustomer({ isOpen, onClose, onSuccess }: BaseModalProps) {
   const { addCustomer } = useERPStore();
   const [name, setName] = useState("");
-  const [companyName, setCompanyName] = useState("");
+  const [_companyName, _setCompanyName] = useState("");
   const [phone, setPhone] = useState("");
 
   if (!isOpen) return null;

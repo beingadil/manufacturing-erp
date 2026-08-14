@@ -1,8 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatCurrency } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
 import { Users, DollarSign, Activity, AlertCircle } from 'lucide-react';
-import { format } from 'date-fns';
 
 import { DrillDownVoucherList } from '../common/DrillDownVoucherList';
 import { useDrillDown } from '../../../contexts/DrillDownContext';

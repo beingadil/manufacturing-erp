@@ -1,11 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatNumber } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
 import { AlertCircle } from 'lucide-react';
 import { InventoryReportService } from "../../../lib/reporting/InventoryReportService";
 
 export function LowStock() {
-  const [dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });
+  const [_dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });
   const [search, setSearch] = useState('');
 
   const data = useMemo(() => InventoryReportService.getLowStockData(search), [search]);

@@ -1,8 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useERPStore } from '../store/useERPStore';
-import { Database, Activity, CheckCircle, XCircle, AlertTriangle, RefreshCw } from 'lucide-react';
-import { FinancialCalculationService } from '../lib/business/FinancialCalculationService';
-import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
+import { Activity, CheckCircle, XCircle, AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface Issue {
   category: string;
@@ -21,15 +19,15 @@ export function SystemHealthDashboard() {
     setIsScanning(true);
     setTimeout(() => {
       const issues: Issue[] = [];
-      let passed = 0;
-      let failed = 0;
-      let warnings = 0;
+      let _passed = 0;
+      let _failed = 0;
+      let _warnings = 0;
 
       const addIssue = (category: string, name: string, status: 'pass' | 'fail' | 'warn', details: string) => {
         issues.push({ category, name, status, details });
-        if (status === 'pass') passed++;
-        if (status === 'fail') failed++;
-        if (status === 'warn') warnings++;
+        if (status === 'pass') _passed++;
+        if (status === 'fail') _failed++;
+        if (status === 'warn') _warnings++;
       };
 
       try {

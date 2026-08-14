@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { formatCurrency } from '../../../lib/utils';
 import { ReportFilterBar } from '../common/ReportFilterBar';
 import { generateEnterpriseDocument } from '../../../lib/pdfEngine';

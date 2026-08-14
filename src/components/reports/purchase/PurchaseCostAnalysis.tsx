@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { formatCurrency, formatNumber } from '../../../lib/utils';
+import { useMemo, useState } from 'react';
+import { formatCurrency, } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
 import { Activity, DollarSign, Target } from 'lucide-react';
 import { PurchaseReportService } from "../../../lib/reporting/PurchaseReportService";

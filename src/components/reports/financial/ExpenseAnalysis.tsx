@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatCurrency } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
-import { Calculator, DollarSign, Percent } from 'lucide-react';
+import { Calculator, DollarSign, } from 'lucide-react';
 import { FinancialReportService } from "../../../lib/reporting/FinancialReportService";
 
 export function ExpenseAnalysis() {

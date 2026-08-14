@@ -1,4 +1,4 @@
-import { Product, Batch, InventoryMovement, RawMaterial, ProcessingReceipt, ProcessingSend, Sale } from '../../types/erp';
+import { Product, Batch, ProcessingReceipt, ProcessingSend, Sale } from '../../types/erp';
 
 export interface BatchStageValue {
   value: number;

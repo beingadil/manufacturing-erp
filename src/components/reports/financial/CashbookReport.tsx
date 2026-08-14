@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatCurrency } from '../../../lib/utils';
 import { format } from 'date-fns';
 import { ReportFilterBar } from '../common/ReportFilterBar';
