@@ -20,6 +20,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.17',
+    date: '2026-08-14',
+    title: 'Deep cleanup — dead code removed, single authoritative service layer, stricter checks',
+    sections: [
+      {
+        title: '🧹 Cleanup & Architecture',
+        items: [
+          'Deleted 11 orphaned files and ~1,300 lines of dead code across the app (never-referenced pages, hooks, validators, an orphaned Electron handler, and a duplicated calculation service).',
+          'Removed the legacy AccountingService — AccountingEngine is now the single authoritative voucher layer; delete/create/update all flow through it from every UI entry point.',
+          'Completed ProcessingService with bill create/update/delete and routed all Processing-module mutations through the service layer (validate → audit) instead of raw store calls.',
+          'Enabled noUnusedImports/noUnusedVariables lint rules so unused code now fails the build instead of silently accumulating.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.16',
     date: '2026-08-13',
     title: 'Unified module design system — KPI cards, redesigned tables & sidebar',
