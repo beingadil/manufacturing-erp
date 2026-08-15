@@ -20,6 +20,30 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.18',
+    date: '2026-08-15',
+    title: 'Working restore & import — backup data now actually comes back',
+    sections: [
+      {
+        title: '💾 Backup & Restore — fixed end-to-end',
+        items: [
+          'Restore and Import now truly restore: a category/material/purchase saved before the backup and deleted afterwards comes back exactly as it was. Previously the app re-applied the newer pre-restore state from its local mirror, so restore appeared to do nothing.',
+          'Restoring or importing invalidates the local persistence mirror so the restored database wins on reload — no more “restore ran but nothing changed”.',
+          'Restore/import now remove stale WAL sidecar files before reopening the database, eliminating a classic SQLite corruption risk.',
+        ],
+      },
+      {
+        title: '🛡️ Persistence hardening',
+        items: [
+          'Mirror writes now carry an explicit “unsynced” flag — if SQLite fails to save a change (disk full, DB closed), that change is recovered from the mirror on the next launch instead of being silently lost.',
+          'Writes to SQLite are serialized per store so rapid changes always land in order.',
+          'Timestamps are millisecond-precision for exact SQLite-vs-mirror comparisons.',
+          'Removed an unreachable legacy settings-migration code path; the storage adapter is now the single writer for every persisted store.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.17',
     date: '2026-08-14',
     title: 'Deep cleanup — dead code removed, single authoritative service layer, stricter checks',
