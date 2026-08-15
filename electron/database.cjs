@@ -326,6 +326,7 @@ function restoreDatabase(backupPath) {
       db = null;
     }
     fs.copyFileSync(backupPath, dbPath);
+    removeWalSidecars(dbPath);
     initialized = false;
     initializeDatabase();
     console.log('[DB] Database restored from:', backupPath);
@@ -391,6 +392,7 @@ function importBackupFromPath(sourcePath) {
     console.log('[DB] Pre-import safety backup saved:', safetyPath);
     // Replace the live database
     fs.copyFileSync(sourcePath, dbPath);
+    removeWalSidecars(dbPath);
     initialized = false;
     initializeDatabase();
     console.log('[DB] Database imported from:', sourcePath);
@@ -537,6 +539,7 @@ function importUnifiedBackupFromPath(sourcePath) {
     }
     // Replace the live database file
     fs.writeFileSync(dbPath, dbBytes);
+    removeWalSidecars(dbPath);
     initialized = false;
     initializeDatabase();
     console.log('[DB] Unified backup imported from:', sourcePath);
@@ -595,6 +598,7 @@ function restoreFromUpdateSafeBackup() {
     }
 
     fs.copyFileSync(backupPath, dbPath);
+    removeWalSidecars(dbPath);
     console.log('[DB] Database restored from update-safe backup');
 
     // Remove the backup file so we don't restore stale data next time
@@ -605,6 +609,20 @@ function restoreFromUpdateSafeBackup() {
   } catch (error) {
     console.error('[DB] restoreFromUpdateSafeBackup error:', error);
     return { success: false, error: error.message };
+  }
+}
+
+// After replacing the live database file (restore/import) any leftover -wal /
+// -shm files from the previous connection must be removed. Replaying a stale
+// WAL against a different database file is a classic SQLite corruption source.
+function removeWalSidecars(dbPath) {
+  try {
+    for (const ext of ['-wal', '-shm']) {
+      const f = dbPath + ext;
+      if (fs.existsSync(f)) fs.rmSync(f, { force: true });
+    }
+  } catch (error) {
+    console.warn('[DB] Failed to remove WAL sidecars:', error.message);
   }
 }
 

@@ -11,6 +11,14 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
+    // jsdom exposes localStorage only for documents with a real origin.
+    // Without a url, `localStorage` is undefined in the test environment even
+    // though `window` exists (vitest 4 + jsdom 29 behavior).
+    environmentOptions: {
+      jsdom: {
+        url: "http://localhost/",
+      },
+    },
     include: ["src/**/*.test.{ts,tsx}"],
   },
 });
