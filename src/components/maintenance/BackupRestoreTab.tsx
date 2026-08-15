@@ -4,6 +4,7 @@ import {
   HardDrive, Loader2, Trash2, Info, Monitor,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { clearStorageMirrors } from '../../database/sqlite/SQLiteStorageAdapter';
 
 // ─── Single canonical backup/restore component ──────────────────────────────
 // Used by BOTH Settings → Backup & Restore AND System Maintenance → Backup &
@@ -95,6 +96,10 @@ export function BackupRestoreTab() {
       if (db.backup) await db.backup(); // safety backup of current state
       const res = await db.restore(snapshot.path);
       if (res.success) {
+        // The main process replaced SQLite with the snapshot. The localStorage
+        // mirrors still hold the newer pre-restore state and would override it
+        // on rehydration — clear them so the restored SQLite rows win.
+        clearStorageMirrors();
         alert('Database restored successfully. The application will now reload.');
         window.location.reload();
       } else {
@@ -160,6 +165,8 @@ export function BackupRestoreTab() {
       if (result.success) {
         const m = result.manifest as BackupManifest | undefined;
         setLastManifest(m || null);
+        // Same as restore: drop stale mirrors so rehydration reads the imported DB.
+        clearStorageMirrors();
         alert(
           'Database imported successfully. The application will now reload.\n\n' +
           (m

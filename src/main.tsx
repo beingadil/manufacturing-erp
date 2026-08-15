@@ -62,7 +62,6 @@ async function bootstrap() {
     try {
       if (dbService.isReady()) {
         const { SQLiteStorageAdapter } = await import('./database/sqlite/SQLiteStorageAdapter');
-        const db = dbService.getAdapter();
 
         // ---- ERP store rehydration ----
         const erpValue = await SQLiteStorageAdapter.getItem('erp-storage');
@@ -141,7 +140,14 @@ async function bootstrap() {
           }
         }
 
-        // ---- Settings store rehydration + localStorage migration ----
+        // ---- Settings store rehydration ----
+        // NOTE: legacy localStorage settings are already covered by
+        // SQLiteStorageAdapter.getItem()'s mirror fallback (a raw key is read
+        // as a legacy envelope), and the persist write triggered by the
+        // setState below re-saves them through the adapter. The old direct
+        // 'INSERT INTO key_value_store' migration branch was unreachable and
+        // bypassed the adapter's queue/mirror model, so it was removed — the
+        // adapter is now the single writer for this key.
         const settingsValue = await SQLiteStorageAdapter.getItem('erp-settings');
         if (settingsValue) {
           // Settings already persisted — rehydrate
@@ -153,33 +159,7 @@ async function bootstrap() {
             Logger.info('Startup', 'Settings rehydrated from SQLite');
           }
         } else {
-          // Check if settings exist in localStorage (legacy) and migrate to SQLite
-          let migrated = false;
-          try {
-            const localSettings = localStorage.getItem('erp-settings');
-            if (localSettings) {
-              await db.execute(
-                'INSERT INTO key_value_store (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)',
-                ['erp-settings', localSettings]
-              );
-              Logger.info('Startup', 'Settings migrated from localStorage to SQLite');
-
-              const parsed = JSON.parse(localSettings);
-              const state = parsed.state || parsed;
-              if (state && typeof state === 'object') {
-                const { useSettingsStore } = await import('./store/useSettingsStore');
-                useSettingsStore.setState(state);
-                Logger.info('Startup', 'Settings rehydrated from localStorage after migration');
-              }
-              migrated = true;
-            }
-          } catch (_e) {
-            // localStorage may not be available
-          }
-
-          if (!migrated) {
-            Logger.info('Startup', 'No persisted settings found (first launch or clean start)');
-          }
+          Logger.info('Startup', 'No persisted settings found (first launch or clean start)');
         }
 
         // ---- Log store rehydration ----
