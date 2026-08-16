@@ -92,11 +92,13 @@ The script will:
 
 1. Bump the version in `package.json` and `src/config/version.ts`
 2. Commit the change
-3. Tag the commit with `v1.x.x`
-4. Push to GitHub
-5. Trigger **GitHub Actions** to build and publish the release
+3. Build the frontend and publish the installer + `latest.yml` straight to **GitHub Releases** (`electron-builder --publish always`)
+4. Tag the commit with `v1.x.x` and push the branch + tag
+5. Fill in the release notes from the commit log since the previous tag
 
-Users will see the update automatically within minutes of the workflow completing.
+Users will see the update automatically within minutes of the release being published.
+
+The build and publish happen **locally on your machine** — the GitHub Actions workflow is a manual-only fallback for building on another machine. It does **not** auto-trigger on tag pushes (that previously raced the local publish and produced duplicate/orphaned releases), and it skips automatically if a release for the current version already exists. To use it: **Actions → Build & Release → Run workflow**.
 
 ### Option B: Manual
 
@@ -150,7 +152,7 @@ Users can also check manually from **Settings → About & Updates → Check for 
 | `fatal: not a git repository` | Git not initialized | Run `git init` |
 | `fatal: remote origin already exists` | Remote already set | Run `git remote set-url origin <url>` |
 | `GH_TOKEN not set` | Token not configured | Set `export GH_TOKEN="ghp_..."` |
-| GitHub Actions not triggering | No tag pushed | Tag must match `v*.*.*` pattern |
+| CI release not auto-triggering | By design — tag pushes never trigger CI | The local script is the primary path; run the workflow manually from **Actions** for a CI build |
 | App shows "Update Error" | No internet or wrong repo | Check network; verify publish config |
 
 ---

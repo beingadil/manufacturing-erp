@@ -1,12 +1,54 @@
 name: Build & Release
 
+# Manual-only trigger. Tag pushes deliberately do NOT auto-trigger this
+# workflow: the primary release path is scripts/publish-release.sh, which
+# builds locally and publishes the installer + latest.yml straight to GitHub
+# Releases via `electron-builder --publish always`, and only THEN pushes the
+# v* tag. A `push: tags` trigger made CI fire on that same tag and build +
+# publish a SECOND installer, racing the local upload — duplicate releases,
+# orphaned drafts, broken auto-update. Run this workflow manually (Actions →
+# Build & Release → Run workflow) when you want a CI-built release from
+# another machine. The guard job below additionally skips whenever a release
+# for the current package.json version already exists, so it can never clobber
+# or duplicate one.
 on:
-  push:
-    tags:
-      - 'v*.*.*'
+  workflow_dispatch:
 
 jobs:
+  # Guard: if a release for the version in package.json already exists, skip
+  # the build entirely. Makes the workflow self-protecting against racing or
+  # duplicating an existing release (re-dispatch, or a tag trigger being
+  # re-added later).
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Skip if release already exists
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -e "console.log(require('./package.json').version)")
+          TAG="v${VERSION}"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "⚠️  Release ${TAG} already exists — skipping build to avoid duplicating it."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
   release:
+    needs: guard
+    if: needs.guard.outputs.skip == 'false'
     runs-on: windows-latest
     # GITHUB_TOKEN needs write access to contents to create the GitHub
     # Release and upload the installer assets via electron-builder.
