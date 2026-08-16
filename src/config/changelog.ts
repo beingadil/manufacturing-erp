@@ -20,6 +20,29 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.19',
+    date: '2026-08-16',
+    title: 'Much smaller installer + race-proof release pipeline',
+    sections: [
+      {
+        title: '📦 Smaller, faster installer',
+        items: [
+          'Installer shrank from ~157 MB to ~99 MB and the packaged app data from 395 MB to 7.5 MB — updates download and install noticeably faster.',
+          'Removed 11 production dependencies that were never used anywhere in the app (agent-SDK leftovers pulling in a ~150 MB charting closure).',
+          'Moved the 58 renderer libraries that Vite bundles into the build to dev dependencies — only the two runtime modules the app actually loads ship in the package.',
+          'Stripped better-sqlite3’s compile-time artifacts; only the compiled native module ships, so the database engine loads exactly as before.',
+        ],
+      },
+      {
+        title: '🚀 Release pipeline hardening',
+        items: [
+          'The CI release workflow no longer auto-triggers on tag pushes — a tag push can never race the local publish again (this caused the duplicate/orphaned releases in v1.0.18).',
+          'The workflow is now manual-only and skips if a release for the version already exists, so double-publishing is impossible.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.18',
     date: '2026-08-15',
     title: 'Working restore & import — backup data now actually comes back',
