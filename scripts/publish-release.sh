@@ -26,8 +26,11 @@
 #   7. Auto-generates the release notes body from the commit log since
 #      the previous tag and PATCHes it onto the GitHub release
 #
-#   The GitHub Actions workflow (.github/workflows/release.yml) is kept
-#   as a fallback for other machines; this script is the primary path.
+#   The GitHub Actions workflow (.github/workflows/release.yml) is kept as a
+#   fallback for other machines; this script is the primary path. The workflow
+#   is manual-only (workflow_dispatch) — it never auto-triggers on the tag
+#   push this script performs, so it cannot race or duplicate the release
+#   (and it skips if a release for the version already exists).
 #
 # ============================================================
 
