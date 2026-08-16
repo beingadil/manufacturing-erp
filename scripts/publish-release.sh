@@ -9,7 +9,9 @@
 #
 # Prerequisites:
 #   1. A GitHub repository with your code pushed to 'origin'
-#   2. GH_TOKEN or GITHUB_TOKEN environment variable set
+#   2. GH_TOKEN / GITHUB_TOKEN environment variable, OR a workflow-scoped
+#      PAT stored in Git Credential Manager (run scripts/setup-gh-token.sh
+#      once — the script then falls back to it automatically)
 #   3. Publish config in package.json pointing to your repo
 #   4. All changes committed on your current branch
 #
@@ -41,10 +43,20 @@ cd "$(dirname "$0")/.."
 # ── Validate prerequisites ──────────────────────────────────────────
 
 if [ -z "${GH_TOKEN:-}" ] && [ -z "${GITHUB_TOKEN:-}" ]; then
-  echo "❌  GH_TOKEN or GITHUB_TOKEN environment variable must be set."
-  echo "   Create a GitHub Personal Access Token with 'repo' scope:"
-  echo "   https://github.com/settings/tokens"
-  exit 1
+  # Fall back to the credential stored in Git Credential Manager by
+  # scripts/setup-gh-token.sh — makes releases fully unattended.
+  STORED_TOKEN=$(printf "protocol=https\nhost=github.com\n\n" \
+    | git credential fill 2>/dev/null | sed -n 's/^password=//p')
+  if [ -n "$STORED_TOKEN" ]; then
+    export GH_TOKEN="$STORED_TOKEN"
+    echo "ℹ️   GH_TOKEN not set — using credential from Git Credential Manager."
+  else
+    echo "❌  No GitHub token available."
+    echo "   Either set GH_TOKEN, or store a workflow-scoped PAT once:"
+    echo "   bash scripts/setup-gh-token.sh <token>"
+    echo "   (https://github.com/settings/tokens — needs 'repo' + 'workflow' scopes)"
+    exit 1
+  fi
 fi
 
 if ! git remote get-url origin &>/dev/null; then
