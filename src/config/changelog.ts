@@ -20,6 +20,20 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.20',
+    date: '2026-08-17',
+    title: 'Fully unattended releases — one command from now on',
+    sections: [
+      {
+        title: '🚀 Release pipeline',
+        items: [
+          'New setup-gh-token.sh stores a workflow-scoped GitHub token in Windows Credential Manager (with validation and a hidden-input mode), and publish-release.sh now falls back to it automatically — future releases are a single command with no manual token step.',
+          'Completes the v1.0.19 push: master and the v1.0.19 tag now point at the release commit on GitHub, and the release stays published with all three assets.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.19',
     date: '2026-08-16',
     title: 'Much smaller installer + race-proof release pipeline',
