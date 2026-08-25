@@ -1,17 +1,16 @@
+import { Edit, Eye, Plus, Printer, Trash2, X } from 'lucide-react';
+import React, { useMemo, useState } from "react";
+import { Link } from 'react-router-dom';
+import { Column, DataTable, RowActionButton } from "../components/DataTable";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
-import { Eye, Edit, Trash2, Printer } from 'lucide-react';
-import React, { useState, useMemo } from "react";
-import { useERPStore } from "../store/useERPStore";
+import { QuickAddCustomer, QuickAddProduct } from "../components/QuickAddModals";
+import { SearchableSelect } from "../components/SearchableSelect";
+import { VoucherHistoryTab } from "../components/VoucherHistoryTab";
+import { generateInvoicePDF } from "../lib/documentGenerators";
+import { formatCurrency } from "../lib/utils";
 import { ErrorManagement } from '../lib/validation';
 import { SalesService } from '../services/SalesService';
-import { Plus, X } from "lucide-react";
-import { DataTable, Column, RowActionButton } from "../components/DataTable";
-import { formatCurrency } from "../lib/utils";
-import { SearchableSelect } from "../components/SearchableSelect";
-import { QuickAddCustomer, QuickAddProduct } from "../components/QuickAddModals";
-import { VoucherHistoryTab } from "../components/VoucherHistoryTab";
-import { Link } from 'react-router-dom';
-import { generateInvoicePDF } from "../lib/documentGenerators";
+import { useERPStore } from "../store/useERPStore";
 
 export function Sales() {
   const { sales, products, materials, customers, vouchers } = useERPStore();
@@ -181,43 +180,58 @@ export function Sales() {
 
       {isModalOpen && !isAddCustomerOpen && !isAddProductOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-card rounded-2xl shadow-xl w-full max-w-md">
+          <div className="bg-card rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
             <div className="px-6 py-4 border-b flex justify-between">
               <h3 className="text-lg font-bold">{editSaleId ? "Edit Sale" : "New Sale"}</h3>
               <button onClick={() => { setIsModalOpen(false); setEditSaleId(undefined); }}><X className="h-5 w-5 text-muted-foreground/80" /></button>
             </div>
-            <form onSubmit={handleCreate} className="p-6 pb-64 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground/80 mb-1">Customer</label>
-                <SearchableSelect 
-                  options={customers.map(c => ({ id: c.id, label: c.name, searchValue: c.phone }))}
-                  value={customerId}
-                  onChange={setCustomerId}
-                  placeholder="Select Customer..."
-                  onAdd={() => setIsAddCustomerOpen(true)}
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-foreground/80 mb-1">Product</label>
-                <SearchableSelect 
-                  options={products.map(p => {
-                    const m = materials.find(mat => mat.id === p.materialId);
-                    return { id: p.id, label: p.name, secondaryLabel: `Available: ${m?.processedStockPcs || 0} PCS` }
-                  })}
-                  value={productId}
-                  onChange={handleProductChange}
-                  placeholder="Select Product..."
-                  onAdd={() => setIsAddProductOpen(true)}
-                  required
-                />
+            <form onSubmit={handleCreate} className="p-6 space-y-3">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground/80 mb-1">Customer</label>
+                  <SearchableSelect 
+                    options={customers.map(c => ({ id: c.id, label: c.name, searchValue: c.phone }))}
+                    value={customerId}
+                    onChange={setCustomerId}
+                    placeholder="Select Customer..."
+                    onAdd={() => setIsAddCustomerOpen(true)}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground/80 mb-1">Product</label>
+                  <SearchableSelect 
+                    options={products.map(p => {
+                      const m = materials.find(mat => mat.id === p.materialId);
+                      return { id: p.id, label: p.name, secondaryLabel: `Available: ${m?.processedStockPcs || 0} PCS` }
+                    })}
+                    value={productId}
+                    onChange={handleProductChange}
+                    placeholder="Select Product..."
+                    onAdd={() => setIsAddProductOpen(true)}
+                    required
+                  />
+                </div>
               </div>
 
-              <input type="number" required placeholder="PCS to Sell" value={pcsSold} onChange={e => setPcsSold(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
-              <input type="number" step="0.01" required placeholder="Price Per Piece (₹)" value={pricePerPiece} onChange={e => setPricePerPiece(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
-              <input type="date" required value={date} onChange={e => setDate(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
-              <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">{editSaleId ? "Update Sale" : "Confirm Sale"}</button>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground/80 mb-1">PCS to Sell *</label>
+                  <input type="number" required placeholder="Quantity" value={pcsSold} onChange={e => setPcsSold(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground/80 mb-1">Price Per Piece (₹) *</label>
+                  <input type="number" step="0.01" required placeholder="Rate" value={pricePerPiece} onChange={e => setPricePerPiece(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground/80 mb-1">Date *</label>
+                  <input type="date" required value={date} onChange={e => setDate(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" />
+                </div>
+              </div>
+              <div className="pt-2 flex gap-3">
+                <button type="button" onClick={() => { setIsModalOpen(false); setEditSaleId(undefined); }} className="flex-1 rounded-xl border border-border bg-card px-4 py-3 font-semibold text-foreground/80 hover:bg-muted/40 transition-colors">Cancel</button>
+                <button type="submit" className="flex-1 rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-md">{editSaleId ? "Update Sale" : "Confirm Sale"}</button>
+              </div>
             </form>
           </div>
         </div>

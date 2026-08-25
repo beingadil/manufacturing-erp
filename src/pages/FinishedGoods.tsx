@@ -1,13 +1,13 @@
-import React, { useState, useMemo } from "react";
-import { useERPStore } from "../store/useERPStore";
-import { Plus, X, Pencil, Trash2, Package, Boxes } from "lucide-react";
-import { DataTable, Column, RowActionButton } from "../components/DataTable";
-import { formatCurrency, formatNumber } from "../lib/utils";
-import { KpiCard } from '../components/ui/KpiCard';
-import { SearchableSelect } from "../components/SearchableSelect";
-import { QuickAddMaterial } from "../components/QuickAddModals";
-import { DeleteConfirmationModal } from "../components/DeleteConfirmationModal";
+import { Boxes, Package, Pencil, Plus, Trash2, X } from "lucide-react";
+import React, { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { Column, DataTable, RowActionButton } from "../components/DataTable";
+import { DeleteConfirmationModal } from "../components/DeleteConfirmationModal";
+import { QuickAddMaterial } from "../components/QuickAddModals";
+import { SearchableSelect } from "../components/SearchableSelect";
+import { KpiCard } from '../components/ui/KpiCard';
+import { formatCurrency, formatNumber } from "../lib/utils";
+import { useERPStore } from "../store/useERPStore";
 
 export function FinishedGoods() {
   const { products, materials, categories, sales, addProduct, updateModuleItem, removeModuleItem } = useERPStore();
@@ -200,12 +200,12 @@ export function FinishedGoods() {
 
       {isModalOpen && !isAddMaterialOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-card rounded-2xl shadow-xl w-full max-w-md">
+          <div className="bg-card rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
             <div className="px-6 py-4 border-b flex justify-between">
               <h3 className="text-lg font-bold">{editingProduct ? 'Edit Product' : 'Add Product'}</h3>
               <button onClick={closeModal}><X className="h-5 w-5 text-muted-foreground/80" /></button>
             </div>
-            <form onSubmit={editingProduct ? handleEdit : handleCreate} className="p-6 pb-64 space-y-4">
+            <form onSubmit={editingProduct ? handleEdit : handleCreate} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
               <input type="text" required placeholder="Product Name" value={name} onChange={e => setName(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
               
               <div className="grid grid-cols-2 gap-3">

@@ -1,16 +1,15 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { Cloud, Layers, Package, Pencil, Plus, RefreshCw, Tags, Trash2, X } from 'lucide-react';
 import { motion } from 'motion/react';
-import { Plus, Tags, Pencil, Trash2, Cloud, RefreshCw, Package, Layers, X } from 'lucide-react';
-import { useERPStore } from '../store/useERPStore';
-import { MaterialCategory } from '../types/erp';
-import { DataTable, Column, RowActionButton } from "../components/DataTable";
-
-import { CategoryService } from '../services/CategoryService';
+import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { SafeDeleteDialog } from '../components/common/SafeDeleteDialog';
 import { InlineEditInput } from '../components/common/InlineEditInput';
+import { SafeDeleteDialog } from '../components/common/SafeDeleteDialog';
+import { Column, DataTable, RowActionButton } from "../components/DataTable";
 import { KpiCard } from '../components/ui/KpiCard';
 import { formatNumber } from '../lib/utils';
+import { CategoryService } from '../services/CategoryService';
+import { useERPStore } from '../store/useERPStore';
+import { MaterialCategory } from '../types/erp';
 
 export default function Categories() {
   const { categories, materials, addCategory, updateCategory } = useERPStore();
@@ -265,7 +264,7 @@ export default function Categories() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             onClick={(e) => e.stopPropagation()}
-            className="bg-card rounded-2xl shadow-xl w-full max-w-md overflow-hidden"
+            className="bg-card rounded-2xl shadow-xl w-full max-w-lg overflow-hidden"
           >
             <div className="px-6 py-4 border-b border-border/50 flex items-center justify-between bg-gradient-to-r from-indigo-500/10 to-violet-500/10">
               <div className="flex items-center gap-3">

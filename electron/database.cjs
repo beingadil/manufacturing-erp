@@ -202,6 +202,11 @@ function createAllTables() {
   addColumnIfMissing('processorBills', 'billingUnit', 'TEXT');
   // Worker type — the processing stage a processor performs (NULL = general).
   addColumnIfMissing('processors', 'stageId', 'TEXT');
+  // Batch stage-tracking columns for multi-stage processing
+  addColumnIfMissing('batches', 'atProcessorPcs', 'REAL DEFAULT 0');
+  addColumnIfMissing('batches', 'processedPcs', 'REAL DEFAULT 0');
+  addColumnIfMissing('batches', 'currentStageId', 'TEXT');
+  addColumnIfMissing('batches', 'stageAvailablePcs', 'REAL DEFAULT 0');
 
   // Performance indexes
   db.exec(`

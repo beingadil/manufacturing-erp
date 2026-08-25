@@ -44,6 +44,8 @@ export interface Batch {
   processedPcs?: number;
   /** The processing stage this batch is currently at (informational; derived from movements). */
   currentStageId?: string;
+  /** Pcs of this batch available to send to the next processing stage (received from previous stage, not yet dispatched). */
+  stageAvailablePcs?: number;
 }
 
 export type ProcessingRateMethod = "per_piece" | "per_kg";

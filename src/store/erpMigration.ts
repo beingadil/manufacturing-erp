@@ -155,6 +155,27 @@ export function migrateERPState(state: any): any {
       );
     }
 
+    // Non-final stage receipts: received pcs become available at the next stage
+    // in the chain (stageAvailablePcs += received, currentStageId -> next stage).
+    const stagesSorted = [...processingStages].sort((a: any, b: any) => a.sequence - b.sequence);
+    for (const r of orderedReceipts) {
+      const send = sends.find((x: any) => x.id === r.sendId);
+      const stageId = r.stageId ?? send?.stageId;
+      if (InventoryCalculationService.receiptProducesFinished(stageId, processingStages)) continue;
+      const currentStage = stagesSorted.find((s: any) => s.id === stageId);
+      const nextStageId = currentStage?.nextStageId;
+      trail = trail.map((b: any) => {
+        if (send?.batchId && b.id === send.batchId) {
+          return {
+            ...b,
+            currentStageId: nextStageId || undefined,
+            stageAvailablePcs: (b.stageAvailablePcs || 0) + (r.pcsReceived || 0),
+          };
+        }
+        return b;
+      });
+    }
+
     // Sales: finished → sold consume FIFO per material (same as the engine).
     const productMaterial = new Map<string, string>(
       products.map((p: any) => [p.id as string, p.materialId as string])
