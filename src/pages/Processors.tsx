@@ -1,12 +1,12 @@
+import { CircleDollarSign, Pencil, Plus, UserCog, Wallet, X } from "lucide-react";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useERPStore } from "../store/useERPStore";
-import { formatCurrency, formatNumber, cn } from "../lib/utils";
-import { Plus, UserCog, X, Pencil, Wallet, CircleDollarSign } from "lucide-react";
-import { DataTable, Column, RowActionButton } from "../components/DataTable";
-import { KpiCard } from '../components/ui/KpiCard';
-import { PartyLedgerModal } from "../components/PartyLedgerModal";
 import { toast } from "sonner";
+import { Column, DataTable, RowActionButton } from "../components/DataTable";
+import { PartyLedgerModal } from "../components/PartyLedgerModal";
+import { KpiCard } from '../components/ui/KpiCard';
+import { cn, formatCurrency, formatNumber } from "../lib/utils";
+import { useERPStore } from "../store/useERPStore";
 
 export function Processors() {
   const { processors, addProcessor, updateProcessor, processingStages } = useERPStore();
@@ -198,12 +198,12 @@ export function Processors() {
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-card rounded-2xl shadow-xl w-full max-w-md">
+          <div className="bg-card rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
             <div className="px-6 py-4 border-b flex justify-between">
               <h3 className="text-lg font-bold">{editingProcessor ? 'Edit Processor' : 'Add Processor'}</h3>
               <button onClick={closeModal}><X className="h-5 w-5 text-muted-foreground/80" /></button>
             </div>
-            <form onSubmit={handleSubmit} className="p-6 pb-64 space-y-4">
+            <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
               <input type="text" required value={name} onChange={e => setName(e.target.value)} className="w-full rounded-xl border p-3 text-sm" placeholder="Processor Name *" />
               <div>
                 <label className="block text-sm font-medium text-foreground/80 mb-1">Worker Type</label>

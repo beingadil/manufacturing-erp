@@ -1,17 +1,16 @@
+import { Edit, Eye, Plus, Printer, Trash2, X } from 'lucide-react';
+import React, { useMemo, useState } from "react";
+import { Link } from 'react-router-dom';
+import { Column, DataTable, RowActionButton } from "../components/DataTable";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
-import { Eye, Edit, Trash2, Printer } from 'lucide-react';
-import React, { useState, useMemo } from "react";
-import { useERPStore } from "../store/useERPStore";
+import { QuickAddMaterial, QuickAddSupplier } from "../components/QuickAddModals";
+import { SearchableSelect } from "../components/SearchableSelect";
+import { VoucherHistoryTab } from "../components/VoucherHistoryTab";
+import { generatePurchaseInvoicePDF } from "../lib/documentGenerators";
+import { formatCurrency } from "../lib/utils";
 import { ErrorManagement } from '../lib/validation';
 import { PurchaseService } from '../services/PurchaseService';
-import { Plus, X } from "lucide-react";
-import { formatCurrency } from "../lib/utils";
-import { DataTable, Column, RowActionButton } from "../components/DataTable";
-import { SearchableSelect } from "../components/SearchableSelect";
-import { QuickAddSupplier, QuickAddMaterial } from "../components/QuickAddModals";
-import { VoucherHistoryTab } from "../components/VoucherHistoryTab";
-import { Link } from 'react-router-dom';
-import { generatePurchaseInvoicePDF } from "../lib/documentGenerators";
+import { useERPStore } from "../store/useERPStore";
 
 export function Purchases() {
   const { purchases, materials, suppliers, vouchers } = useERPStore();
@@ -184,45 +183,46 @@ export function Purchases() {
 
       {isModalOpen && !isAddSupplierOpen && !isAddMaterialOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-card rounded-2xl shadow-xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto">
+          <div className="bg-card rounded-2xl shadow-xl w-full max-w-2xl">
             <div className="px-6 py-4 border-b border-border/50 flex items-center justify-between sticky top-0 bg-card z-10">
               <h3 className="text-lg font-bold">{editPurchaseId ? "Edit Purchase" : "Add Purchase"}</h3>
               <button onClick={() => { setIsModalOpen(false); setEditPurchaseId(undefined); }}><X className="h-5 w-5 text-muted-foreground/80" /></button>
             </div>
-            <form onSubmit={handleCreate} className="p-6 pb-64 space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-semibold">Supplier *</label>
-                <SearchableSelect 
-                  options={suppliers.map(s => ({ id: s.id, label: s.name, searchValue: s.phone }))}
-                  value={supplierId}
-                  onChange={setSupplierId}
-                  placeholder="Select Supplier..."
-                  onAdd={() => setIsAddSupplierOpen(true)}
-                  required
-                />
+            <form onSubmit={handleCreate} className="p-6 space-y-3">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold">Supplier *</label>
+                  <SearchableSelect 
+                    options={suppliers.map(s => ({ id: s.id, label: s.name, searchValue: s.phone }))}
+                    value={supplierId}
+                    onChange={setSupplierId}
+                    placeholder="Select Supplier..."
+                    onAdd={() => setIsAddSupplierOpen(true)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold">Material *</label>
+                  <SearchableSelect 
+                    options={materials.map(m => ({ id: m.id, label: m.name }))}
+                    value={materialId}
+                    onChange={setMaterialId}
+                    placeholder="Select Material..."
+                    onAdd={() => setIsAddMaterialOpen(true)}
+                    required
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold">Material *</label>
-                <SearchableSelect 
-                  options={materials.map(m => ({ id: m.id, label: m.name }))}
-                  value={materialId}
-                  onChange={setMaterialId}
-                  placeholder="Select Material..."
-                  onAdd={() => setIsAddMaterialOpen(true)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold">Date *</label>
-                <input type="date" required value={date} onChange={e => setDate(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" />
-              </div>
-              
-              <div className="flex gap-4">
-                <div className="space-y-2 flex-1">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold">Date *</label>
+                  <input type="date" required value={date} onChange={e => setDate(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" />
+                </div>
+                <div className="space-y-2">
                   <label className="text-sm font-semibold">Weight *</label>
                   <input type="number" step="0.01" min="0.01" required value={weight} onChange={e => setWeight(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" placeholder="Total weight" />
                 </div>
-                <div className="space-y-2 flex-1">
+                <div className="space-y-2">
                   <label className="text-sm font-semibold">Unit *</label>
                   <select required value={weightUnit} onChange={e => setWeightUnit(e.target.value as any)} className="w-full rounded-xl border border-border px-4 py-3 bg-card">
                     <option value="KGs">KGs</option>
@@ -231,14 +231,15 @@ export function Purchases() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-semibold">Rate per Unit ({weightUnit}) *</label>
-                <input type="number" step="0.01" min="0" required value={ratePerUnit} onChange={e => setRatePerUnit(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" placeholder={`Price per ${weightUnit}`} />
-              </div>
-              
-              <div className="space-y-2">
-                <label className="text-sm font-semibold">Weight Per Piece (KGs) *</label>
-                <input type="number" step="any" min="0.000001" required value={weightPerPiece} onChange={e => setWeightPerPiece(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" placeholder="Weight of one piece (e.g. 0.572)" />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold">Rate per Unit ({weightUnit}) *</label>
+                  <input type="number" step="0.01" min="0" required value={ratePerUnit} onChange={e => setRatePerUnit(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" placeholder={`Price per ${weightUnit}`} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold">Weight Per Piece (KGs) *</label>
+                  <input type="number" step="any" min="0.000001" required value={weightPerPiece} onChange={e => setWeightPerPiece(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" placeholder="Weight of one piece (e.g. 0.572)" />
+                </div>
               </div>
 
               <div className="p-4 rounded-xl bg-muted/40 border border-border flex flex-col gap-2">

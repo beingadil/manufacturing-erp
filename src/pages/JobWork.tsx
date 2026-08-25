@@ -1,5 +1,5 @@
 import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, CheckCircle2, Edit, Eye, PackageCheck, Plus, Printer, Trash2, X } from 'lucide-react';
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from 'react-router-dom';
 import { Column, DataTable } from "../components/DataTable";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
@@ -81,8 +81,92 @@ export function JobWork() {
       setSendProcessorId("");
     }
   }, [stageWorkers, sendProcessorId]);
-  const availableBatches = (batches || []).filter(b => b.materialId === sendMaterialId && b.remainingPcs > 0);
+  const availableBatches = useMemo(() => {
+    if (!sendMaterialId) return [];
+    const targetStage = sendSelectedStage;
+    const isFirstOrLegacy = !targetStage || targetStage === [...(processingStages || [])].sort((a, b) => a.sequence - b.sequence)[0];
+    return (batches || []).filter(b => {
+      if (b.materialId !== sendMaterialId) return false;
+      if (isFirstOrLegacy) {
+        // Stage 1 / legacy: show batches with raw stock remaining
+        return b.remainingPcs > 0;
+      }
+      // Stage N+1: show batches that arrived at this stage (received from previous)
+      return b.currentStageId === targetStage?.id && (b.stageAvailablePcs || 0) > 0;
+    });
+  }, [batches, sendMaterialId, sendSelectedStage, processingStages]);
   
+  // Compute stage-aware available stock for each material
+  const getStageAvailable = useCallback((materialId: string) => {
+    const targetStage = sendSelectedStage;
+    const stages = (processingStages || []).sort((a, b) => a.sequence - b.sequence);
+    const isFirstOrLegacy = !targetStage || targetStage === stages[0];
+    if (isFirstOrLegacy) {
+      const m = materials.find(mat => mat.id === materialId);
+      return m?.stockPcs || 0;
+    }
+    return (batches || [])
+      .filter(b => b.materialId === materialId && b.currentStageId === targetStage?.id)
+      .reduce((sum, b) => sum + (b.stageAvailablePcs || 0), 0);
+  }, [sendSelectedStage, processingStages, materials, batches]);
+
+
+  // ── Stage strictness: determine the material's current stage and next stage ──
+  // When a material is selected, we compute which stages are complete and which
+  // is the next valid stage. The user CANNOT go back to an earlier stage.
+  const materialStageProgress = useMemo(() => {
+    if (!sendMaterialId) return null;
+    const sorted = [...(processingStages || [])].sort((a, b) => a.sequence - b.sequence);
+    if (sorted.length === 0) return null;
+
+    // Find the most advanced stage any batch of this material has reached
+    const materialBatches = (batches || []).filter(b => b.materialId === sendMaterialId);
+    let maxStageSequence = 0;
+    let currentStageId = '';
+    let totalStageAvailable = 0;
+
+    for (const b of materialBatches) {
+      if (b.currentStageId) {
+        const stage = sorted.find(s => s.id === b.currentStageId);
+        if (stage && stage.sequence > maxStageSequence) {
+          maxStageSequence = stage.sequence;
+          currentStageId = b.currentStageId;
+        }
+      }
+      totalStageAvailable += b.stageAvailablePcs || 0;
+    }
+
+    // If no batch has a currentStageId, the material is at stage 0 (raw, not yet sent)
+    const nextStage = maxStageSequence === 0
+      ? sorted[0]  // First stage (Initial Processor)
+      : sorted.find(s => s.sequence === maxStageSequence + 1) || null; // Next in chain
+
+    const completedStages = sorted.filter(s => s.sequence <= maxStageSequence);
+    const isRaw = maxStageSequence === 0;
+
+    return {
+      currentStageId: isRaw ? '' : currentStageId,
+      nextStage,
+      completedStages,
+      allStages: sorted,
+      isRaw,
+      totalStageAvailable,
+      canProgress: !!nextStage,
+    };
+  }, [sendMaterialId, batches, processingStages]);
+
+  // Auto-set stage when material changes (strict sequencing)
+  useEffect(() => {
+    if (!sendMaterialId || editSendId) return; // Don't auto-set during edits
+    if (materialStageProgress?.nextStage) {
+      setSendStageId(materialStageProgress.nextStage.id);
+    } else if (materialStageProgress?.isRaw) {
+      // Material is raw — set to first stage
+      const first = [...(processingStages || [])].sort((a, b) => a.sequence - b.sequence)[0];
+      if (first) setSendStageId(first.id);
+    }
+  }, [sendMaterialId, materialStageProgress, editSendId, processingStages]);
+
   // Find previous pending sends for the selected processor to allow adjustment
   const previousPendingSends = useMemo(() => {
     if (!sendProcessorId) return [];
@@ -109,13 +193,13 @@ export function JobWork() {
     if (!sendProcessorId || !sendMaterialId || !sendPcs || !sendRate || !sendDate) return;
     
     const pcs = parseInt(sendPcs);
-    if (sendSelectedMaterial && pcs > sendSelectedMaterial.stockPcs) {
+    if (sendSelectedMaterial && pcs > getStageAvailable(sendSelectedMaterial.id)) {
       return;
     }
     
     if (sendBatchId) {
        const b = availableBatches.find(bat => bat.id === sendBatchId);
-       if (b && pcs > b.remainingPcs) return; // validate batch qty
+       if (b && pcs > ((b.stageAvailablePcs || 0) > 0 ? (b.stageAvailablePcs || 0) : (b.remainingPcs || 0))) return; // validate batch qty
     }
 
     if (editSendId) {
@@ -700,12 +784,12 @@ export function JobWork() {
 
       {isSendModalOpen && !isAddProcessorOpen && !isAddMaterialOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-card rounded-2xl shadow-xl w-full max-w-md">
+          <div className="bg-card rounded-2xl shadow-xl w-full max-w-2xl">
             <div className="px-6 py-4 border-b flex justify-between">
               <h3 className="text-lg font-bold">Send to Processor</h3>
               <button onClick={() => { setIsSendModalOpen(false); setEditSendId(undefined); }}><X className="h-5 w-5 text-muted-foreground/80" /></button>
             </div>
-            <form onSubmit={handleSend} className="p-6 pb-64 space-y-4">
+            <form onSubmit={handleSend} className="p-6 space-y-3">
               <div>
                 <label className="block text-sm font-medium text-foreground/80 mb-1">
                   Processor{sendSelectedStage ? ` — ${sendSelectedStage.name}${sendSelectedStage.isFinalStage ? ' (Final)' : ''} workers` : ''}
@@ -729,7 +813,14 @@ export function JobWork() {
               <div>
                 <label className="block text-sm font-medium text-foreground/80 mb-1">Material</label>
                 <SearchableSelect 
-                  options={materials.map((m) => ({ id: m.id, label: m.name, secondaryLabel: `Available: ${m.stockPcs} PCS` }))}
+                  options={materials.map((m) => {
+                    const avail = getStageAvailable(m.id);
+                    const matBatches = (batches || []).filter(b => b.materialId === m.id);
+                    const hasRaw = (m.stockPcs || 0) > 0;
+                    const hasWip = matBatches.some(b => b.currentStageId);
+                    const status = hasRaw && !hasWip ? 'Raw' : hasWip ? 'In Progress' : 'Raw';
+                    return { id: m.id, label: m.name, secondaryLabel: `${status} · ${avail} PCS available` };
+                  })}
                   value={sendMaterialId}
                   onChange={(val) => { setSendMaterialId(val); setSendBatchId(""); }}
                   placeholder="Select Material..."
@@ -737,21 +828,64 @@ export function JobWork() {
                   required
                 />
               </div>
+              {/* Stage progress indicator when material is selected */}
+              {materialStageProgress && (
+                <div className="rounded-xl border border-border bg-muted/30 p-3">
+                  <div className="text-xs font-medium text-muted-foreground mb-2">
+                    {materialStageProgress.isRaw ? 'Material is raw — ready for first stage' :
+                     materialStageProgress.canProgress ? `Next stage: ${materialStageProgress.nextStage?.name}` :
+                     'All stages complete — finished goods ready'}
+                  </div>
+                  <div className="flex gap-1">
+                    {materialStageProgress.allStages.map((s, i) => {
+                      const isComplete = materialStageProgress.completedStages.some(c => c.id === s.id);
+                      const isNext = materialStageProgress.nextStage?.id === s.id;
+                      return (
+                        <div key={s.id} className="flex-1 text-center">
+                          <div className={`h-1.5 rounded-full ${isComplete ? 'bg-green-500' : isNext ? 'bg-primary animate-pulse' : 'bg-muted'}`} />
+                          <div className={`text-[10px] mt-0.5 truncate ${isComplete ? 'text-green-600 font-medium' : isNext ? 'text-primary font-medium' : 'text-muted-foreground'}`}>
+                            {s.name}{s.isFinalStage ? ' ★' : ''}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {materialStageProgress.totalStageAvailable > 0 && (
+                    <div className="text-xs text-primary font-medium mt-2">
+                      {materialStageProgress.totalStageAvailable} PCS available at stage
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-foreground/80 mb-1">Processing Stage</label>
-                <select
-                  value={sendStageId}
-                  onChange={e => setSendStageId(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-background p-3 text-sm"
-                >
-                  <option value="">Auto (first stage in chain)</option>
-                  {sortedStages.map(s => <option key={s.id} value={s.id}>{s.name}{s.isFinalStage ? ' (Final)' : ''}</option>)}
-                </select>
+                {editSendId ? (
+                  // During edits, allow changing stage (historical records)
+                  <select
+                    value={sendStageId}
+                    onChange={e => setSendStageId(e.target.value)}
+                    className="w-full rounded-xl border border-border bg-background p-3 text-sm"
+                  >
+                    {sortedStages.map(s => <option key={s.id} value={s.id}>{s.name}{s.isFinalStage ? ' (Final)' : ''}</option>)}
+                  </select>
+                ) : (
+                  // New sends: auto-set to next stage, show as read-only
+                  <div className="w-full rounded-xl border border-border bg-muted/50 p-3 text-sm flex items-center justify-between">
+                    <span className="font-medium">
+                      {sendSelectedStage?.name || 'Select material first'}
+                      {sendSelectedStage?.isFinalStage ? ' (Final Stage)' : ''}
+                    </span>
+                    {materialStageProgress?.nextStage && (
+                      <span className="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded-full">AUTO</span>
+                    )}
+                  </div>
+                )}
               </div>
               {sendMaterialId && (
                 <select value={sendBatchId} onChange={e => setSendBatchId(e.target.value)} className="w-full rounded-xl border p-3 text-sm">
                   <option value="">Auto (oldest batch first)</option>
-                  {availableBatches.map(b => <option key={b.id} value={b.id}>{b.batchNo} (Available: {b.remainingPcs} PCS)</option>)}
+                  {availableBatches.map(b => <option key={b.id} value={b.id}>{b.batchNo} (Available: {(b.stageAvailablePcs || 0) > 0 ? b.stageAvailablePcs : b.remainingPcs} PCS)</option>)}
                 </select>
               )}
               <input type="number" required placeholder="PCS to Send" value={sendPcs} onChange={e => setSendPcs(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
@@ -794,12 +928,12 @@ export function JobWork() {
 
       {isReceiveModalOpen && !isAddProcessorOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-card rounded-2xl shadow-xl w-full max-w-md">
+          <div className="bg-card rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
             <div className="px-6 py-4 border-b flex justify-between">
               <h3 className="text-lg font-bold">Receive from Processor</h3>
               <button onClick={() => { setIsReceiveModalOpen(false); setEditReceiveId(undefined); }}><X className="h-5 w-5 text-muted-foreground/80" /></button>
             </div>
-            <form onSubmit={handleReceive} className="p-6 pb-64 space-y-4">
+            <form onSubmit={handleReceive} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
               <div>
                 <label className="block text-sm font-medium text-foreground/80 mb-1">Processor</label>
                 <SearchableSelect 
@@ -831,12 +965,12 @@ export function JobWork() {
 
       {isBillModalOpen && !isAddProcessorOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-card rounded-2xl shadow-xl w-full max-w-2xl">
+          <div className="bg-card rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
             <div className="px-6 py-4 border-b flex justify-between">
               <h3 className="text-lg font-bold">Generate Processor Bill</h3>
               <button onClick={() => { setIsBillModalOpen(false); setEditBillId(undefined); }}><X className="h-5 w-5 text-muted-foreground/80" /></button>
             </div>
-            <form onSubmit={handleCreateBill} className="p-6 pb-64 space-y-4">
+            <form onSubmit={handleCreateBill} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
               <div className="flex gap-4">
                 <div className="flex-1">
                   <SearchableSelect 
@@ -916,7 +1050,7 @@ export function JobWork() {
 
       {stageModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-card rounded-2xl shadow-xl w-full max-w-md">
+          <div className="bg-card rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
             <div className="px-6 py-4 border-b flex justify-between">
               <h3 className="text-lg font-bold">{editStageId ? 'Edit Processing Stage' : 'Add Processing Stage'}</h3>
               <button onClick={() => setStageModalOpen(false)}><X className="h-5 w-5 text-muted-foreground/80" /></button>
@@ -967,7 +1101,7 @@ export function JobWork() {
 
       {lossModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-card rounded-2xl shadow-xl w-full max-w-md">
+          <div className="bg-card rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
             <div className="px-6 py-4 border-b flex justify-between">
               <h3 className="text-lg font-bold">Record Loss / Wastage</h3>
               <button onClick={() => { setLossModal({ isOpen: false, sendId: '', dispatchNo: '', pending: 0 }); setLossQty(''); }}><X className="h-5 w-5 text-muted-foreground/80" /></button>

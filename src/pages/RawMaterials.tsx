@@ -1,17 +1,15 @@
-import React, { useState, useMemo } from "react";
-import { useERPStore } from "../store/useERPStore";
-import { cn } from "../lib/utils";
-import { Plus, PackageSearch, X, Pencil, Trash2, Layers, Wallet } from "lucide-react";
+import { Layers, PackageSearch, Pencil, Plus, Trash2, Wallet, X } from "lucide-react";
+import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { DataTable, Column, RowActionButton } from "../components/DataTable";
-import { KpiCard } from '../components/ui/KpiCard';
-
-import { MaterialService } from '../services/MaterialService';
 import { toast } from 'sonner';
-import { SafeDeleteDialog } from '../components/common/SafeDeleteDialog';
 import { InlineEditInput } from '../components/common/InlineEditInput';
+import { SafeDeleteDialog } from '../components/common/SafeDeleteDialog';
+import { Column, DataTable, RowActionButton } from "../components/DataTable";
+import { KpiCard } from '../components/ui/KpiCard';
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
-import { formatCurrency, formatNumber } from '../lib/utils';
+import { cn, formatCurrency, formatNumber } from "../lib/utils";
+import { MaterialService } from '../services/MaterialService';
+import { useERPStore } from "../store/useERPStore";
 
 export function RawMaterials() {
   const { materials, categories, purchases, processingSends, processingReceipts, batches } = useERPStore();
@@ -335,14 +333,14 @@ export function RawMaterials() {
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-card rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className="bg-card rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-border/50 flex items-center justify-between">
               <h3 className="text-lg font-bold text-foreground">{editingMaterial ? 'Edit Raw Material' : 'Add Raw Material'}</h3>
               <button onClick={closeModal} className="text-muted-foreground/80 hover:text-muted-foreground transition-colors">
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <form onSubmit={editingMaterial ? handleEdit : handleCreate} className="p-6 pb-64 space-y-4">
+            <form onSubmit={editingMaterial ? handleEdit : handleCreate} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-foreground">Material Name *</label>
                 <input type="text" required value={name} onChange={e => setName(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors" placeholder="e.g. Circle 6½ Inch" />

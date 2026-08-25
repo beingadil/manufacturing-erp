@@ -741,9 +741,32 @@ export const useERPStore = create<ERPState>()(
         const consumesRaw = InventoryCalculationService.sendConsumesRaw(data.stageId, state.processingStages || []);
 
         if (!consumesRaw) {
-          // Intermediate stage: no raw/WIP counter change, no batch change. The
-          // movement is recorded purely as history (stage derivation carries the
-          // per-stage WIP). No 'adjust pending' merging across stages.
+          // Intermediate stage dispatch: pieces move from 'available at previous
+          // stage' to 'in transit at target stage'. Consume from the batch's
+          // stageAvailablePcs and advance its currentStageId to the target stage.
+          // Also update atProcessorPcs on the material (these pcs are now at a
+          // processor).
+          
+          // Guard: reject over-send at the batch level
+          if (data.batchId) {
+            const batch = (state.batches || []).find(b => b.id === data.batchId);
+            const available = (batch?.stageAvailablePcs || 0);
+            if (data.pcsSent <= 0 || data.pcsSent > available) return state;
+          }
+
+          const updatedBatches = (state.batches || []).map(b => {
+            if (b.id === data.batchId) {
+              return {
+                ...b,
+                stageAvailablePcs: Math.max(0, (b.stageAvailablePcs || 0) - data.pcsSent),
+                currentStageId: data.stageId || b.currentStageId,
+              };
+            }
+            return b;
+          });
+
+          const stages = (state.processingStages || []).sort((a, b) => a.sequence - b.sequence);
+          // PCS remain in WIP (atProcessorPcs unchanged) — same economic pcs, just relocated.
           const movement: InventoryMovement = {
             id: uuidv4(),
             materialId: data.materialId,
@@ -758,7 +781,8 @@ export const useERPStore = create<ERPState>()(
           };
           return {
             processingSends: [newSend, ...state.processingSends],
-            inventoryMovements: [movement, ...(state.inventoryMovements || [])]
+            inventoryMovements: [movement, ...(state.inventoryMovements || [])],
+            batches: updatedBatches,
           };
         }
 
@@ -904,6 +928,26 @@ export const useERPStore = create<ERPState>()(
             state.batches || [],
             send.batchId
           );
+        } else {
+          // Non-final stage receipt: pieces are received back from the processor
+          // and become AVAILABLE to send to the next stage in the chain.
+          // The batch's currentStageId advances to the next stage, and
+          // stageAvailablePcs tracks how many pcs are ready for the next send.
+          const stages = (state.processingStages || []).sort((a, b) => a.sequence - b.sequence);
+          const currentStage = stages.find(s => s.id === stageId);
+          const nextStageId = currentStage?.nextStageId;
+
+          // PCS remain in WIP (atProcessorPcs unchanged) — marked available for next stage.
+          updatedBatches = (state.batches || []).map(b => {
+            if (b.id === send.batchId) {
+              return {
+                ...b,
+                currentStageId: nextStageId || undefined,
+                stageAvailablePcs: (b.stageAvailablePcs || 0) + data.pcsReceived,
+              };
+            }
+            return b;
+          });
         }
 
         const movement: InventoryMovement = {
