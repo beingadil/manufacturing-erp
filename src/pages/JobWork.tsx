@@ -1,25 +1,42 @@
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, CheckCircle2, Edit, Eye, PackageCheck, Plus, Printer, Trash2, X } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from "react";
+import { Link } from 'react-router-dom';
+import { Column, DataTable } from "../components/DataTable";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
-import { Eye, Edit, Trash2, Printer } from 'lucide-react';
-import React, { useState, useMemo } from "react";
-import { useERPStore } from "../store/useERPStore";
-import { ArrowRight, ArrowLeft, CheckCircle2, X } from "lucide-react";
-import { DataTable, Column } from "../components/DataTable";
-import { formatCurrency } from "../lib/utils";
+import { QuickAddMaterial, QuickAddProcessor } from "../components/QuickAddModals";
 import { SearchableSelect } from "../components/SearchableSelect";
-import { QuickAddProcessor, QuickAddMaterial } from "../components/QuickAddModals";
 import { VoucherHistoryTab } from "../components/VoucherHistoryTab";
 import { generateDispatchSlipPDF, generateProcessorBillPDF } from "../lib/documentGenerators";
+import { formatCurrency, formatNumber } from "../lib/utils";
 import { ErrorManagement } from '../lib/validation';
-import { Link } from 'react-router-dom';
 import { ProcessingService } from '../services/ProcessingService';
+import { useERPStore } from "../store/useERPStore";
 
 export function JobWork() {
   const { 
     materials, processors, processingSends, processingReceipts, processorBills, vouchers,
-    batches 
+    batches, processingStages
   } = useERPStore();
   
-  const [activeTab, setActiveTab] = useState<"Send" | "Receive" | "Billing" | "Vouchers">("Send");
+  const [activeTab, setActiveTab] = useState<"Send" | "Receive" | "Billing" | "Vouchers" | "Timeline" | "Stages">("Send");
+
+  // ── Stage master state ────────────────────────────────────────────────────
+  const [stageModalOpen, setStageModalOpen] = useState(false);
+  const [editStageId, setEditStageId] = useState<string | undefined>();
+  const [stageName, setStageName] = useState('');
+  const [stageSequence, setStageSequence] = useState('');
+  const [stageRateMethod, setStageRateMethod] = useState<'per_piece' | 'per_kg'>('per_piece');
+  const [stageBillingUnit, setStageBillingUnit] = useState('Per PCS');
+  const [stageIsFinal, setStageIsFinal] = useState(false);
+  const [stageBillingEnabled, setStageBillingEnabled] = useState(true);
+  const [stageDescription, setStageDescription] = useState('');
+
+  // ── Timeline state ────────────────────────────────────────────────────────
+  const [timelineBatchId, setTimelineBatchId] = useState('');
+
+  // ── Loss recording state ──────────────────────────────────────────────────
+  const [lossModal, setLossModal] = useState<{ isOpen: boolean; sendId: string; dispatchNo: string; pending: number }>({ isOpen: false, sendId: '', dispatchNo: '', pending: 0 });
+  const [lossQty, setLossQty] = useState('');
   
   const [isAddProcessorOpen, setIsAddProcessorOpen] = useState(false);
   const [isAddMaterialOpen, setIsAddMaterialOpen] = useState(false);
@@ -30,6 +47,7 @@ export function JobWork() {
   const [editSendId, setEditSendId] = useState<string | undefined>();
   const [sendProcessorId, setSendProcessorId] = useState("");
   const [sendMaterialId, setSendMaterialId] = useState("");
+  const [sendStageId, setSendStageId] = useState("");
   const [sendBatchId, setSendBatchId] = useState("");
   const [sendPcs, setSendPcs] = useState("");
   const [sendRate, setSendRate] = useState("");
@@ -38,6 +56,31 @@ export function JobWork() {
   const [adjustPendingIds, setAdjustPendingIds] = useState<string[]>([]);
 
   const sendSelectedMaterial = materials.find(m => m.id === sendMaterialId);
+  // When no stage is explicitly chosen, default to the FIRST stage in the chain
+  // (the real 'Initial Processor' stage) — NOT an empty legacy value that would
+  // silently treat the dispatch as old single-stage processing (whose receipt
+  // jumps straight to Finished Goods). Legacy records keep their empty stageId
+  // when EDITED (see handleSend) so historical semantics are never rewritten.
+  const sendSelectedStage = (processingStages || []).find(s => s.id === sendStageId)
+    ?? [...(processingStages || [])].sort((a, b) => a.sequence - b.sequence)[0];
+  const sendStageRateMethod = sendSelectedStage?.rateMethod || 'per_piece';
+
+  // Workers eligible for the selected stage: workers OF that stage plus General
+  // workers (no stage). The Processor master's Worker Type drives this list —
+  // an Initial Processor is never offered Machine work and vice versa.
+  const stageWorkers = useMemo(() => {
+    const stageId = sendSelectedStage?.id;
+    return processors.filter(p => !p.stageId || p.stageId === stageId);
+  }, [processors, sendSelectedStage?.id]);
+
+  // If the chosen worker is not eligible for the (newly selected) stage — e.g.
+  // an Acid Man picked, then the stage switched to Machine — clear the choice
+  // so a dispatch can never pair a worker with work he doesn't perform.
+  useEffect(() => {
+    if (sendProcessorId && !stageWorkers.some(p => p.id === sendProcessorId)) {
+      setSendProcessorId("");
+    }
+  }, [stageWorkers, sendProcessorId]);
   const availableBatches = (batches || []).filter(b => b.materialId === sendMaterialId && b.remainingPcs > 0);
   
   // Find previous pending sends for the selected processor to allow adjustment
@@ -54,6 +97,7 @@ export function JobWork() {
     setEditSendId(item.id);
     setSendProcessorId(item.processorId);
     setSendMaterialId(item.materialId);
+    setSendStageId(item.stageId || "");
     setSendPcs(item.pcsSent.toString());
     setSendRate(item.ratePerPiece.toString());
     setSendDate(item.date);
@@ -75,9 +119,13 @@ export function JobWork() {
     }
 
     if (editSendId) {
+      // EDITS stay faithful to the existing record: an empty stageId on a
+      // legacy dispatch is preserved (never silently re-tagged), so its
+      // historical single-stage behavior is unchanged.
       ProcessingService.updateDispatch(editSendId, {
         processorId: sendProcessorId,
         materialId: sendMaterialId,
+        stageId: sendStageId || undefined,
         batchId: sendBatchId || undefined,
         pcsSent: pcs,
         ratePerPiece: parseFloat(sendRate),
@@ -85,9 +133,12 @@ export function JobWork() {
         remarks: sendNote
       });
     } else {
+      // New sends resolve the default to the first stage — the dispatch flows
+      // through the chain (receipt stays WIP until the final stage completes).
       ProcessingService.dispatch({
         processorId: sendProcessorId,
         materialId: sendMaterialId,
+        stageId: sendStageId || sendSelectedStage?.id || undefined,
         batchId: sendBatchId || undefined,
         pcsSent: pcs,
         ratePerPiece: parseFloat(sendRate),
@@ -101,6 +152,7 @@ export function JobWork() {
     setSendRate("");
     setSendNote("");
     setSendBatchId("");
+    setSendStageId("");
     setAdjustPendingIds([]);
   };
 
@@ -210,14 +262,17 @@ export function JobWork() {
   const enrichedSends = useMemo(() => processingSends.map(s => {
     const p = processors.find(pr => pr.id === s.processorId);
     const m = materials.find(mat => mat.id === s.materialId);
+    const stage = processingStages.find(st => st.id === s.stageId);
     return {
       ...s,
       processorName: p?.name || 'Unknown',
       materialName: m?.name || 'Unknown',
+      stageName: stage ? stage.name : 'Initial Processor',
       formattedDate: new Date(s.date).toLocaleDateString(),
-      pendingPcs: s.pcsSent - s.pcsReceived
+      pendingPcs: s.pcsSent - s.pcsReceived - (s.lossQuantity || 0),
+      lossPcs: s.lossQuantity || 0
     };
-  }), [processingSends, processors, materials]);
+  }), [processingSends, processors, materials, processingStages]);
 
   const sendColumns: Column<typeof enrichedSends[0]>[] = [
     { key: 'actions', label: 'Actions', align: 'right', render: (item) => (
@@ -236,6 +291,12 @@ export function JobWork() {
         <button className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Eye className="h-4 w-4" /></button>
         <button onClick={() => handleEditSend(item)} className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Edit className="h-4 w-4" /></button>
         <button
+          onClick={() => setLossModal({ isOpen: true, sendId: item.id, dispatchNo: item.dispatchNo || 'Unknown', pending: item.pendingPcs })}
+          disabled={item.pendingPcs <= 0}
+          title={item.pendingPcs > 0 ? 'Record loss/wastage' : 'No pending pcs to record as loss'}
+          className="p-1.5 rounded-md text-warning transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-warning/10"
+        ><AlertTriangle className="h-4 w-4" /></button>
+        <button
           onClick={() => setDeleteModal({isOpen: true, type: 'send', id: item.id, no: item.dispatchNo || 'Unknown'})}
           disabled={item.pcsReceived > 0}
           title={item.pcsReceived > 0 ? 'Delete linked receipts first' : 'Delete dispatch'}
@@ -245,9 +306,11 @@ export function JobWork() {
     ) },
     { key: "formattedDate", label: "Date", sortable: true },
     { key: "processorName", label: "Processor", sortable: true, render: (item) => <span className="font-medium">{item.processorName}</span> },
+    { key: "stageName", label: "Stage", sortable: true },
     { key: "materialName", label: "Material", sortable: true },
     { key: "pcsSent", label: "Sent", align: "right", sortable: true, render: (item) => <span className="font-medium">{item.pcsSent} PCS</span> },
     { key: "pcsReceived", label: "Received", align: "right", sortable: true, render: (item) => <span className="font-medium text-success">{item.pcsReceived} PCS</span> },
+    { key: "lossPcs", label: "Loss", align: "right", sortable: true, render: (item) => item.lossPcs > 0 ? <span className="font-medium text-destructive">{item.lossPcs} PCS</span> : <span className="text-muted-foreground/40">—</span> },
     { key: "pendingPcs", label: "Pending", align: "right", sortable: true, render: (item) => <span className="font-bold text-destructive">{item.pendingPcs} PCS</span> },
     { 
       key: "status", 
@@ -265,13 +328,15 @@ export function JobWork() {
   const enrichedReceipts = useMemo(() => processingReceipts.map(r => {
     const p = processors.find(pr => pr.id === r.processorId);
     const m = materials.find(mat => mat.id === r.materialId);
+    const stage = processingStages.find(st => st.id === r.stageId);
     return {
       ...r,
       processorName: p?.name || 'Unknown',
       materialName: m?.name || 'Unknown',
+      stageName: stage ? stage.name : (r.stageId ? r.stageId : 'Initial Processor'),
       formattedDate: new Date(r.date).toLocaleDateString()
     };
-  }), [processingReceipts, processors, materials]);
+  }), [processingReceipts, processors, materials, processingStages]);
 
   const receiptColumns: Column<typeof enrichedReceipts[0]>[] = [
     { key: 'actions', label: 'Actions', align: 'right', render: (item) => (
@@ -288,6 +353,7 @@ export function JobWork() {
     ) },
     { key: "formattedDate", label: "Date", sortable: true },
     { key: "processorName", label: "Processor", sortable: true, render: (item) => <span className="font-medium">{item.processorName}</span> },
+    { key: "stageName", label: "Stage", sortable: true },
     { key: "materialName", label: "Material", sortable: true },
     { key: "pcsReceived", label: "Received", align: "right", sortable: true, render: (item) => <span className="font-medium text-success">+{item.pcsReceived} PCS</span> },
     { key: "billAmount", label: "Bill Amount", align: "right", sortable: true, render: (item) => <span className="font-bold text-foreground">{formatCurrency(item.billAmount)}</span> }
@@ -336,6 +402,99 @@ export function JobWork() {
     if (deleteModal.type === 'send') ProcessingService.deleteDispatch(deleteModal.id);
     else if (deleteModal.type === 'receipt') ProcessingService.deleteReceive(deleteModal.id);
     else if (deleteModal.type === 'bill') ProcessingService.deleteBill(deleteModal.id);
+  };
+
+  // ── Stage master handlers ──────────────────────────────────────────────────
+  const sortedStages = useMemo(() => [...(processingStages || [])].sort((a, b) => a.sequence - b.sequence), [processingStages]);
+
+  const openAddStage = () => {
+    setEditStageId(undefined);
+    setStageName('');
+    setStageSequence(String((sortedStages.length || 0) + 1));
+    setStageRateMethod('per_piece');
+    setStageBillingUnit('Per PCS');
+    setStageIsFinal(false);
+    setStageBillingEnabled(true);
+    setStageDescription('');
+    setStageModalOpen(true);
+  };
+
+  const openEditStage = (s: any) => {
+    setEditStageId(s.id);
+    setStageName(s.name);
+    setStageSequence(String(s.sequence));
+    setStageRateMethod(s.rateMethod || 'per_piece');
+    setStageBillingUnit(s.billingUnit || 'Per PCS');
+    setStageIsFinal(!!s.isFinalStage);
+    setStageBillingEnabled(s.billingEnabled !== false);
+    setStageDescription(s.description || '');
+    setStageModalOpen(true);
+  };
+
+  const handleStageSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stageName || !stageSequence) return;
+    const payload = {
+      name: stageName,
+      sequence: parseInt(stageSequence),
+      description: stageDescription || undefined,
+      active: true,
+      inputUnit: 'PCS',
+      billingUnit: stageBillingUnit,
+      billingEnabled: stageBillingEnabled,
+      rateMethod: stageRateMethod,
+      isFinalStage: stageIsFinal,
+    };
+    if (editStageId) {
+      ProcessingService.updateStage(editStageId, payload);
+      // Only one stage may be final — clear the flag on any other final stage.
+      if (stageIsFinal) {
+        sortedStages.filter(s => s.id !== editStageId && s.isFinalStage).forEach(s => ProcessingService.updateStage(s.id, { isFinalStage: false }));
+      }
+    } else {
+      ProcessingService.addStage(payload);
+    }
+    setStageModalOpen(false);
+  };
+
+  const handleDeleteStage = (id: string) => {
+    ProcessingService.deleteStage(id);
+  };
+
+  // ── Timeline derivation ────────────────────────────────────────────────────
+  const timelineBatch = batches.find(b => b.id === timelineBatchId);
+  const timeline = useMemo(() => {
+    if (!timelineBatchId) return [];
+    const batchSends = processingSends.filter(s => s.batchId === timelineBatchId && s.status !== 'Adjusted');
+    const batchReceipts = processingReceipts.filter(r => batchSends.some(s => s.id === r.sendId));
+    const batch = batches.find(b => b.id === timelineBatchId);
+    if (!batch) return [];
+    const rows = sortedStages.map(stage => {
+      const sends = batchSends.filter(s => s.stageId === stage.id);
+      const receipts = batchReceipts.filter(r => r.stageId === stage.id);
+      const sent = sends.reduce((sum, s) => sum + s.pcsSent, 0);
+      const received = receipts.reduce((sum, r) => sum + r.pcsReceived, 0);
+      const loss = sends.reduce((sum, s) => sum + (s.lossQuantity || 0), 0);
+      const wip = Math.max(0, sent - received - loss);
+      const processorName = sends[0] ? processors.find(p => p.id === sends[0].processorId)?.name || 'Unknown' : '—';
+      const rate = sends[0]?.ratePerPiece || 0;
+      const billed = receipts.some(r => r.billedStatus === 'Billed');
+      return { stage, sent, received, loss, wip, processorName, rate, billed, sendCount: sends.length };
+    });
+    return rows;
+  }, [timelineBatchId, processingSends, processingReceipts, batches, sortedStages, processors]);
+
+  const handleRecordLoss = () => {
+    if (!lossModal.isOpen || !lossQty) return;
+    ErrorManagement.safeExecuteSync(() => {
+      ProcessingService.recordLoss({
+        sendId: lossModal.sendId,
+        quantity: parseInt(lossQty),
+        remarks: 'Recorded from Job Work'
+      });
+      setLossModal({ isOpen: false, sendId: '', dispatchNo: '', pending: 0 });
+      setLossQty('');
+    }, 'Record Processing Loss');
   };
   
   return (
@@ -392,6 +551,18 @@ export function JobWork() {
         >
           Voucher History
         </button>
+        <button
+          onClick={() => setActiveTab("Timeline")}
+          className={`pb-4 text-sm font-semibold transition-colors border-b-2 ${activeTab === "Timeline" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground/80"}`}
+        >
+          Stage Timeline
+        </button>
+        <button
+          onClick={() => setActiveTab("Stages")}
+          className={`pb-4 text-sm font-semibold transition-colors border-b-2 ${activeTab === "Stages" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground/80"}`}
+        >
+          Stages
+        </button>
       </div>
 
       {activeTab === "Send" ? (
@@ -421,8 +592,110 @@ export function JobWork() {
           persistKey="jobwork-bills-table"
           defaultSortKey="date"
         />
-      ) : (
+      ) : activeTab === "Vouchers" ? (
         <VoucherHistoryTab sourceModule="Processing" />
+      ) : activeTab === "Timeline" ? (
+        <div className="space-y-5">
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+            <select
+              value={timelineBatchId}
+              onChange={e => setTimelineBatchId(e.target.value)}
+              className="w-full sm:max-w-md rounded-xl border border-border bg-background p-3 text-sm"
+            >
+              <option value="">Select a batch to trace its processing chain...</option>
+              {(batches || []).map(b => {
+                const mat = materials.find(m => m.id === b.materialId);
+                return <option key={b.id} value={b.id}>{b.batchNo} — {mat?.name || 'Material'} ({formatNumber(b.initialPcs)} PCS)</option>;
+              })}
+            </select>
+            {timelineBatch && (
+              <span className="text-xs text-muted-foreground">
+                Raw on hand: {formatNumber(timelineBatch.remainingPcs)} · WIP: {formatNumber(timelineBatch.atProcessorPcs || 0)} · Finished: {formatNumber(timelineBatch.processedPcs || 0)}
+              </span>
+            )}
+          </div>
+
+          {!timelineBatchId ? (
+            <div className="p-10 text-center text-sm text-muted-foreground bg-muted/30 rounded-2xl border border-dashed border-border">
+              Select a batch above to see its full manufacturing chain: PURCHASE → INITIAL PROCESSOR → MACHINE → ACID → POLISH → FINISHED PRODUCT.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {/* Purchase origin */}
+              <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-4">
+                <div className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                <div className="flex-1">
+                  <div className="text-sm font-semibold text-foreground">Purchase — {timelineBatch?.batchNo}</div>
+                  <div className="text-xs text-muted-foreground">Raw material on hand: {formatNumber(timelineBatch?.remainingPcs || 0)} PCS · {formatCurrency(timelineBatch?.amount || 0)}</div>
+                </div>
+              </div>
+              {timeline.map((row, i) => (
+                <div key={row.stage.id} className="flex items-center gap-3 rounded-xl border border-border bg-card p-4">
+                  <div className={`h-2.5 w-2.5 rounded-full ${row.stage.isFinalStage ? 'bg-emerald-500' : 'bg-orange-500'}`} />
+                  <ArrowDown className="h-4 w-4 text-muted-foreground/50 shrink-0" />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-foreground">{row.stage.isFinalStage ? '★ ' : ''}{row.stage.name}</span>
+                      {row.stage.isFinalStage && <span className="text-[10px] uppercase tracking-wide bg-emerald-500/10 text-emerald-600 px-1.5 py-0.5 rounded-full">Final</span>}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Worker: {row.processorName} · Rate: {formatCurrency(row.rate)}{row.stage.rateMethod === 'per_kg' ? '/KG' : '/PCS'}
+                    </div>
+                  </div>
+                  <div className="text-right text-xs space-y-0.5">
+                    <div className="text-muted-foreground">Sent <span className="font-medium text-foreground">{formatNumber(row.sent)}</span></div>
+                    <div className="text-muted-foreground">Received <span className="font-medium text-success">{formatNumber(row.received)}</span></div>
+                    {row.loss > 0 && <div className="text-muted-foreground">Loss <span className="font-medium text-destructive">{formatNumber(row.loss)}</span></div>}
+                    <div className="text-muted-foreground">Held <span className="font-medium text-warning">{formatNumber(row.wip)}</span></div>
+                  </div>
+                </div>
+              ))}
+              {/* Finished goods */}
+              <div className="flex items-center gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+                <PackageCheck className="h-4 w-4 text-emerald-500" />
+                <div className="flex-1">
+                  <div className="text-sm font-semibold text-foreground">Finished Goods</div>
+                  <div className="text-xs text-muted-foreground">Saleable after the final stage completes</div>
+                </div>
+                <div className="text-right text-xs">
+                  <span className="font-medium text-emerald-600">{formatNumber(timelineBatch?.processedPcs || 0)} PCS</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-bold text-foreground">Processing Stage Master</h3>
+              <p className="text-xs text-muted-foreground">Configure the manufacturing chain. The final stage (★) produces saleable Finished Goods — never hardcoded.</p>
+            </div>
+            <button onClick={openAddStage} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+              <Plus className="h-4 w-4" /> Add Stage
+            </button>
+          </div>
+          <DataTable
+            data={sortedStages.map(s => ({ ...s, isFinal: s.isFinalStage ? 'Yes' : 'No', rate: s.rateMethod === 'per_kg' ? 'Per KG' : 'Per PCS', activeLabel: s.active ? 'Active' : 'Inactive' }))}
+            columns={[
+              { key: 'actions', label: 'Actions', align: 'right', render: (item) => (
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => openEditStage(item)} className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Edit className="h-4 w-4" /></button>
+                  <button onClick={() => handleDeleteStage(item.id)} className="p-1.5 hover:bg-destructive/10 text-destructive rounded-md transition-colors" title="Only unused stages can be deleted"><Trash2 className="h-4 w-4" /></button>
+                </div>
+              )},
+              { key: 'sequence', label: '#', sortable: true },
+              { key: 'name', label: 'Stage', sortable: true, render: (item) => <span className="font-medium">{item.isFinal === 'Yes' ? '★ ' : ''}{item.name}</span> },
+              { key: 'rate', label: 'Billing', sortable: true },
+              { key: 'billingUnit', label: 'Billing Unit' },
+              { key: 'isFinal', label: 'Final Stage', render: (item) => item.isFinal === 'Yes' ? <span className="text-emerald-600 font-semibold">Yes</span> : <span className="text-muted-foreground">No</span> },
+              { key: 'activeLabel', label: 'Status' },
+            ]}
+            searchKeys={['name']}
+            searchPlaceholder="Search stages..."
+            persistKey="jobwork-stages-table"
+          />
+        </div>
       )}
 
       {isSendModalOpen && !isAddProcessorOpen && !isAddMaterialOpen && (
@@ -434,9 +707,18 @@ export function JobWork() {
             </div>
             <form onSubmit={handleSend} className="p-6 pb-64 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-foreground/80 mb-1">Processor</label>
+                <label className="block text-sm font-medium text-foreground/80 mb-1">
+                  Processor{sendSelectedStage ? ` — ${sendSelectedStage.name}${sendSelectedStage.isFinalStage ? ' (Final)' : ''} workers` : ''}
+                </label>
                 <SearchableSelect 
-                  options={processors.map(p => ({ id: p.id, label: p.name, searchValue: p.phone }))}
+                  options={stageWorkers.map(p => ({
+                    id: p.id,
+                    label: p.name,
+                    secondaryLabel: p.stageId
+                      ? `${(processingStages || []).find(s => s.id === p.stageId)?.name || 'Worker'}${p.phone ? ` · ${p.phone}` : ''}`
+                      : (p.phone ? `General · ${p.phone}` : 'General Worker'),
+                    searchValue: p.phone
+                  }))}
                   value={sendProcessorId}
                   onChange={setSendProcessorId}
                   placeholder="Select Processor..."
@@ -447,13 +729,24 @@ export function JobWork() {
               <div>
                 <label className="block text-sm font-medium text-foreground/80 mb-1">Material</label>
                 <SearchableSelect 
-                  options={materials.map(m => ({ id: m.id, label: m.name, secondaryLabel: `Available: ${m.stockPcs} PCS` }))}
+                  options={materials.map((m) => ({ id: m.id, label: m.name, secondaryLabel: `Available: ${m.stockPcs} PCS` }))}
                   value={sendMaterialId}
                   onChange={(val) => { setSendMaterialId(val); setSendBatchId(""); }}
                   placeholder="Select Material..."
                   onAdd={() => setIsAddMaterialOpen(true)}
                   required
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground/80 mb-1">Processing Stage</label>
+                <select
+                  value={sendStageId}
+                  onChange={e => setSendStageId(e.target.value)}
+                  className="w-full rounded-xl border border-border bg-background p-3 text-sm"
+                >
+                  <option value="">Auto (first stage in chain)</option>
+                  {sortedStages.map(s => <option key={s.id} value={s.id}>{s.name}{s.isFinalStage ? ' (Final)' : ''}</option>)}
+                </select>
               </div>
               {sendMaterialId && (
                 <select value={sendBatchId} onChange={e => setSendBatchId(e.target.value)} className="w-full rounded-xl border p-3 text-sm">
@@ -462,7 +755,7 @@ export function JobWork() {
                 </select>
               )}
               <input type="number" required placeholder="PCS to Send" value={sendPcs} onChange={e => setSendPcs(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
-              <input type="number" step="0.01" required placeholder="Rate Per Piece (₹)" value={sendRate} onChange={e => setSendRate(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
+              <input type="number" step="0.01" required placeholder={sendStageRateMethod === 'per_kg' ? "Rate Per KG (PKR)" : "Rate Per Piece (PKR)"} value={sendRate} onChange={e => setSendRate(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
               <input type="date" required value={sendDate} onChange={e => setSendDate(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
               
               {previousPendingSends.length > 0 && (
@@ -522,7 +815,8 @@ export function JobWork() {
                 <option value="">Select Pending Send Entry</option>
                 {openSends.map(s => {
                   const m = materials.find(mat => mat.id === s.materialId);
-                  return <option key={s.id} value={s.id}>{new Date(s.date).toLocaleDateString()} - {m?.name} ({s.pcsSent - s.pcsReceived} pending)</option>;
+                  const st = processingStages.find(x => x.id === s.stageId);
+                  return <option key={s.id} value={s.id}>{new Date(s.date).toLocaleDateString()} - {m?.name} ({st?.name || 'Initial Processor'}) ({s.pcsSent - s.pcsReceived} pending)</option>;
                 })}
               </select>
               <input type="number" required placeholder="PCS Received" value={receivePcs} onChange={e => setReceivePcs(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
@@ -615,6 +909,78 @@ export function JobWork() {
               <div className="flex gap-3">
                 <button type="submit" disabled={selectedReceiptsForBill.length === 0} className="flex-1 rounded-xl bg-primary p-3 text-primary-foreground font-semibold disabled:opacity-50">Create Bill</button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {stageModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-card rounded-2xl shadow-xl w-full max-w-md">
+            <div className="px-6 py-4 border-b flex justify-between">
+              <h3 className="text-lg font-bold">{editStageId ? 'Edit Processing Stage' : 'Add Processing Stage'}</h3>
+              <button onClick={() => setStageModalOpen(false)}><X className="h-5 w-5 text-muted-foreground/80" /></button>
+            </div>
+            <form onSubmit={handleStageSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground/80 mb-1">Stage Name</label>
+                <input required value={stageName} onChange={e => setStageName(e.target.value)} placeholder="e.g. Machine, Acid, Polish" className="w-full rounded-xl border p-3 text-sm" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground/80 mb-1">Sequence</label>
+                  <input required type="number" min="1" value={stageSequence} onChange={e => setStageSequence(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground/80 mb-1">Rate Method</label>
+                  <select value={stageRateMethod} onChange={e => setStageRateMethod(e.target.value as any)} className="w-full rounded-xl border p-3 text-sm">
+                    <option value="per_piece">Per Piece</option>
+                    <option value="per_kg">Per KG</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground/80 mb-1">Billing Unit</label>
+                <input value={stageBillingUnit} onChange={e => setStageBillingUnit(e.target.value)} placeholder="e.g. Per KG" className="w-full rounded-xl border p-3 text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground/80 mb-1">Description</label>
+                <input value={stageDescription} onChange={e => setStageDescription(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
+              </div>
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 text-sm text-foreground/80">
+                  <input type="checkbox" checked={stageBillingEnabled} onChange={e => setStageBillingEnabled(e.target.checked)} className="h-4 w-4" />
+                  Billing enabled
+                </label>
+                <label className="flex items-center gap-2 text-sm text-foreground/80">
+                  <input type="checkbox" checked={stageIsFinal} onChange={e => setStageIsFinal(e.target.checked)} className="h-4 w-4" />
+                  Final stage (produces Finished Goods)
+                </label>
+              </div>
+              <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">
+                {editStageId ? 'Save Changes' : 'Add Stage'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {lossModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-card rounded-2xl shadow-xl w-full max-w-md">
+            <div className="px-6 py-4 border-b flex justify-between">
+              <h3 className="text-lg font-bold">Record Loss / Wastage</h3>
+              <button onClick={() => { setLossModal({ isOpen: false, sendId: '', dispatchNo: '', pending: 0 }); setLossQty(''); }}><X className="h-5 w-5 text-muted-foreground/80" /></button>
+            </div>
+            <form onSubmit={(e) => { e.preventDefault(); handleRecordLoss(); }} className="p-6 space-y-4">
+              <div className="text-sm text-muted-foreground">
+                Dispatch <span className="font-mono">{lossModal.dispatchNo}</span> — pending {lossModal.pending} PCS. Loss is recorded explicitly; pending pcs can still be received later.
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground/80 mb-1">Loss Quantity (PCS)</label>
+                <input required type="number" min="1" max={lossModal.pending} value={lossQty} onChange={e => setLossQty(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
+              </div>
+              <button type="submit" className="w-full rounded-xl bg-destructive p-3 text-destructive-foreground font-semibold">Record Loss</button>
             </form>
           </div>
         </div>

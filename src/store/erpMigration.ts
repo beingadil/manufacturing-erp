@@ -1,5 +1,6 @@
-import type { Account, AccountSubtype, Voucher, VoucherType } from '../types/erp';
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
+import { buildDefaultStages } from '../lib/processing/processingStageSeed';
+import type { Account, AccountSubtype, ProcessingStage, Voucher, VoucherType } from '../types/erp';
 
 /**
  * Persist v3 migration (spec §4, §15, §17, §27).
@@ -73,7 +74,15 @@ export function migrateERPState(state: any): any {
     return parentId ? { ...acc, parentId } : acc;
   });
 
-  // 4. Reconstruct per-batch stages (raw → WIP → finished) from the
+  // 4. Seed the processing stage master when empty (spec §4): the default
+  //    chain Initial Processor → Machine → Acid → Polish (final). Idempotent —
+  //    no-ops once stages exist, so user-configured stages are never overwritten.
+  let processingStages: ProcessingStage[] = Array.isArray(state.processingStages) ? state.processingStages : [];
+  if (processingStages.length === 0) {
+    processingStages = buildDefaultStages();
+  }
+
+  // 5. Reconstruct per-batch stages (raw → WIP → finished) from the
   //    authoritative send/receipt/sale history. This runs on EVERY startup and
   //    is fully idempotent: batches are reset to their purchase baseline and the
   //    history is replayed with the same FIFO helpers the live engine uses, so
@@ -81,6 +90,11 @@ export function migrateERPState(state: any): any {
   //    field-presence gate (`alreadyMigrated`), which could stamp stale 0-stage
   //    fields onto batches and then skip the backfill forever — the exact
   //    double-count symptom (raw + finished showing the same pcs).
+  //
+  //    Stage-aware (spec §6): only stage-1 / legacy dispatches draw from raw;
+  //    only receipts from the configured final stage / legacy produce finished;
+  //    recorded losses shrink WIP. The same economic pcs are never counted in
+  //    two stages simultaneously.
   const batches = Array.isArray(state.batches) ? state.batches : [];
   const sends = Array.isArray(state.processingSends) ? state.processingSends : [];
   const receipts = Array.isArray(state.processingReceipts) ? state.processingReceipts : [];
@@ -97,13 +111,13 @@ export function migrateERPState(state: any): any {
       processedPcs: 0,
     }));
 
-    // Dispatches: raw → WIP. Prefer the dispatch's recorded batch; when a
-    // legacy dispatch has none ('Any Batch / General Stock'), FIFO-attribute
-    // from the oldest active batches — exactly what the live engine does.
+    // Dispatches: stage-1 / legacy draws raw → WIP. Intermediate-stage
+    // dispatches are WIP → WIP and do not touch the batch buckets.
     const orderedSends = [...sends]
       .filter((s: any) => s.status !== 'Adjusted' && (s.pcsSent || 0) > 0)
       .sort((a: any, b: any) => (a.date || '').localeCompare(b.date || ''));
     for (const s of orderedSends) {
+      if (!InventoryCalculationService.sendConsumesRaw(s.stageId, processingStages)) continue;
       trail = InventoryCalculationService.attributeDispatchFIFO(
         s.materialId,
         s.pcsSent,
@@ -112,12 +126,27 @@ export function migrateERPState(state: any): any {
       ).batches;
     }
 
-    // Receipts: WIP → finished on the same batches (prefer the send's batch).
+    // Recorded losses: WIP −= loss (FIFO, preferring the dispatch's batch).
+    for (const s of orderedSends) {
+      if (!(s.lossQuantity || 0)) continue;
+      if (!InventoryCalculationService.sendConsumesRaw(s.stageId, processingStages)) continue;
+      trail = InventoryCalculationService.attributeLossFIFO(
+        s.materialId,
+        s.lossQuantity || 0,
+        trail as any,
+        s.batchId || undefined
+      );
+    }
+
+    // Receipts: final-stage / legacy → WIP to finished (prefer the send's
+    // batch). Intermediate receipts are WIP → WIP and do not touch buckets.
     const orderedReceipts = [...receipts]
       .filter((r: any) => (r.pcsReceived || 0) > 0)
       .sort((a: any, b: any) => (a.date || '').localeCompare(b.date || ''));
     for (const r of orderedReceipts) {
       const send = sends.find((x: any) => x.id === r.sendId);
+      const stageId = r.stageId ?? send?.stageId;
+      if (!InventoryCalculationService.receiptProducesFinished(stageId, processingStages)) continue;
       trail = InventoryCalculationService.attributeReceiptFIFO(
         r.materialId,
         r.pcsReceived,
@@ -126,7 +155,7 @@ export function migrateERPState(state: any): any {
       );
     }
 
-    // Sales: finished → sold FIFO per product's material (same as the engine).
+    // Sales: finished → sold consume FIFO per material (same as the engine).
     const productMaterial = new Map<string, string>(
       products.map((p: any) => [p.id as string, p.materialId as string])
     );
@@ -142,7 +171,7 @@ export function migrateERPState(state: any): any {
     migratedBatches = trail;
   }
 
-  // 5. Drop legacy parallel trail
+  // 6. Drop legacy parallel trail
   const { ledgerEntries, ...rest } = state;
 
   return {
@@ -150,5 +179,6 @@ export function migrateERPState(state: any): any {
     accounts: migratedAccounts,
     vouchers,
     batches: migratedBatches,
+    processingStages,
   };
 }

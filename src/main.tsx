@@ -206,6 +206,27 @@ async function bootstrap() {
       Logger.warn('Startup', `Chart of Accounts auto-seed skipped: ${e.message}`);
     }
 
+    // Auto-seed the Processing Stage master (Initial Processor → Machine →
+    // Acid → Polish) when empty — idempotent, so user-configured stages are
+    // never overwritten. Covers fresh installs (no persisted state to migrate).
+    try {
+      const { useERPStore } = await import('./store/useERPStore');
+      const state = useERPStore.getState();
+      if ((state.processingStages || []).length === 0) {
+        Logger.info('Startup', 'No processing stages found, seeding default chain...');
+        const mod = await import('./lib/processing/processingStageSeed');
+        const result = mod.seedDefaultProcessingStages(
+          () => useERPStore.getState(),
+          { addProcessingStage: state.addProcessingStage, updateProcessingStage: state.updateProcessingStage } as any
+        );
+        Logger.info('Startup', result.skipped
+          ? 'Processing stages already present'
+          : `Processing stages seeded: ${result.created} created`);
+      }
+    } catch (e: any) {
+      Logger.warn('Startup', `Processing stage seed skipped: ${e.message}`);
+    }
+
     // Dev-only: seed realistic demo data across ALL modules (never in
     // production — Vite replaces import.meta.env.DEV with false at build time
     // and tree-shakes this whole branch, so the installer ships no demo data).

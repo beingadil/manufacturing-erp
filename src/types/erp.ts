@@ -42,7 +42,39 @@ export interface Batch {
   atProcessorPcs?: number;
   /** Pcs of this batch finished/processed and on hand (unsold) — valued at this batch's purchase cost. */
   processedPcs?: number;
+  /** The processing stage this batch is currently at (informational; derived from movements). */
+  currentStageId?: string;
 }
+
+export type ProcessingRateMethod = "per_piece" | "per_kg";
+
+/**
+ * A configurable manufacturing/processing stage (spec §4).
+ *
+ * The stage master is data-driven: the final stage is determined by
+ * `isFinalStage`, never hardcoded, so future stages (Cutting, Grinding,
+ * Heat Treatment, Packaging, …) can be added without code restructuring.
+ */
+export interface ProcessingStage {
+  id: string;
+  name: string;
+  /** Order in the chain — stage 1 draws from raw stock. */
+  sequence: number;
+  description?: string;
+  active: boolean;
+  inputUnit?: string;
+  /** Billing unit label, e.g. "Per PCS" or "Per KG". */
+  billingUnit?: string;
+  billingEnabled: boolean;
+  /** How the stage's bill amount is computed: per_piece = qty × rate, per_kg = qty × weightPerPiece(kg) × rate. */
+  rateMethod: ProcessingStageRateMethod;
+  /** When true, receiving from this stage produces saleable Finished Goods. */
+  isFinalStage: boolean;
+  /** The next stage in the chain (null/undefined when final). */
+  nextStageId?: string;
+}
+
+export type ProcessingStageRateMethod = "per_piece" | "per_kg";
 
 export interface InventoryMovement {
   id: string;
@@ -50,7 +82,7 @@ export interface InventoryMovement {
   batchId?: string;
   date: string;
   referenceNo: string;
-  module: "Purchase" | "Dispatch" | "Receive" | "Sale" | "Adjustment";
+  module: "Purchase" | "Dispatch" | "Receive" | "Sale" | "Adjustment" | "Loss";
   transactionType: "IN" | "OUT";
   userId?: string;
   quantity: number;
@@ -70,6 +102,10 @@ export interface Processor {
   status?: string;
   balancePayable: number;
   accountId?: string;
+  /** The processing stage this worker performs (worker type — Initial
+   *  Processor / Machine / Acid / Polish …). Undefined = General worker who can
+   *  take work at ANY stage. Config-driven: new stages appear automatically. */
+  stageId?: string;
 }
 
 export interface Supplier {
@@ -131,6 +167,10 @@ export interface ProcessingSend {
   remarks?: string;
   status: "Pending" | "Partial" | "Closed" | "Adjusted";
   adjustedToDispatchId?: string;
+  /** Processing stage this material is sent TO (which worker/stage does the work). */
+  stageId?: string;
+  /** Pcs of this dispatch explicitly recorded as loss/wastage (never automatic). */
+  lossQuantity?: number;
 }
 
 export interface ProcessingReceipt {
@@ -144,6 +184,12 @@ export interface ProcessingReceipt {
   billAmount: number; // Keep for reference, but actual billing is in ProcessorBill
   billedStatus?: "Unbilled" | "Billed";
   remarks?: string;
+  /** Stage this receipt is received FROM (the worker/stage that did the work). */
+  stageId?: string;
+  /** Rate method used to compute billAmount (per_piece vs per_kg). */
+  rateMethod?: "per_piece" | "per_kg";
+  /** Billing unit label (e.g. 'PCS' or 'KG'). */
+  billingUnit?: string;
 }
 
 export interface ProcessorBill {
@@ -154,6 +200,12 @@ export interface ProcessorBill {
   receiptIds: string[];
   totalAmount: number;
   remarks?: string;
+  /** Stage this bill covers (the stage whose receipts are being billed). */
+  stageId?: string;
+  /** Rate method used for the bill (per_piece vs per_kg). */
+  rateMethod?: "per_piece" | "per_kg";
+  /** Billing unit label (e.g. "Per PCS" or "Per KG"). */
+  billingUnit?: string;
 }
 
 export interface Product {

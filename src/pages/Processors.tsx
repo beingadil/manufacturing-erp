@@ -9,7 +9,7 @@ import { PartyLedgerModal } from "../components/PartyLedgerModal";
 import { toast } from "sonner";
 
 export function Processors() {
-  const { processors, addProcessor, updateProcessor } = useERPStore();
+  const { processors, addProcessor, updateProcessor, processingStages } = useERPStore();
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [ledgerParty, setLedgerParty] = useState<{ id: string; name: string; kind: 'Processor' } | null>(null);
@@ -20,6 +20,16 @@ export function Processors() {
   const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
+  // Worker type = the processing stage this person works at (config-driven,
+  // so new stages appear here automatically). Empty = General (any stage).
+  const [workerStageId, setWorkerStageId] = useState("");
+
+  const sortedStages = [...(processingStages || [])].sort((a, b) => a.sequence - b.sequence);
+  const stageNameOf = (stageId?: string) => {
+    if (!stageId) return 'General';
+    const s = sortedStages.find(x => x.id === stageId);
+    return s ? `${s.name}${s.isFinalStage ? ' (Final)' : ''}` : 'General';
+  };
 
   const openEditModal = (processor: any) => {
     setEditingProcessor(processor);
@@ -29,6 +39,7 @@ export function Processors() {
     setEmail(processor.email || "");
     setAddress(processor.address || "");
     setNotes(processor.notes || "");
+    setWorkerStageId(processor.stageId || "");
     setIsModalOpen(true);
   };
 
@@ -41,6 +52,7 @@ export function Processors() {
     setEmail("");
     setAddress("");
     setNotes("");
+    setWorkerStageId("");
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -53,7 +65,8 @@ export function Processors() {
       phone,
       email,
       address,
-      notes
+      notes,
+      stageId: workerStageId || undefined
     };
 
     try {
@@ -77,14 +90,27 @@ export function Processors() {
       sortable: true,
       render: (item) => (
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-            <UserCog className="h-4 w-4" />
-          </div>
+          <UserCog className="h-4 w-4 shrink-0 text-muted-foreground" />
           <div>
             <span className="font-medium text-foreground">{item.name}</span>
             {item.contactPerson && <div className="text-xs text-muted-foreground">{item.contactPerson}</div>}
           </div>
         </div>
+      )
+    },
+    {
+      key: "workerType",
+      label: "Worker Type",
+      sortable: true,
+      render: (item) => (
+        <span className={cn(
+          "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+          item.stageId
+            ? "bg-primary/10 text-primary border border-primary/20"
+            : "bg-muted text-muted-foreground border border-border"
+        )}>
+          {stageNameOf(item.stageId)}
+        </span>
       )
     },
     { key: "phone", label: "Contact", sortable: true, render: (item) => <span className="text-muted-foreground">{item.phone || '-'}</span> },
@@ -179,6 +205,20 @@ export function Processors() {
             </div>
             <form onSubmit={handleSubmit} className="p-6 pb-64 space-y-4">
               <input type="text" required value={name} onChange={e => setName(e.target.value)} className="w-full rounded-xl border p-3 text-sm" placeholder="Processor Name *" />
+              <div>
+                <label className="block text-sm font-medium text-foreground/80 mb-1">Worker Type</label>
+                <select
+                  value={workerStageId}
+                  onChange={e => setWorkerStageId(e.target.value)}
+                  className="w-full rounded-xl border border-border bg-background p-3 text-sm"
+                >
+                  <option value="">General Worker (any stage)</option>
+                  {sortedStages.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}{s.isFinalStage ? ' (Final Polish)' : ''}</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-muted-foreground">The processing job this worker performs. The Job Work module only offers workers matching the selected stage.</p>
+              </div>
               <input type="text" value={contactPerson} onChange={e => setContactPerson(e.target.value)} className="w-full rounded-xl border p-3 text-sm" placeholder="Contact Person" />
               <div className="grid grid-cols-2 gap-3">
                 <input type="text" value={phone} onChange={e => setPhone(e.target.value)} className="w-full rounded-xl border p-3 text-sm" placeholder="Phone" />

@@ -1,8 +1,8 @@
+import { AlertCircle, Factory, } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { ProcessingReportService } from "../../../lib/reporting/ProcessingReportService";
 import { formatNumber } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
-import { Factory, AlertCircle, } from 'lucide-react';
-import { ProcessingReportService } from "../../../lib/reporting/ProcessingReportService";
 
 export function ProcessingLossReport() {
   const [dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });
@@ -24,9 +24,11 @@ export function ProcessingLossReport() {
       ]}
       columns={[
         { key: "processorName", label: "Processor Name" },
+        { key: "stageName", label: "Stage" },
         { key: "sentPcs", label: "Sent (PCS)", align: "right", render: (item) => formatNumber(item.sentPcs) },
         { key: "receivedPcs", label: "Received (PCS)", align: "right", render: (item) => formatNumber(item.receivedPcs) },
         { key: "lossPcs", label: "Loss (PCS)", align: "right", render: (item) => <span className="text-rose-600 font-medium">{formatNumber(item.lossPcs)}</span> },
+        { key: "pendingPcs", label: "Pending (PCS)", align: "right", render: (item) => formatNumber(item.pendingPcs || 0) },
         { key: "lossPercentage", label: "Loss %", align: "right", render: (item) => `${item.lossPercentage.toFixed(2)}%` }
       ]}
       exportDataMapping={(item) => ({
@@ -34,6 +36,7 @@ export function ProcessingLossReport() {
         sentPcs: formatNumber(item.sentPcs),
         receivedPcs: formatNumber(item.receivedPcs),
         lossPcs: formatNumber(item.lossPcs),
+        pendingPcs: formatNumber(item.pendingPcs || 0),
         lossPercentage: `${item.lossPercentage.toFixed(2)}%`
       })}
     />

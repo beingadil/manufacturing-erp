@@ -1,11 +1,13 @@
-import { useERPStore } from '../store/useERPStore';
-import { 
-  ValidationEngine, 
-  ProcessingDispatchValidator, ProcessingDispatchDTO,
-  ProcessingReceiveValidator, ProcessingReceiveDTO 
-} from '../lib/validation';
-import type { ProcessorBill } from '../types/erp';
 import { BusinessWorkflowEngine } from '../lib/business/BusinessWorkflowEngine';
+import { ProcessingDispatchDTO,
+  ProcessingDispatchValidator, ProcessingLossDTO,
+  ProcessingLossValidator, ProcessingReceiveDTO,
+  ProcessingReceiveValidator, ProcessingStageDTO, 
+  ProcessingStageValidator, 
+  ValidationEngine 
+} from '../lib/validation';
+import { useERPStore } from '../store/useERPStore';
+import type { ProcessingStage, ProcessorBill } from '../types/erp';
 
 export class ProcessingService {
   static dispatch(data: ProcessingDispatchDTO, adjustPendingIds?: string[]) {
@@ -53,6 +55,33 @@ export class ProcessingService {
       const state = useERPStore.getState();
       state.deleteProcessingReceipt(id);
     }, 'Receive deleted');
+  }
+
+  static recordLoss(data: ProcessingLossDTO) {
+    return BusinessWorkflowEngine.executeWorkflow('Record Processing Loss', () => {
+      ValidationEngine.validate(new ProcessingLossValidator(), data, 'Record Processing Loss');
+      const state = useERPStore.getState();
+      state.recordProcessingLoss(data.sendId, data.quantity, data.date, data.remarks);
+    }, 'Loss recorded');
+  }
+
+  static addStage(data: ProcessingStageDTO) {
+    return BusinessWorkflowEngine.executeWorkflow('Add Processing Stage', () => {
+      ValidationEngine.validate(new ProcessingStageValidator(), data, 'Add Processing Stage');
+      return useERPStore.getState().addProcessingStage(data as Omit<ProcessingStage, 'id'>);
+    }, 'Stage added');
+  }
+
+  static updateStage(id: string, data: Partial<ProcessingStageDTO>) {
+    return BusinessWorkflowEngine.executeWorkflow('Update Processing Stage', () => {
+      useERPStore.getState().updateProcessingStage(id, data);
+    }, 'Stage updated');
+  }
+
+  static deleteStage(id: string) {
+    return BusinessWorkflowEngine.executeWorkflow('Delete Processing Stage', () => {
+      useERPStore.getState().deleteProcessingStage(id);
+    }, 'Stage deleted');
   }
 
   static createBill(data: Omit<ProcessorBill, 'id' | 'billNo' | 'totalAmount'>) {

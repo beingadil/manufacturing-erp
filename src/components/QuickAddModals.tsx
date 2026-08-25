@@ -89,16 +89,19 @@ export function QuickAddSupplier({ isOpen, onClose, onSuccess }: BaseModalProps)
 }
 
 export function QuickAddProcessor({ isOpen, onClose, onSuccess }: BaseModalProps) {
-  const { addProcessor } = useERPStore();
+  const { addProcessor, processingStages } = useERPStore();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  // Worker type = processing stage this worker performs (empty = General/any).
+  const [workerStageId, setWorkerStageId] = useState("");
+  const sortedStages = [...(processingStages || [])].sort((a, b) => a.sequence - b.sequence);
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    const id = addProcessor({ name, phone });
+    const id = addProcessor({ name, phone, stageId: workerStageId || undefined });
     onSuccess(id);
     onClose();
   };
@@ -118,6 +121,15 @@ export function QuickAddProcessor({ isOpen, onClose, onSuccess }: BaseModalProps
           <div>
             <label className="block text-sm font-medium text-foreground/80 mb-1">Phone</label>
             <input value={phone} onChange={e => setPhone(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-foreground/80 mb-1">Worker Type</label>
+            <select value={workerStageId} onChange={e => setWorkerStageId(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm">
+              <option value="">General Worker (any stage)</option>
+              {sortedStages.map(s => (
+                <option key={s.id} value={s.id}>{s.name}{s.isFinalStage ? ' (Final Polish)' : ''}</option>
+              ))}
+            </select>
           </div>
           <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">Save Processor</button>
         </form>

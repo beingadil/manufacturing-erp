@@ -1,17 +1,17 @@
+import { format, startOfMonth, startOfWeek, startOfYear, subDays } from 'date-fns';
+import { AlertTriangle, ArrowDownCircle, ArrowLeftRight, ArrowRight, ArrowUpCircle, Banknote, Building2, CircleDollarSign, DollarSign, Factory, Landmark, Layers, Package, PackageSearch, Scale, ShoppingCart, TrendingUp, Truck, Users, Wallet } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { PositionSummary } from '../components/reports/financial/BalanceSheetStatement';
+import { KpiCard } from "../components/ui/KpiCard";
 import { useAuth } from "../contexts/AuthContext";
 import { filterFinancialData } from "../lib/abac";
-import { useMemo, useState } from "react";
-import { useERPStore } from "../store/useERPStore";
-import { formatCurrency, formatNumber, cn } from "../lib/utils";
-import { KpiCard } from "../components/ui/KpiCard";
-import { ArrowRight, PackageSearch, Users, Truck, TrendingUp, AlertTriangle, CircleDollarSign, ArrowUpCircle, ArrowDownCircle, DollarSign, Landmark, Building2, Scale, Wallet, ArrowLeftRight, ShoppingCart, Banknote, Factory, Layers, Package } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { format, subDays, startOfWeek, startOfMonth, startOfYear } from 'date-fns';
-import { DashboardSummaryService } from '../lib/dashboard/DashboardSummaryService';
 import { getSystemAccountBySubtype } from '../lib/accounting/accountClassification';
+import { DashboardSummaryService } from '../lib/dashboard/DashboardSummaryService';
 import { FinancialReportService } from '../lib/reporting/FinancialReportService';
-import { PositionSummary } from '../components/reports/financial/BalanceSheetStatement';
+import { cn, formatCurrency, formatNumber } from "../lib/utils";
+import { useERPStore } from "../store/useERPStore";
 
 type Preset = 'today' | 'week' | 'month' | 'year' | 'custom';
 
@@ -20,7 +20,7 @@ export function Dashboard() {
   const {
     materials, processors, suppliers, customers, processorBills,
     sales, purchases, products, accounts, journalEntries, vouchers, accountSubtypes,
-    batches,
+    batches, processingSends, processingReceipts, processingStages,
   } = useERPStore();
   const navigate = useNavigate();
 
@@ -53,10 +53,11 @@ export function Dashboard() {
     {
       accounts, accountSubtypes, journalEntries, vouchers, batches, materials,
       customers, suppliers, processors, processorBills,
+      processingSends, processingReceipts, processingStages,
       sales: secureSales, purchases: securePurchases,
     },
     { asOfDate: range.end, periodStart: range.start, periodEnd: range.end }
-  ), [accounts, accountSubtypes, journalEntries, vouchers, batches, materials, customers, suppliers, processors, secureSales, securePurchases, range]);
+  ), [accounts, accountSubtypes, journalEntries, vouchers, batches, materials, customers, suppliers, processors, secureSales, securePurchases, processingSends, processingReceipts, processingStages, range]);
 
   // "Where you stand" — the SAME authoritative balance-sheet figures as the
   // Balance Sheet report (invested / total profit to date / what's yours),
@@ -358,11 +359,27 @@ export function Dashboard() {
             iconClassName="text-orange-500"
             label="WIP / At Processor"
             value={`${formatNumber(summary.inventory.wipPcs)} PCS`}
-            description={<>
-              <div className="flex justify-between"><span>Value</span><span className="font-medium text-foreground/80">{formatCurrency(summary.inventory.atProcessor)}</span></div>
-              <div className="text-muted-foreground/70">At purchase cost of the batch dispatched</div>
-            </>}
-            onClick={() => navigate('/processing')}
+            description={
+              <>
+                {summary.inventory.stageWip.length > 0 ? (
+                  <div className="space-y-0.5">
+                    {summary.inventory.stageWip.map(st => (
+                      <div key={st.stageId} className="flex justify-between gap-2">
+                        <span>{st.name}</span>
+                        <span className="font-medium text-foreground/80">{formatNumber(st.pcs)} PCS · {formatCurrency(st.value)}</span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between gap-2 border-t border-border/60 pt-1 mt-1">
+                      <span className="font-medium text-foreground">Total WIP</span>
+                      <span className="font-semibold text-foreground">{formatNumber(summary.inventory.wipPcs)} PCS · {formatCurrency(summary.inventory.atProcessor)}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex justify-between"><span>Value</span><span className="font-medium text-foreground/80">{formatCurrency(summary.inventory.atProcessor)}</span></div>
+                )}
+              </>
+            }
+            onClick={() => navigate('/job-work')}
           />
           <KpiCard
             icon={Package}
