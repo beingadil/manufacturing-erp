@@ -1,22 +1,21 @@
-import { DocumentNumberingService } from '../lib/business/DocumentNumberingService';
-import { UnitConversionService } from '../lib/business/UnitConversionService';
-import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
-import { createCRUDActions } from './crudActions';
-import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import { SQLiteStorageAdapter } from '../database/sqlite/SQLiteStorageAdapter';
 import { v4 as uuidv4 } from 'uuid';
-import { databaseMiddleware } from './databaseMiddleware';
-import { 
-  MaterialCategory, RawMaterial, Processor, Supplier, Customer, 
-  Purchase, ProcessingSend, ProcessingReceipt, Product, Sale,
-  Batch, InventoryMovement, ProcessorBill,
-  AccountSubtype, Account, Voucher, JournalEntry, 
-  CompanySettings, DocumentSettings
-} from '../types/erp';
-import { migrateERPState } from './erpMigration';
+import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import { SQLiteStorageAdapter } from '../database/sqlite/SQLiteStorageAdapter';
 import { AccountingEngine } from '../lib/accounting/AccountingEngine';
-import { getSystemAccountBySubtype, getSystemInventoryAccount, getSystemCOGSAccount } from '../lib/accounting/accountClassification';
+import { getSystemAccountBySubtype, getSystemCOGSAccount, getSystemInventoryAccount } from '../lib/accounting/accountClassification';
+import { DocumentNumberingService } from '../lib/business/DocumentNumberingService';
+import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
+import { UnitConversionService } from '../lib/business/UnitConversionService';import {Account, 
+  AccountSubtype, 
+  Batch, 
+  CompanySettings, Customer, DocumentSettings, InventoryMovement, JournalEntry, 
+  MaterialCategory, ProcessingReceipt, ProcessingSend, ProcessingStage,Processor, ProcessorBill, Product, 
+  Purchase, RawMaterial, Sale,Supplier, Voucher 
+} from '../types/erp';
+import { createCRUDActions } from './crudActions';
+import { databaseMiddleware } from './databaseMiddleware';
+import { migrateERPState } from './erpMigration';
 
 export interface ERPState {
   inventoryThreshold: number;
@@ -37,6 +36,7 @@ export interface ERPState {
   processingSends: ProcessingSend[];
   processingReceipts: ProcessingReceipt[];
   processorBills: ProcessorBill[];
+  processingStages: ProcessingStage[];
   products: Product[];
   sales: Sale[];
   batches: Batch[];
@@ -54,6 +54,9 @@ export interface ERPState {
   // Entity Add Actions
   addCategory: (data: Omit<MaterialCategory, 'id'>) => string;
   updateCategory: (id: string, data: Partial<MaterialCategory>) => void;
+  addProcessingStage: (data: Omit<ProcessingStage, 'id'>) => string;
+  updateProcessingStage: (id: string, data: Partial<ProcessingStage>) => void;
+  deleteProcessingStage: (id: string) => void;
   addProcessor: (data: Omit<Processor, 'id' | 'balancePayable'>) => string;
   addSupplier: (data: Omit<Supplier, 'id' | 'balancePayable'>) => string;
   addCustomer: (data: Omit<Customer, 'id' | 'balanceReceivable'>) => string;
@@ -82,6 +85,7 @@ export interface ERPState {
   addProcessingSend: (data: Omit<ProcessingSend, 'id' | 'dispatchNo' | 'pcsReceived' | 'status'>, adjustSendIds?: string[]) => void;
   addProcessingReceipt: (data: Omit<ProcessingReceipt, 'id' | 'receiveNo' | 'billAmount'>) => void;
   addProcessorBill: (data: Omit<ProcessorBill, 'id' | 'billNo' | 'totalAmount'>) => void;
+  recordProcessingLoss: (sendId: string, quantity: number, date?: string, remarks?: string) => void;
   addSale: (data: Omit<Sale, 'id' | 'invoiceNo' | 'totalAmount'>) => void;
   
   // Accounting Actions
@@ -161,6 +165,7 @@ export const useERPStore = create<ERPState>()(
       processingSends: [],
       processingReceipts: [],
       processorBills: [],
+      processingStages: [],
       products: [],
       sales: [],
       batches: [],
@@ -195,6 +200,7 @@ export const useERPStore = create<ERPState>()(
           processingSends: [],
           processingReceipts: [],
           processorBills: [],
+          processingStages: [],
           products: [],
           sales: [],
           batches: [],
@@ -467,6 +473,25 @@ export const useERPStore = create<ERPState>()(
         categories: state.categories.map(c => c.id === id ? { ...c, ...data } : c)
       })),
 
+      addProcessingStage: (data) => {
+        const id = uuidv4();
+        set((state) => ({ processingStages: [{ ...data, id }, ...state.processingStages] }));
+        return id;
+      },
+
+      updateProcessingStage: (id, data) => set((state) => ({
+        processingStages: state.processingStages.map(s => s.id === id ? { ...s, ...data } : s)
+      })),
+
+      deleteProcessingStage: (id) => set((state) => {
+        // Guard: a stage with movements cannot be deleted — it is part of the
+        // historical chain. Only unused stages can be removed.
+        const hasMovements = state.processingSends.some(s => s.stageId === id)
+          || state.processingReceipts.some(r => r.stageId === id);
+        if (hasMovements) return state;
+        return { processingStages: state.processingStages.filter(s => s.id !== id) };
+      }),
+
       addProcessor: (data) => {
         const id = uuidv4();
         set((state) => {
@@ -709,8 +734,41 @@ export const useERPStore = create<ERPState>()(
           status: 'Pending'
         };
 
+        // Stage-aware dispatch (spec §6): a stage-1 / legacy dispatch draws from
+        // RAW stock (raw → WIP); an intermediate-stage dispatch moves pcs that
+        // are ALREADY in WIP (WIP → WIP) and must NOT touch the raw counters or
+        // the batch buckets — the same economic pcs are never counted twice.
+        const consumesRaw = InventoryCalculationService.sendConsumesRaw(data.stageId, state.processingStages || []);
+
+        if (!consumesRaw) {
+          // Intermediate stage: no raw/WIP counter change, no batch change. The
+          // movement is recorded purely as history (stage derivation carries the
+          // per-stage WIP). No 'adjust pending' merging across stages.
+          const movement: InventoryMovement = {
+            id: uuidv4(),
+            materialId: data.materialId,
+            batchId: data.batchId,
+            date: data.date,
+            referenceNo: dispatchNo,
+            module: "Dispatch",
+            transactionType: "OUT",
+            quantity: data.pcsSent,
+            runningBalance: 0,
+            remarks: data.remarks
+          };
+          return {
+            processingSends: [newSend, ...state.processingSends],
+            inventoryMovements: [movement, ...(state.inventoryMovements || [])]
+          };
+        }
+
         const currentMaterial = state.materials.find(m => m.id === data.materialId);
         const currentStock = currentMaterial?.stockPcs || 0;
+
+        // ── Store-level guard (spec §7, §21): over-send rejected HERE — the
+        // authoritative layer can never dispatch more raw pcs than are on hand.
+        if (data.pcsSent <= 0 || data.pcsSent > currentStock) return state;
+
         const newStock = currentStock - data.pcsSent;
         const currentAtProcessor = currentMaterial?.atProcessorPcs || 0;
 
@@ -777,14 +835,38 @@ export const useERPStore = create<ERPState>()(
         const send = state.processingSends.find(s => s.id === data.sendId);
         if (!send) return state;
 
-        const billAmount = data.pcsReceived * send.ratePerPiece;
-        
+        // ── Store-level guards (spec §7, §21): over-receipt and duplicate
+        // receipt are rejected HERE, not just in the UI/validators, so the
+        // authoritative layer can never be bypassed. The over-receipt guard
+        // inherently blocks a second receipt of the same pcs (pending becomes 0).
+        const pending = send.pcsSent - send.pcsReceived - (send.lossQuantity || 0);
+        if (data.pcsReceived <= 0 || data.pcsReceived > pending) return state;
+
+        // Stage-aware receipt (spec §6): only a receipt from the configured
+        // FINAL stage (or a legacy stage-less receipt) produces Finished Goods
+        // (WIP → finished). Intermediate receipts move WIP → WIP and must NOT
+        // touch the finished counters or the batch buckets.
+        const stageId = data.stageId ?? send.stageId;
+        const producesFinished = InventoryCalculationService.receiptProducesFinished(stageId, state.processingStages || []);
+
+        // Per-stage billing (spec §9, §10): per_piece = qty × rate;
+        // per_kg = qty × weightPerPiece(kg) × rate (e.g. 32 KG × Rs 32 = Rs 1,024).
+        const stage = (state.processingStages || []).find(s => s.id === stageId);
+        const rateMethod = data.rateMethod ?? stage?.rateMethod ?? 'per_piece';
+        const batch = send.batchId ? state.batches.find(b => b.id === send.batchId) : undefined;
+        const billAmount = rateMethod === 'per_kg'
+          ? data.pcsReceived * (batch?.weightPerPiece || 0) * send.ratePerPiece
+          : data.pcsReceived * send.ratePerPiece;
+
         const newReceipt: ProcessingReceipt = {
           ...data,
           id: uuidv4(),
           receiveNo,
           billAmount,
-          billedStatus: "Unbilled"
+          billedStatus: "Unbilled",
+          stageId,
+          rateMethod,
+          billingUnit: data.billingUnit ?? stage?.billingUnit,
         };
 
         const updatedSends = state.processingSends.map(s => {
@@ -799,25 +881,30 @@ export const useERPStore = create<ERPState>()(
         const currentMaterial = state.materials.find(m => m.id === data.materialId);
         const currentAtProcessor = currentMaterial?.atProcessorPcs || 0;
 
-        const updatedMaterials = state.materials.map(m =>
-          m.id === data.materialId ? {
-            ...m,
-            atProcessorPcs: Math.max(0, currentAtProcessor - data.pcsReceived),
-            processedStockPcs: m.processedStockPcs + data.pcsReceived
-          } : m
-        );
+        let updatedMaterials = state.materials;
+        let updatedBatches = state.batches;
 
-        // Move the received pcs from the WIP stage to the finished stage so
-        // finished stock is valued at the actual purchase rate of the batch it
-        // was dispatched from. The batch trail ALWAYS moves in lockstep with the
-        // material counters (FIFO, preferring the send's batch) so the same pcs
-        // are never counted as both WIP and finished goods.
-        const updatedBatches = InventoryCalculationService.attributeReceiptFIFO(
-          data.materialId,
-          data.pcsReceived,
-          state.batches || [],
-          send.batchId
-        );
+        if (producesFinished) {
+          updatedMaterials = state.materials.map(m =>
+            m.id === data.materialId ? {
+              ...m,
+              atProcessorPcs: Math.max(0, currentAtProcessor - data.pcsReceived),
+              processedStockPcs: m.processedStockPcs + data.pcsReceived
+            } : m
+          );
+
+          // Move the received pcs from the WIP stage to the finished stage so
+          // finished stock is valued at the actual purchase rate of the batch it
+          // was dispatched from. The batch trail ALWAYS moves in lockstep with the
+          // material counters (FIFO, preferring the send's batch) so the same pcs
+          // are never counted as both WIP and finished goods.
+          updatedBatches = InventoryCalculationService.attributeReceiptFIFO(
+            data.materialId,
+            data.pcsReceived,
+            state.batches || [],
+            send.batchId
+          );
+        }
 
         const movement: InventoryMovement = {
           id: uuidv4(),
@@ -841,10 +928,67 @@ export const useERPStore = create<ERPState>()(
         };
       }),
 
+      recordProcessingLoss: (sendId, quantity, date, remarks) => set((state) => {
+        const send = state.processingSends.find(s => s.id === sendId);
+        if (!send) return state;
+
+        // Explicit loss only (spec §8): pending pcs can be received OR recorded
+        // as loss — never automatic. Reject over-loss and negative/zero loss.
+        const pending = send.pcsSent - send.pcsReceived - (send.lossQuantity || 0);
+        if (quantity <= 0 || quantity > pending) return state;
+
+        const lossDate = date || new Date().toISOString().split('T')[0];
+        const updatedSends = state.processingSends.map(s =>
+          s.id === sendId ? { ...s, lossQuantity: (s.lossQuantity || 0) + quantity } : s
+        );
+
+        // The lost pcs leave the WIP stage entirely — real shrinkage. Material
+        // counter and batch trail both drop by exactly `quantity` (FIFO,
+        // preferring the dispatch's batch), so total inventory value decreases
+        // by the lost pcs at purchase cost and is never double-counted.
+        const updatedMaterials = state.materials.map(m =>
+          m.id === send.materialId
+            ? { ...m, atProcessorPcs: Math.max(0, (m.atProcessorPcs || 0) - quantity) }
+            : m
+        );
+        const updatedBatches = InventoryCalculationService.attributeLossFIFO(
+          send.materialId,
+          quantity,
+          state.batches || [],
+          send.batchId
+        );
+
+        const movement: InventoryMovement = {
+          id: uuidv4(),
+          materialId: send.materialId,
+          batchId: send.batchId,
+          date: lossDate,
+          referenceNo: send.dispatchNo,
+          module: "Loss",
+          transactionType: "OUT",
+          quantity,
+          runningBalance: Math.max(0, (state.materials.find(m => m.id === send.materialId)?.atProcessorPcs || 0) - quantity),
+          remarks: remarks || `Loss recorded against ${send.dispatchNo}`
+        };
+
+        return {
+          processingSends: updatedSends,
+          materials: updatedMaterials,
+          batches: updatedBatches,
+          inventoryMovements: [movement, ...(state.inventoryMovements || [])]
+        };
+      }),
+
       addProcessorBill: (data) => {
         set((state) => {
         const billNo = DocumentNumberingService.nextDocumentNumber(state.processorBills, 'billNo', 'BILL', data.date);
         const receiptsToBill = state.processingReceipts.filter(r => data.receiptIds.includes(r.id));
+
+        // ── Store-level guard: duplicate billing (spec §7, §21) — a receipt
+        // that is already Billed cannot be billed again, so the authoritative
+        // layer can never double-pay a stage.
+        if (receiptsToBill.some(r => r.billedStatus === 'Billed')) return state;
+
         const totalAmount = receiptsToBill.reduce((sum, r) => sum + r.billAmount, 0);
 
         const billId = uuidv4();
@@ -866,7 +1010,9 @@ export const useERPStore = create<ERPState>()(
         // COMPLETE ledger via AccountingEngine.recomputePartyBalances() after
         // this set — never incremented here (spec §14).
 
-        // Automatic Voucher Generation (spec §25 — resolve accounts by subtype, never by name)
+        // Automatic Voucher Generation (spec §25 — resolve accounts by subtype, never by name).
+        // Per the approved policy, stage bills post DR Processing Expense /
+        // CR worker AP — the same mechanism as the existing processor bill.
         const processingExpenseAccount = getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Processing Expense');
         const payableAccount = state.accounts.find(a => a.linkedEntityId === data.processorId)
           || getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Accounts Payable');

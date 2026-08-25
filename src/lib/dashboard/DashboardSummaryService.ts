@@ -4,6 +4,9 @@ import type {
   Batch,
   Customer,
   JournalEntry,
+  ProcessingReceipt,
+  ProcessingSend,
+  ProcessingStage,
   Processor,
   ProcessorBill,
   Purchase,
@@ -13,7 +16,8 @@ import type {
   Voucher,
 } from '../../types/erp';
 import { AccountingEngine } from '../accounting/AccountingEngine';
-import { getCashAccounts, getBankAccounts } from '../accounting/accountClassification';
+import { getBankAccounts, getCashAccounts } from '../accounting/accountClassification';
+import { InventoryCalculationService } from '../business/InventoryCalculationService';
 
 /**
  * Dashboard Financial & Inventory Position — a READ-ONLY presentation layer
@@ -31,14 +35,22 @@ export interface BankBalance {
   balance: number;
 }
 
+export interface StageWipBreakdown {
+  stageId: string;
+  name: string;
+  sequence: number;
+  pcs: number;
+  value: number;
+}
+
 export interface InventoryValuation {
   /** Value of raw stock on hand — batch cost basis. */
   rawMaterials: number;
   /** Value of processed/finished stock at weighted-average material cost. */
   processedStock: number;
-  /** Cost-based value of stock physically at processors (operational — not ledger-posted). */
+  /** Value of stock currently at processors (operational — not ledger-posted). */
   atProcessor: number;
-  /** Same as processedStock — in this ERP finished goods ARE the processed stock. */
+  /** Same as processedStock — in this equals the finished goods. */
   finishedGoods: number;
   /** Total valued inventory = raw + at-processor + finished. */
   total: number;
@@ -46,7 +58,10 @@ export interface InventoryValuation {
   rawPcs: number;
   wipPcs: number;
   finishedPcs: number;
-  /** True when the batch-basis total equals the per-material roll-up (batch/stock state reconcile). */
+  /** Per-stage WIP breakdown (derived from movement history — the same WIP
+   *  pcs are never counted twice; each stage shows its own held quantity). */
+  stageWip: StageWipBreakdown[];
+  /** True when the batch-basis total equals the per-material rollup (batch/stock state reconcile). */
   reconciled: boolean;
 }
 
@@ -110,6 +125,9 @@ export interface DashboardSummaryState {
   sales: Sale[];
   purchases: Purchase[];
   processorBills: ProcessorBill[];
+  processingSends: ProcessingSend[];
+  processingReceipts: ProcessingReceipt[];
+  processingStages: ProcessingStage[];
 }
 
 export class DashboardSummaryService {
@@ -146,7 +164,13 @@ export class DashboardSummaryService {
    * silent addition was the double-counting bug (raw counted from batches PLUS
    * WIP/finished counted from material counters).
    */
-  private static valueInventory(batches: Batch[], materials: RawMaterial[]): InventoryValuation {
+  private static valueInventory(
+    batches: Batch[],
+    materials: RawMaterial[],
+    processingSends: ProcessingSend[],
+    processingReceipts: ProcessingReceipt[],
+    processingStages: ProcessingStage[]
+  ): InventoryValuation {
     let rawMaterials = 0;
     let atProcessor = 0;
     let finishedGoods = 0;
@@ -189,6 +213,21 @@ export class DashboardSummaryService {
       if (Math.abs((m.processedStockPcs || 0) - batchFin) > tol) reconciled = false;
     }
 
+    // Per-stage WIP breakdown — a pure derivation over the movement history.
+    // Each stage's pcs come from Σ sent − Σ received − Σ loss for that stage;
+    // the batch's single atProcessorPcs bucket is the sum across stages, so the
+    // same economic pcs are never counted in two stages simultaneously.
+    const stageWip: StageWipBreakdown[] = [...processingStages]
+      .sort((a, b) => a.sequence - b.sequence)
+      .filter(s => !s.isFinalStage)
+      .map(stage => {
+        const pcs = InventoryCalculationService.getStageWIP(stage.id, processingSends, processingReceipts);
+        // Value the stage at the weighted-average purchase cost of the pcs in
+        // WIP (batch basis) — same basis as the atProcessor total.
+        const value = atProcessor > 0 && wipPcs > 0 ? (atProcessor * pcs) / wipPcs : 0;
+        return { stageId: stage.id, name: stage.name, sequence: stage.sequence, pcs, value };
+      });
+
     const total = rawMaterials + atProcessor + finishedGoods;
     return {
       rawMaterials,
@@ -199,12 +238,13 @@ export class DashboardSummaryService {
       rawPcs,
       wipPcs,
       finishedPcs,
+      stageWip,
       reconciled,
     };
   }
 
   static getSummary(state: DashboardSummaryState, options: DashboardSummaryOptions): DashboardSummary {
-    const { accounts, accountSubtypes, journalEntries, vouchers, batches, materials, customers, suppliers, processors, sales, purchases, processorBills } = state;
+    const { accounts, accountSubtypes, journalEntries, vouchers, batches, materials, customers, suppliers, processors, sales, purchases, processorBills, processingSends, processingReceipts, processingStages } = state;
     const { asOfDate, periodStart, periodEnd } = options;
 
     // ── Balances as of the period end — single authoritative engine ─────────
@@ -248,7 +288,7 @@ export class DashboardSummaryService {
 
     // ── Inventory valuation — ACTUAL purchase cost, per stage ────────────────
     // raw / atProcessor / finished each = Σ pcs × that batch's purchase rate.
-    const inventory = this.valueInventory(batches, materials);
+    const inventory = this.valueInventory(batches, materials, processingSends || [], processingReceipts || [], processingStages || []);
 
     // ── Balance-sheet position — mirrors the Balance Sheet report EXACTLY ────
     // Raw balances, no clamping: if an asset account is negative (e.g. the

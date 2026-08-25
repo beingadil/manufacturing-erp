@@ -16,6 +16,20 @@ const BACKUP_FORMAT_NAME = 'manufacturing-erp-unified-backup';
 let db = null;
 let initialized = false;
 
+// Add a column to an existing table only if it does not already exist
+// (CREATE TABLE IF NOT EXISTS never alters an existing table).
+function addColumnIfMissing(table, column, definition) {
+  try {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
+    if (!cols.includes(column)) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+      console.log(`[DB] Added column ${table}.${column}`);
+    }
+  } catch (e) {
+    console.warn(`[DB] addColumnIfMissing(${table}.${column}) skipped:`, e.message);
+  }
+}
+
 function getDbPath() {
   return path.join(app.getPath('userData'), 'manufacturing-erp.sqlite');
 }
@@ -91,11 +105,17 @@ function createAllTables() {
       FOREIGN KEY (supplierId) REFERENCES suppliers(id) ON DELETE RESTRICT,
       FOREIGN KEY (materialId) REFERENCES materials(id) ON DELETE RESTRICT
     );
+    CREATE TABLE IF NOT EXISTS processingStages (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, sequence INTEGER DEFAULT 0,
+      description TEXT, active INTEGER DEFAULT 1, inputUnit TEXT, billingUnit TEXT,
+      billingEnabled INTEGER DEFAULT 1, rateMethod TEXT DEFAULT 'per_piece',
+      isFinalStage INTEGER DEFAULT 0, nextStageId TEXT
+    );
     CREATE TABLE IF NOT EXISTS processingSends (
       id TEXT PRIMARY KEY, dispatchNo TEXT NOT NULL UNIQUE, processorId TEXT NOT NULL,
       materialId TEXT NOT NULL, batchId TEXT, date TEXT NOT NULL, pcsSent REAL DEFAULT 0,
       pcsReceived REAL DEFAULT 0, ratePerPiece REAL DEFAULT 0, status TEXT DEFAULT 'Pending',
-      adjustedToDispatchId TEXT, remarks TEXT,
+      adjustedToDispatchId TEXT, remarks TEXT, stageId TEXT, lossQuantity REAL DEFAULT 0,
       FOREIGN KEY (processorId) REFERENCES processors(id) ON DELETE RESTRICT,
       FOREIGN KEY (materialId) REFERENCES materials(id) ON DELETE RESTRICT
     );
@@ -103,6 +123,7 @@ function createAllTables() {
       id TEXT PRIMARY KEY, receiveNo TEXT NOT NULL UNIQUE, processorId TEXT NOT NULL,
       materialId TEXT NOT NULL, sendId TEXT NOT NULL, date TEXT NOT NULL, pcsReceived REAL DEFAULT 0,
       billAmount REAL DEFAULT 0, billedStatus TEXT DEFAULT 'Unbilled', remarks TEXT,
+      stageId TEXT, rateMethod TEXT, billingUnit TEXT,
       FOREIGN KEY (processorId) REFERENCES processors(id) ON DELETE RESTRICT,
       FOREIGN KEY (materialId) REFERENCES materials(id) ON DELETE RESTRICT,
       FOREIGN KEY (sendId) REFERENCES processingSends(id) ON DELETE RESTRICT
@@ -110,6 +131,7 @@ function createAllTables() {
     CREATE TABLE IF NOT EXISTS processorBills (
       id TEXT PRIMARY KEY, billNo TEXT NOT NULL UNIQUE, processorId TEXT NOT NULL,
       date TEXT NOT NULL, totalAmount REAL DEFAULT 0, receiptIds TEXT, remarks TEXT,
+      stageId TEXT, rateMethod TEXT, billingUnit TEXT,
       FOREIGN KEY (processorId) REFERENCES processors(id) ON DELETE RESTRICT
     );
     CREATE TABLE IF NOT EXISTS sales (
@@ -167,6 +189,19 @@ function createAllTables() {
     DROP TABLE IF EXISTS _migrations;
     DROP TABLE IF EXISTS key_value_store_history;
   `);
+
+  // Additive stage columns for existing databases (CREATE TABLE IF NOT EXISTS
+  // never alters an existing table, so guard each ALTER by PRAGMA table_info).
+  addColumnIfMissing('processingSends', 'stageId', 'TEXT');
+  addColumnIfMissing('processingSends', 'lossQuantity', 'REAL DEFAULT 0');
+  addColumnIfMissing('processingReceipts', 'stageId', 'TEXT');
+  addColumnIfMissing('processingReceipts', 'rateMethod', "TEXT DEFAULT 'per_piece'");
+  addColumnIfMissing('processingReceipts', 'billingUnit', 'TEXT');
+  addColumnIfMissing('processorBills', 'stageId', 'TEXT');
+  addColumnIfMissing('processorBills', 'rateMethod', 'TEXT');
+  addColumnIfMissing('processorBills', 'billingUnit', 'TEXT');
+  // Worker type — the processing stage a processor performs (NULL = general).
+  addColumnIfMissing('processors', 'stageId', 'TEXT');
 
   // Performance indexes
   db.exec(`

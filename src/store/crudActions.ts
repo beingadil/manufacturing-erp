@@ -1,9 +1,37 @@
-import { StoreApi } from 'zustand';
-import { ERPState } from './useERPStore';
 import { v4 as uuidv4 } from 'uuid';
-import { UnitConversionService } from '../lib/business/UnitConversionService';
+import { StoreApi } from 'zustand';
+import { getSystemAccountBySubtype, getSystemCOGSAccount, getSystemInventoryAccount } from '../lib/accounting/accountClassification';
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
-import { getSystemAccountBySubtype, getSystemInventoryAccount, getSystemCOGSAccount } from '../lib/accounting/accountClassification';
+import { UnitConversionService } from '../lib/business/UnitConversionService';
+import type { Batch, ProcessingReceipt, ProcessingSend, Product, Sale } from '../types/erp';
+import { ERPState } from './useERPStore';
+
+/**
+ * Rebuild one material's batch trail from the authoritative history, using the
+ * store's stage master (stage-aware FIFO replay — only stage-1/legacy sends
+ * draw raw, only final-stage/legacy receipts produce finished, recorded losses
+ * shrink WIP). The returned batches are the single source of truth; callers
+ * then re-derive material counters via syncMaterialCounters.
+ */
+function applyBatchReplayForMaterial(
+  materialId: string,
+  state: ERPState,
+  sends: ProcessingSend[],
+  receipts: ProcessingReceipt[],
+  sales: Sale[],
+  products: Product[]
+): Batch[] {
+  return InventoryCalculationService.recomputeFinishedPcsForMaterial(
+    materialId,
+    state.batches || [],
+    receipts,
+    sends,
+    sales,
+    products,
+    undefined,
+    state.processingStages || []
+  );
+}
 
 /**
  * NOTE: this module deliberately does NOT import AccountingEngine (that would
@@ -141,26 +169,18 @@ export const createCRUDActions = (
       const sale = state.sales.find(s => s.id === id);
       if (!sale) return state;
 
-      // 1. Reverse material processedStockPcs
       const product = state.products.find(p => p.id === sale.productId);
-      let updatedMaterials = state.materials;
-      if (product) {
-        updatedMaterials = state.materials.map(m => 
-          m.id === product.materialId 
-            ? { ...m, processedStockPcs: m.processedStockPcs + sale.pcsSold }
-            : m
-        );
-      }
 
-      // 2. NOTE: the customer's balanceReceivable is derived from the linked
-      //    account's COMPLETE ledger via the afterMutation callback — never
-      //    decremented here (spec §14).
+      // NOTE: the customer's balanceReceivable is derived from the linked
+      // account's COMPLETE ledger via the afterMutation callback — never
+      // decremented here (spec §14).
 
-      // 3. Remove inventory movement
+      // Remove inventory movement
       const updatedInventoryMovements = state.inventoryMovements.filter(im => im.referenceNo !== sale.invoiceNo);
 
-      // 3b. Restore the finished pcs this sale consumed (FIFO) back onto batches
-      // so per-batch valuation stays correct after the delete.
+      // Restore the finished pcs this sale consumed (FIFO) back onto batches
+      // (stage-aware replay), then re-derive the material counters from the
+      // rebuilt trail so they can never drift.
       let updatedBatches = state.batches;
       if (product?.materialId) {
         updatedBatches = InventoryCalculationService.recomputeFinishedPcsForMaterial(
@@ -170,11 +190,13 @@ export const createCRUDActions = (
           state.processingSends || [],
           state.sales || [],
           state.products || [],
-          id
+          id,
+          state.processingStages || []
         );
       }
+      const updatedMaterials = InventoryCalculationService.syncMaterialCounters(state.materials, updatedBatches);
 
-      // 4. Remove voucher and JEs
+      // Remove voucher and JEs
       const voucher = state.vouchers.find(v => v.sourceId === id && v.sourceModule === 'Sales');
       let updatedVouchers = state.vouchers;
       let updatedJournalEntries = state.journalEntries;
@@ -202,30 +224,19 @@ export const createCRUDActions = (
       if (!oldSale) return state;
 
       const newTotalAmount = data.pcsSold * data.pricePerPiece;
-      const diffPcs = data.pcsSold - oldSale.pcsSold;
 
       const updatedSales = state.sales.map(s => 
         s.id === id ? { ...s, ...data, totalAmount: newTotalAmount } : s
       );
-
-      const product = state.products.find(p => p.id === oldSale.productId);
-      let updatedMaterials = state.materials;
-      if (product) {
-        // diffPcs > 0 means more pcs sold, so processedStockPcs goes down
-        updatedMaterials = state.materials.map(m => 
-          m.id === product.materialId 
-            ? { ...m, processedStockPcs: m.processedStockPcs - diffPcs }
-            : m
-        );
-      }
 
       // NOTE: the customer's balanceReceivable is derived from the linked
       // account's COMPLETE ledger via the afterMutation callback — never
       // adjusted here (spec §14).
 
       // Rebuild the material's finished pcs per batch from the authoritative
-      // history (receipts produce, sales consume FIFO) so an edit re-applies
-      // cleanly at actual purchase cost.
+      // history (receipts produce, sales consume FIFO, stage-aware) so an edit
+      // re-applies cleanly at actual purchase cost, then re-derive the material
+      // counters from the rebuilt trail.
       const saleProduct = state.products.find(p => p.id === data.productId || p.id === oldSale.productId);
       const linkedMaterialId = saleProduct?.materialId;
       let updatedBatches = state.batches;
@@ -237,9 +248,11 @@ export const createCRUDActions = (
           state.processingSends || [],
           updatedSales,
           state.products || [],
-          undefined
+          undefined,
+          state.processingStages || []
         );
       }
+      const updatedMaterials = InventoryCalculationService.syncMaterialCounters(state.materials, updatedBatches);
 
       const voucher = state.vouchers.find(v => v.sourceId === id && v.sourceModule === 'Sales');
       let updatedVouchers = state.vouchers;
@@ -332,25 +345,12 @@ export const createCRUDActions = (
       const hasReceipts = state.processingReceipts.some(r => r.sendId === id);
       if (hasReceipts || send.pcsReceived > 0) return state;
 
-      // Sends merged into this dispatch ('Adjusted') — bring them back to Pending.
+      // Sends merged back into this dispatch ('adjusted') — restore to Pending.
       const adjustedOrphans = state.processingSends.filter(s => s.adjustedToDispatchId === id);
-      const adjustedPcs = adjustedOrphans.reduce((sum, s) => sum + (s.pcsSent - s.pcsReceived), 0);
-      // Pcs this dispatch physically drew from raw stock (adjusted pcs were
-      // already drawn by the original sends and live in WIP).
-      const physicalPcs = Math.max(0, send.pcsSent - adjustedPcs);
+      // (adjusted pcs were already drawn by the original sends and live in WIP;
+      // the batch-trail replay below restores everything correctly.)
 
-      // 1. Restore material counters
-      const updatedMaterials = state.materials.map(m => 
-        m.id === send.materialId
-          ? {
-              ...m,
-              stockPcs: (m.stockPcs || 0) + physicalPcs,
-              atProcessorPcs: Math.max(0, (m.atProcessorPcs || 0) - physicalPcs)
-            }
-          : m
-      );
-
-      // 2. Restore adjusted orphans to Pending (clear the merge link)
+      // Restore adjusted orphans to Pending (clear the merge link)
       const restoredOrphans = adjustedOrphans.map(s => ({
         ...s,
         status: 'Pending' as const,
@@ -362,7 +362,9 @@ export const createCRUDActions = (
         ...restoredOrphans
       ];
 
-      // 3. Rebuild the batch trail from the remaining history (idempotent, FIFO)
+      // Rebuild the batch trail from the remaining history (idempotent,
+      // stage-aware FIFO replay — the deleted send's loss is removed with it),
+      // then re-derive the material counters from the rebuilt trail.
       const updatedBatches = InventoryCalculationService.recomputeFinishedPcsForMaterial(
         send.materialId,
         state.batches || [],
@@ -370,10 +372,12 @@ export const createCRUDActions = (
         remainingSends,
         state.sales || [],
         state.products || [],
-        undefined
+        undefined,
+        state.processingStages || []
       );
+      const updatedMaterials = InventoryCalculationService.syncMaterialCounters(state.materials, updatedBatches);
 
-      // 4. Remove this dispatch's inventory movement
+      // Remove this dispatch's inventory movement
       return {
         ...state,
         processingSends: remainingSends,
@@ -383,31 +387,29 @@ export const createCRUDActions = (
       };
     });
   },
-  
+
 
   updateProcessingSend: (id: string, data: any) => {
     set((state) => {
       const oldSend = state.processingSends.find(s => s.id === id);
       if (!oldSend) return state;
 
-      const diffPcs = data.pcsSent - oldSend.pcsSent;
-
       const updatedSends = state.processingSends.map(s =>
         s.id === id ? { ...s, ...data } : s
       );
 
-      const updatedMaterials = state.materials.map(m =>
-        m.id === oldSend.materialId
-          ? { ...m, stockPcs: m.stockPcs - diffPcs, atProcessorPcs: (m.atProcessorPcs || 0) + diffPcs }
-          : m
+      // Rebuild the whole trail for this material (handles pcs, stage, and
+      // loss changes in one pass) and re-derive counters from it — the batch
+      // trail is the single source of truth.
+      const updatedBatches = applyBatchReplayForMaterial(
+        oldSend.materialId,
+        state,
+        updatedSends,
+        state.processingReceipts || [],
+        state.sales || [],
+        state.products || []
       );
-
-      // Keep the batch's raw/WIP stages in sync with the edited dispatch
-      const updatedBatches = state.batches.map(b =>
-        b.id === oldSend.batchId
-          ? { ...b, remainingPcs: b.remainingPcs - diffPcs, atProcessorPcs: Math.max(0, (b.atProcessorPcs || 0) + diffPcs) }
-          : b
-      );
+      const updatedMaterials = InventoryCalculationService.syncMaterialCounters(state.materials, updatedBatches);
 
       return {
         ...state,
@@ -420,8 +422,8 @@ export const createCRUDActions = (
 
 
   /**
-   * Delete a processing receipt and fully reverse its stock + batch-trail
-   * effect. Safety rules:
+   * Delete a processing receipt and reverse its stock + batch-trail effect.
+   * Safety rules:
    *  - A billed receipt cannot be deleted — delete the processor bill first.
    *  - A receipt whose finished goods have already been sold cannot be deleted
    *    (the remaining receipts could not cover the sales) — delete the sale first.
@@ -450,18 +452,7 @@ export const createCRUDActions = (
         .reduce((sum, s) => sum + s.pcsSold, 0);
       if (remainingProduction < soldPcs) return state;
 
-      // 1. Reverse material counters: finished → WIP
-      const updatedMaterials = state.materials.map(m => 
-        m.id === receipt.materialId
-          ? {
-              ...m,
-              processedStockPcs: Math.max(0, (m.processedStockPcs || 0) - receipt.pcsReceived),
-              atProcessorPcs: (m.atProcessorPcs || 0) + receipt.pcsReceived
-            }
-          : m
-      );
-
-      // 2. Remove only this receipt's share from the send and recompute status
+      // Remove only this receipt's share from the send and recompute status
       const updatedSends = state.processingSends.map(s => {
         if (s.id !== receipt.sendId) return s;
         const newReceived = Math.max(0, s.pcsReceived - receipt.pcsReceived);
@@ -469,18 +460,19 @@ export const createCRUDActions = (
         return { ...s, pcsReceived: newReceived, status: status as 'Closed' | 'Partial' | 'Pending' | 'Adjusted' };
       });
 
-      // 3. Rebuild the batch trail from the remaining history
-      const updatedBatches = InventoryCalculationService.recomputeFinishedPcsForMaterial(
+      // Rebuild the batch trail from the remaining history (idempotent,
+      // stage-aware FIFO replay), then re-derive material counters.
+      const updatedBatches = applyBatchReplayForMaterial(
         receipt.materialId,
-        state.batches || [],
+        state,
+        updatedSends,
         remainingReceipts,
-        state.processingSends || [],
         state.sales || [],
-        state.products || [],
-        undefined
+        state.products || []
       );
+      const updatedMaterials = InventoryCalculationService.syncMaterialCounters(state.materials, updatedBatches);
 
-      // 4. Remove this receipt's inventory movement
+      // Remove this receipt's inventory movement
       return {
         ...state,
         processingReceipts: remainingReceipts,
@@ -498,15 +490,13 @@ export const createCRUDActions = (
       const oldReceipt = state.processingReceipts.find(r => r.id === id);
       if (!oldReceipt) return state;
 
-      const diffPcs = data.pcsReceived - oldReceipt.pcsReceived;
-      
       const updatedReceipts = state.processingReceipts.map(r =>
         r.id === id ? { ...r, ...data } : r
       );
 
       const updatedSends = state.processingSends.map(s => {
         if (s.id === oldReceipt.sendId) {
-          const newReceived = s.pcsReceived + diffPcs;
+          const newReceived = s.pcsReceived + (data.pcsReceived - oldReceipt.pcsReceived);
           return {
             ...s,
             pcsReceived: newReceived,
@@ -516,19 +506,16 @@ export const createCRUDActions = (
         return s;
       });
 
-      const updatedMaterials = state.materials.map(m =>
-        m.id === oldReceipt.materialId
-          ? { ...m, atProcessorPcs: (m.atProcessorPcs || 0) - diffPcs, processedStockPcs: m.processedStockPcs + diffPcs }
-          : m
+      // Rebuild the whole batch trail for this material and re-derive counters.
+      const updatedBatches = applyBatchReplayForMaterial(
+        oldReceipt.materialId,
+        state,
+        updatedSends,
+        updatedReceipts,
+        state.sales || [],
+        state.products || []
       );
-
-      // Keep the batch's WIP/finished stages in sync with the edited receipt
-      const oldSend = state.processingSends.find(s => s.id === oldReceipt.sendId);
-      const updatedBatches = state.batches.map(b =>
-        b.id === oldSend?.batchId
-          ? { ...b, atProcessorPcs: Math.max(0, (b.atProcessorPcs || 0) - diffPcs), processedPcs: Math.max(0, (b.processedPcs || 0) + diffPcs) }
-          : b
-      );
+      const updatedMaterials = InventoryCalculationService.syncMaterialCounters(state.materials, updatedBatches);
 
       return {
         ...state,

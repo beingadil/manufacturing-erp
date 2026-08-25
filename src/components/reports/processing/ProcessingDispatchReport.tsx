@@ -1,13 +1,13 @@
-import { useMemo, useState } from 'react';
-import { formatCurrency, formatNumber } from '../../../lib/utils';
-import { ReportFilterBar } from '../common/ReportFilterBar';
-import { DataTable, Column } from '../../DataTable';
-import { ReportKPICard } from '../common/ReportKPICard';
-import { Factory, Send, Hash } from 'lucide-react';
-import { generateEnterpriseDocument } from '../../../lib/pdfEngine';
-import { exportToExcel, exportToCSV } from '../../../lib/exportUtils';
 import { format } from 'date-fns';
+import { Factory, Hash, Send } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { exportToCSV, exportToExcel } from '../../../lib/exportUtils';
+import { generateEnterpriseDocument } from '../../../lib/pdfEngine';
 import { ProcessingReportService } from "../../../lib/reporting/ProcessingReportService";
+import { formatCurrency, formatNumber } from '../../../lib/utils';
+import { Column, DataTable } from '../../DataTable';
+import { ReportFilterBar } from '../common/ReportFilterBar';
+import { ReportKPICard } from '../common/ReportKPICard';
 
 export function ProcessingDispatchReport() {
   const [dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });
@@ -22,6 +22,7 @@ export function ProcessingDispatchReport() {
     { key: "date", label: "Date", sortable: true, render: (item) => format(new Date(item.date), 'dd-MMM-yyyy') },
     { key: "dispatchNo", label: "Dispatch No", sortable: true },
     { key: "processorName", label: "Processor", sortable: true },
+    { key: "stageName", label: "Stage", sortable: true },
     { key: "materialName", label: "Material", sortable: true },
     { key: "pcsSent", label: "PCS Dispatched", align: "right", render: (item) => formatNumber(item.pcsSent) },
     { key: "ratePerPiece", label: "Rate", align: "right", render: (item) => formatCurrency(item.ratePerPiece) },
@@ -40,6 +41,7 @@ export function ProcessingDispatchReport() {
     { header: 'Date', dataKey: 'date' },
     { header: 'Dispatch No', dataKey: 'dispatchNo' },
     { header: 'Processor', dataKey: 'processorName' },
+    { header: 'Stage', dataKey: 'stageName' },
     { header: 'Material', dataKey: 'materialName' },
     { header: 'PCS Dispatched', dataKey: 'pcsSent' },
     { header: 'Rate', dataKey: 'ratePerPiece' },

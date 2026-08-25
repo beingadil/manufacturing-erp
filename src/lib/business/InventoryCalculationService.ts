@@ -1,4 +1,4 @@
-import { Product, Batch, ProcessingReceipt, ProcessingSend, Sale } from '../../types/erp';
+import { Batch, ProcessingReceipt, ProcessingSend, ProcessingStage, Product, RawMaterial, Sale } from '../../types/erp';
 
 export interface BatchStageValue {
   value: number;
@@ -200,12 +200,100 @@ export class InventoryCalculationService {
   }
 
   /**
+   * True when a dispatch draws its pcs from RAW stock (stage 1, or a legacy
+   * stage-less dispatch — old single-stage behaviour where every send drew raw).
+   * Unknown stage ids default to raw-consuming so the trail can never lose pcs.
+   */
+  static sendConsumesRaw(stageId: string | undefined, stages: ProcessingStage[]): boolean {
+    if (!stageId) return true;
+    const stage = stages.find(s => s.id === stageId);
+    if (!stage) return true;
+    return stage.sequence <= 1;
+  }
+
+  /**
+   * True when a receipt from a stage produces FINISHED goods (the stage is the
+   * configured final stage, or a legacy stage-less receipt — old single-stage
+   * behaviour where receipt = finished). Unknown stage ids default to
+   * finished-producing so legacy data is never stranded.
+   */
+  static receiptProducesFinished(stageId: string | undefined, stages: ProcessingStage[]): boolean {
+    if (!stageId) return true;
+    const stage = stages.find(s => s.id === stageId);
+    if (!stage) return true;
+    return !!stage.isFinalStage;
+  }
+
+  /**
+   * Decrement WIP pcs across batches FIFO (oldest batch with WIP first),
+   * preferring the recorded batch. Used when loss/wastage is explicitly
+   * recorded — the lost pcs leave the batch trail entirely (real shrinkage),
+   * so total inventory value decreases by exactly the lost pcs at batch cost.
+   */
+  static attributeLossFIFO(
+    materialId: string,
+    pcsLost: number,
+    batches: Batch[],
+    preferredBatchId?: string
+  ): Batch[] {
+    let remaining = pcsLost;
+    const candidates = batches
+      .filter(b => b.materialId === materialId && b.status === 'Active' && (b.atProcessorPcs || 0) > 0)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const ordered = preferredBatchId
+      ? [batches.find(b => b.id === preferredBatchId), ...candidates.filter(b => b.id !== preferredBatchId)].filter(Boolean)
+      : candidates;
+    const takeByBatch = new Map<string, number>();
+    for (const b of ordered) {
+      if (remaining <= 0) break;
+      const take = Math.min(b?.atProcessorPcs || 0, remaining);
+      if (take <= 0) continue;
+      takeByBatch.set(b!.id, take);
+      remaining -= take;
+    }
+    return batches.map(b => {
+      const take = takeByBatch.get(b.id) || 0;
+      if (take <= 0) return b;
+      return { ...b, atProcessorPcs: Math.max(0, (b.atProcessorPcs || 0) - take) };
+    });
+  }
+
+  /**
+   * Derive the WIP pcs currently held at one processing stage from the movement
+   * history: Σ sent to the stage − Σ received from the stage − Σ loss at the
+   * stage. This is a pure derivation — the same economic pcs are never counted
+   * as held in two stages simultaneously (the batch's single atProcessorPcs
+   * bucket is the sum across all intermediate stages).
+   */
+  static getStageWIP(
+    stageId: string | undefined,
+    processingSends: ProcessingSend[],
+    processingReceipts: ProcessingReceipt[]
+  ): number {
+    const sent = processingSends
+      .filter(s => s.stageId === stageId && s.status !== 'Adjusted')
+      .reduce((sum, s) => sum + (s.pcsSent || 0), 0);
+    const received = processingReceipts
+      .filter(r => r.stageId === stageId)
+      .reduce((sum, r) => sum + (r.pcsReceived || 0), 0);
+    const lost = processingSends
+      .filter(s => s.stageId === stageId)
+      .reduce((sum, s) => sum + (s.lossQuantity || 0), 0);
+    return Math.max(0, sent - received - lost);
+  }
+
+  /**
    * Rebuild a material's batch trail (raw → WIP → finished) from the
    * authoritative send/receipt/sale history — the same replay the startup
    * migration performs, scoped to one material. Used by sale edit/delete so the
    * batch stages stay correct when a sale changes (and never wipe finished pcs
    * for legacy dispatches that have no batchId — those are FIFO-attributed like
    * the live engine). Sales consume finished pcs FIFO, oldest batch first.
+   *
+   * Stage-aware: only stage-1 (or legacy) dispatches draw from raw; only
+   * receipts from the configured final stage (or legacy) produce finished;
+   * recorded losses decrement WIP. Pass `stages` (defaults to legacy
+   * single-stage behaviour when omitted).
    */
   static recomputeFinishedPcsForMaterial(
     materialId: string,
@@ -214,9 +302,10 @@ export class InventoryCalculationService {
     processingSends: ProcessingSend[],
     sales: Sale[],
     products: Product[],
-    excludeSaleId?: string
+    excludeSaleId?: string,
+    stages: ProcessingStage[] = []
   ): Batch[] {
-    // 1. Reset this material's batches to their purchase baseline (all pcs raw).
+    // 1. Reset this material's batches to its purchase baseline (all pcs raw).
     let trail: Batch[] = batches.map(b =>
       b.materialId === materialId
         ? {
@@ -228,23 +317,31 @@ export class InventoryCalculationService {
         : b
     );
 
-    // 2. Replay dispatches chronologically: raw → WIP, preferring the dispatch's
-    //    recorded batch, FIFO from the oldest batch otherwise (mirrors the engine
-    //    and the migration — legacy 'Any Batch' sends have batchId null).
+    // 2. Replay dispatches chronologically. Stage-1 / legacy dispatches draw
+    //    from raw (raw → WIP); intermediate-stage dispatches are WIP → WIP and
+    //    do not touch the batch buckets (the stage derivation carries them).
     const orderedSends = [...processingSends]
       .filter(s => s.materialId === materialId && s.status !== 'Adjusted' && (s.pcsSent || 0) > 0)
       .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     for (const s of orderedSends) {
+      if (!this.sendConsumesRaw(s.stageId, stages)) continue;
       trail = this.attributeDispatchFIFO(materialId, s.pcsSent, trail, s.batchId || undefined).batches;
     }
 
-    // 3. Replay receipts chronologically: WIP → finished, preferring the send's
-    //    batch, FIFO from the oldest WIP otherwise.
+    // 2b. Recorded losses reduce WIP (FIFO, preferring the dispatch's batch).
+    for (const s of orderedSends) {
+      if (!(s.lossQuantity || 0) || !this.sendConsumesRaw(s.stageId, stages)) continue;
+      trail = this.attributeLossFIFO(materialId, s.lossQuantity || 0, trail, s.batchId || undefined);
+    }
+
+    // 3. Replay receipts chronologically: WIP → finished only when the receipt
+    //    is from the final stage (or legacy). Intermediate receipts are WIP→WIP.
     const orderedReceipts = [...processingReceipts]
       .filter(r => r.materialId === materialId && (r.pcsReceived || 0) > 0)
       .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     for (const r of orderedReceipts) {
       const send = processingSends.find(x => x.id === r.sendId);
+      if (!this.receiptProducesFinished(r.stageId ?? send?.stageId, stages)) continue;
       trail = this.attributeReceiptFIFO(materialId, r.pcsReceived, trail, send?.batchId || undefined);
     }
 
@@ -259,6 +356,24 @@ export class InventoryCalculationService {
     }
 
     return trail;
+  }
+
+  /**
+   * Rebuild a material's three counters (stockPcs / atProcessorPcs /
+   * processedStockPcs) from the authoritative batch trail. The batch trail is
+   * the single source of truth; the material counters are a derived roll-up, so
+   * they can never drift from the batches (the Dashboard's reconciliation guard
+   * checks exactly this). Used after any send/receipt/loss/sale mutation that
+   * rebuilds the trail.
+   */
+  static syncMaterialCounters(materials: RawMaterial[], batches: Batch[]): RawMaterial[] {
+    return materials.map(m => {
+      const own = batches.filter(b => b.materialId === m.id && b.status === 'Active');
+      const stockPcs = own.reduce((s, b) => s + (b.remainingPcs || 0), 0);
+      const atProcessorPcs = own.reduce((s, b) => s + (b.atProcessorPcs || 0), 0);
+      const processedStockPcs = own.reduce((s, b) => s + (b.processedPcs || 0), 0);
+      return { ...m, stockPcs, atProcessorPcs, processedStockPcs };
+    });
   }
 
   /**

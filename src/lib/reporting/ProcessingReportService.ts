@@ -1,5 +1,5 @@
-import { useERPStore } from '../../store/useERPStore';
 import { format } from 'date-fns';
+import { useERPStore } from '../../store/useERPStore';
 
 export class ProcessingReportService {
 
@@ -82,7 +82,7 @@ return Array.from(processorMap.values()).map(p => ({
 
   static getProcessingDispatchReportData(dateRange: any, search: any) {
     const state = useERPStore.getState();
-    const { processingSends, processors, materials } = state;
+    const { processingSends, processors, materials, processingStages } = state;
     return processingSends.filter(p => {
   if (dateRange.start && dateRange.end) {
     const d = new Date(p.date);
@@ -95,17 +95,20 @@ return Array.from(processorMap.values()).map(p => ({
 }).map(p => {
   const processor = processors.find(s => s.id === p.processorId);
   const material = materials.find(m => m.id === p.materialId);
+  const stage = processingStages.find(s => s.id === p.stageId);
   return {
     ...p,
     processorName: processor?.name || 'Unknown',
     materialName: material?.name || 'Unknown',
+    stageName: stage ? stage.name : 'Initial Processor',
   };
 }).filter(p => {
   if (!search) return true;
   const q = search.toLowerCase();
   return p.dispatchNo.toLowerCase().includes(q) || 
          p.processorName.toLowerCase().includes(q) || 
-         p.materialName.toLowerCase().includes(q);
+         p.materialName.toLowerCase().includes(q) ||
+         p.stageName.toLowerCase().includes(q);
 });
   }
 
@@ -156,38 +159,48 @@ return Array.from(processorMap.values()).map(p => ({
 
   static getProcessingLossReportData(dateRange: any, search: any) {
     const state = useERPStore.getState();
-    const { processingSends, processingReceipts, processors } = state;
-    let filteredReceipts = processingReceipts.filter(r => {
-  if (dateRange.start && dateRange.end) {
-    const d = new Date(r.date);
-    const start = new Date(dateRange.start);
-    const end = new Date(dateRange.end);
-    start.setHours(0,0,0,0); end.setHours(23,59,59,999);
-    return d >= start && d <= end;
-  }
-  return true;
-});
+    const { processingSends, processors, processingStages } = state;
+    const stageName = (stageId?: string) => {
+      if (!stageId) return 'Initial Processor';
+      return processingStages.find(s => s.id === stageId)?.name || 'Initial Processor';
+    };
 
-const processorMap = new Map();
-filteredReceipts.forEach(r => {
-  const send = processingSends.find(s => s.id === r.sendId);
-  if (!send) return;
+    // Loss/wastage is EXPLICITLY recorded (send.lossQuantity) — never derived
+    // automatically from pending pcs (spec §8). For legacy sends without a
+    // recorded loss, the unreturned pending is shown as the derived loss so the
+    // report stays meaningful for old data.
+    const rows = processingSends.filter(p => {
+      if (dateRange.start && dateRange.end) {
+        const d = new Date(p.date);
+        const start = new Date(dateRange.start);
+        const end = new Date(dateRange.end);
+        start.setHours(0,0,0,0); end.setHours(23,59,59,999);
+        return d >= start && d <= end;
+      }
+      return true;
+    });
 
-  const processorName = processors.find(p => p.id === r.processorId)?.name || 'Unknown';
-  if (!processorMap.has(processorName)) {
-    processorMap.set(processorName, { processorName, sentPcs: 0, receivedPcs: 0 });
-  }
-  const c = processorMap.get(processorName);
-  c.sentPcs += (send as any).weightSent || send.pcsSent;
-  c.receivedPcs += (r as any).weightReceived || r.pcsReceived;
-});
+    const processorMap = new Map();
+    rows.forEach(send => {
+      const processorName = processors.find(p => p.id === send.processorId)?.name || 'Unknown';
+      const key = `${processorName}|${send.stageId || ''}`;
+      if (!processorMap.has(key)) {
+        processorMap.set(key, { processorName, stageName: stageName(send.stageId), sentPcs: 0, receivedPcs: 0, recordedLossPcs: 0 });
+      }
+      const c = processorMap.get(key);
+      c.sentPcs += send.pcsSent;
+      c.receivedPcs += send.pcsReceived;
+      c.recordedLossPcs += send.lossQuantity || 0;
+    });
 
-return Array.from(processorMap.values()).map(p => ({
-    ...p,
-    lossPcs: p.sentPcs - p.receivedPcs,
-    lossPercentage: p.sentPcs > 0 ? ((p.sentPcs - p.receivedPcs) / p.sentPcs) * 100 : 0
-})).filter(p => !search || p.processorName.toLowerCase().includes(search.toLowerCase()))
-   .sort((a,b) => b.lossPcs - a.lossPcs);
+    return Array.from(processorMap.values()).map(p => ({
+      ...p,
+      // Recorded loss is authoritative; legacy unreturned pending is the derived fallback.
+      lossPcs: p.recordedLossPcs > 0 ? p.recordedLossPcs : Math.max(0, p.sentPcs - p.receivedPcs),
+      pendingPcs: Math.max(0, p.sentPcs - p.receivedPcs - p.recordedLossPcs),
+      lossPercentage: p.sentPcs > 0 ? (p.lossPcs / p.sentPcs) * 100 : 0
+    })).filter(p => !search || p.processorName.toLowerCase().includes(search.toLowerCase()) || p.stageName.toLowerCase().includes(search.toLowerCase()))
+      .sort((a, b) => b.lossPcs - a.lossPcs);
   }
 
 
