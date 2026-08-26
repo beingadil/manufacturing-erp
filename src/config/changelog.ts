@@ -20,6 +20,39 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.21',
+    date: '2026-08-26',
+    title: 'Multi-stage processing engine + processor worker-type assignment',
+    sections: [
+      {
+        title: '🏭 Multi-stage processing',
+        items: [
+          'Processing Stage Master — configurable chain (Initial Processor → Machine → Acid → Polish) with sequence enforcement, per-stage billing units, and final-stage flag.',
+          'Strict stage sequencing — material auto-advances through the chain; once received from stage N, it can only be sent to stage N+1. No going back.',
+          'Partial processing with pending/loss tracking — receive 96 of 100 sent, the remaining 4 stay pending until explicitly received or recorded as loss.',
+          'Per-stage processor billing — Machine Man (per KG), Acid Man (per KG), Polish (per KG) each generate their own processor bill through the accounting engine.',
+          `Batch stage-aware dispatch — the Send form detects a material's current stage and only shows eligible batches and workers for that stage.`,
+        ],
+      },
+      {
+        title: '👷 Processor worker-type assignment',
+        items: [
+          'New Worker Type dropdown when adding a processor — Initial Processor, Machine, Acid, Polish, or General.',
+          'JobWork Send form filters workers by stage — only Acid workers appear when sending to Acid, only Machine workers for Machine, etc.',
+          'Worker type column in the Processors master data table with colored badges.',
+        ],
+      },
+      {
+        title: '🎨 Form redesign',
+        items: [
+          'All Operations and Master Data forms widened to max-w-2xl with 2–3 column grids — no scroll bars needed.',
+          'Removed excessive pb-64 padding across all modals and added max-h-[85vh] overflow-y-auto for safety.',
+          'Processing Send/Receive/Bill modals redesigned with stage progress indicator and auto-detected stage.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.20',
     date: '2026-08-17',
     title: 'Fully unattended releases — one command from now on',
