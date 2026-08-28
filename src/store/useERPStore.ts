@@ -825,8 +825,14 @@ export const useERPStore = create<ERPState>()(
           state.batches || [],
           data.batchId
         );
-        const updatedBatches = attributed.batches;
         const consumedBatchId = attributed.usedBatchIds[0] || data.batchId;
+        // Mark the consumed batch as being at the target stage so the receipt
+        // handler and Send form can track stage progression correctly.
+        const updatedBatches = attributed.batches.map(b =>
+          b.id === consumedBatchId
+            ? { ...b, currentStageId: data.stageId || b.currentStageId }
+            : b
+        );
 
         const movement: InventoryMovement = {
           id: uuidv4(),

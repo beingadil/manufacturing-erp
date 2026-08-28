@@ -1,7 +1,7 @@
 {
   "name": "manufacturing-erp",
-  "version": "1.0.21",
-  "description": "Manufacturing ERP — Full-featured desktop ERP for inventory, purchases, sales, processing, and accounting management.",
+  "version": "1.0.22",
+  "description": "Manufacturing ERP \u2014 Full-featured desktop ERP for inventory, purchases, sales, processing, and accounting management.",
   "author": "beingadil <https://github.com/beingadil>",
   "type": "module",
   "main": "electron/main.cjs",

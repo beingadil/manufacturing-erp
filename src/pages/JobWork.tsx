@@ -65,22 +65,10 @@ export function JobWork() {
     ?? [...(processingStages || [])].sort((a, b) => a.sequence - b.sequence)[0];
   const sendStageRateMethod = sendSelectedStage?.rateMethod || 'per_piece';
 
-  // Workers eligible for the selected stage: workers OF that stage plus General
-  // workers (no stage). The Processor master's Worker Type drives this list —
-  // an Initial Processor is never offered Machine work and vice versa.
-  const stageWorkers = useMemo(() => {
-    const stageId = sendSelectedStage?.id;
-    return processors.filter(p => !p.stageId || p.stageId === stageId);
-  }, [processors, sendSelectedStage?.id]);
-
-  // If the chosen worker is not eligible for the (newly selected) stage — e.g.
-  // an Acid Man picked, then the stage switched to Machine — clear the choice
-  // so a dispatch can never pair a worker with work he doesn't perform.
-  useEffect(() => {
-    if (sendProcessorId && !stageWorkers.some(p => p.id === sendProcessorId)) {
-      setSendProcessorId("");
-    }
-  }, [stageWorkers, sendProcessorId]);
+  // Show ALL processors — the user picks the worker manually.
+  // Stage filtering was removed because multiple materials at different stages
+  // conflict with auto-filtering (user has material at Machine AND material at Acid).
+  const stageWorkers = processors;
   const availableBatches = useMemo(() => {
     if (!sendMaterialId) return [];
     const targetStage = sendSelectedStage;
@@ -92,9 +80,10 @@ export function JobWork() {
         // Stage 1 / legacy: show batches with raw stock remaining
         return b.remainingPcs > 0;
       }
-      // Non-first stage: show batches that have received pieces ready to send
-      // (stageAvailablePcs > 0 at any stage — the send handler dispatches them)
-      return (b.stageAvailablePcs || 0) > 0;
+      // Non-first stage: show batches whose currentStageId is the stage BEFORE
+      // the target (source stage), with pieces ready to send forward.
+      const sourceStage = stages.find(s => s.sequence === (targetStage?.sequence ?? 0) - 1);
+      return b.currentStageId === sourceStage?.id && (b.stageAvailablePcs || 0) > 0;
     });
   }, [batches, sendMaterialId, sendSelectedStage, processingStages]);
   
@@ -107,9 +96,11 @@ export function JobWork() {
       const m = materials.find(mat => mat.id === materialId);
       return m?.stockPcs || 0;
     }
-    // Non-first: sum all stageAvailablePcs across batches of this material
+    // Non-first: sum stageAvailablePcs for batches at the SOURCE stage
+    // (the stage before the target — where pieces physically are)
+    const sourceStage = stages.find(s => s.sequence === (targetStage?.sequence ?? 0) - 1);
     return (batches || [])
-      .filter(b => b.materialId === materialId)
+      .filter(b => b.materialId === materialId && b.currentStageId === sourceStage?.id)
       .reduce((sum, b) => sum + (b.stageAvailablePcs || 0), 0);
   }, [sendSelectedStage, processingStages, materials, batches]);
 
@@ -144,7 +135,7 @@ export function JobWork() {
       ? sorted[0]  // First stage (Initial Processor)
       : sorted.find(s => s.sequence === maxStageSequence + 1) || null; // Next in chain
 
-    const completedStages = sorted.filter(s => s.sequence <= maxStageSequence);
+    const completedStages = sorted.filter(s => s.sequence < maxStageSequence);
     const isRaw = maxStageSequence === 0;
 
     return {
@@ -795,7 +786,7 @@ export function JobWork() {
             <form onSubmit={handleSend} className="p-6 space-y-3">
               <div>
                 <label className="block text-sm font-medium text-foreground/80 mb-1">
-                  Processor{sendSelectedStage ? ` — ${sendSelectedStage.name}${sendSelectedStage.isFinalStage ? ' (Final)' : ''} workers` : ''}
+Processor
                 </label>
                 <SearchableSelect 
                   options={stageWorkers.map(p => ({
