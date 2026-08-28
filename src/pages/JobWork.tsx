@@ -84,15 +84,17 @@ export function JobWork() {
   const availableBatches = useMemo(() => {
     if (!sendMaterialId) return [];
     const targetStage = sendSelectedStage;
-    const isFirstOrLegacy = !targetStage || targetStage === [...(processingStages || [])].sort((a, b) => a.sequence - b.sequence)[0];
+    const stages = [...(processingStages || [])].sort((a, b) => a.sequence - b.sequence);
+    const isFirstOrLegacy = !targetStage || targetStage === stages[0];
     return (batches || []).filter(b => {
       if (b.materialId !== sendMaterialId) return false;
       if (isFirstOrLegacy) {
         // Stage 1 / legacy: show batches with raw stock remaining
         return b.remainingPcs > 0;
       }
-      // Stage N+1: show batches that arrived at this stage (received from previous)
-      return b.currentStageId === targetStage?.id && (b.stageAvailablePcs || 0) > 0;
+      // Non-first stage: show batches that have received pieces ready to send
+      // (stageAvailablePcs > 0 at any stage — the send handler dispatches them)
+      return (b.stageAvailablePcs || 0) > 0;
     });
   }, [batches, sendMaterialId, sendSelectedStage, processingStages]);
   
@@ -105,8 +107,9 @@ export function JobWork() {
       const m = materials.find(mat => mat.id === materialId);
       return m?.stockPcs || 0;
     }
+    // Non-first: sum all stageAvailablePcs across batches of this material
     return (batches || [])
-      .filter(b => b.materialId === materialId && b.currentStageId === targetStage?.id)
+      .filter(b => b.materialId === materialId)
       .reduce((sum, b) => sum + (b.stageAvailablePcs || 0), 0);
   }, [sendSelectedStage, processingStages, materials, batches]);
 

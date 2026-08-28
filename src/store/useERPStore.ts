@@ -765,7 +765,6 @@ export const useERPStore = create<ERPState>()(
             return b;
           });
 
-          const stages = (state.processingStages || []).sort((a, b) => a.sequence - b.sequence);
           // PCS remain in WIP (atProcessorPcs unchanged) — same economic pcs, just relocated.
           const movement: InventoryMovement = {
             id: uuidv4(),
@@ -930,19 +929,16 @@ export const useERPStore = create<ERPState>()(
           );
         } else {
           // Non-final stage receipt: pieces are received back from the processor
-          // and become AVAILABLE to send to the next stage in the chain.
-          // The batch's currentStageId advances to the next stage, and
+          // and become AVAILABLE to send to the NEXT stage in the chain.
+          // The batch stays at its CURRENT stage — the send handler advances
+          // currentStageId when it actually dispatches to the next stage.
           // stageAvailablePcs tracks how many pcs are ready for the next send.
-          const stages = (state.processingStages || []).sort((a, b) => a.sequence - b.sequence);
-          const currentStage = stages.find(s => s.id === stageId);
-          const nextStageId = currentStage?.nextStageId;
 
           // PCS remain in WIP (atProcessorPcs unchanged) — marked available for next stage.
           updatedBatches = (state.batches || []).map(b => {
             if (b.id === send.batchId) {
               return {
                 ...b,
-                currentStageId: nextStageId || undefined,
                 stageAvailablePcs: (b.stageAvailablePcs || 0) + data.pcsReceived,
               };
             }
