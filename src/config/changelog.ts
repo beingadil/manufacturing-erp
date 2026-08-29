@@ -20,6 +20,28 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.24',
+    date: '2026-08-30',
+    title: 'Spot Machine stage + auto-migration for existing data',
+    sections: [
+      {
+        title: '🏭 Spot Machine processing stage',
+        items: [
+          'Added 5th processing stage: Spot Machine (final) — material flows through Initial Processor → Machine → Acid → Polish → Spot Machine before becoming saleable Finished Goods.',
+          'Spot Machine is configurable as the final stage via the Stage Master — can be changed or removed without code edits.',
+        ],
+      },
+      {
+        title: '🔄 Auto-migration for existing users',
+        items: [
+          'Existing 4-stage data automatically migrates on startup: Spot Machine is added at sequence 5 with isFinalStage=true, Polish is unmarked as final.',
+          'Processor Worker Type dropdown now shows all 5 stages including Spot Machine (Final).',
+        ],
+      },
+    ],
+  },
+
+  {
     version: '1.0.21',
     date: '2026-08-26',
     title: 'Multi-stage processing engine + processor worker-type assignment',
@@ -27,10 +49,10 @@ export const CHANGELOG: ChangelogEntry[] = [
       {
         title: '🏭 Multi-stage processing',
         items: [
-          'Processing Stage Master — configurable chain (Initial Processor → Machine → Acid → Polish) with sequence enforcement, per-stage billing units, and final-stage flag.',
+          'Processing Stage Master — configurable chain (Initial Processor → Machine → Acid → Polish → Spot Machine) with sequence enforcement, per-stage billing units, and final-stage flag.',
           'Strict stage sequencing — material auto-advances through the chain; once received from stage N, it can only be sent to stage N+1. No going back.',
           'Partial processing with pending/loss tracking — receive 96 of 100 sent, the remaining 4 stay pending until explicitly received or recorded as loss.',
-          'Per-stage processor billing — Machine Man (per KG), Acid Man (per KG), Polish (per KG) each generate their own processor bill through the accounting engine.',
+          'Per-stage processor billing — Machine Man (per KG), Acid Man (per KG), Polish (per KG), Spot Machine (per KG) each generate their own processor bill through the accounting engine.',
           `Batch stage-aware dispatch — the Send form detects a material's current stage and only shows eligible batches and workers for that stage.`,
         ],
       },

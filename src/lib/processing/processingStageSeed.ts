@@ -2,22 +2,22 @@ import { v4 as uuidv4 } from 'uuid';
 import type { ProcessingStage } from '../../types/erp';
 
 /**
- * Default manufacturing chain (spec §1): the SAME physical material moves
- * through Initial Processor → Machine → Acid → Polish → Finished Product.
+ * Default manufacturing chain (spec Â§1): the SAME physical material moves
+ * through Initial Processor â Machine â Acid â Polish â Finished Product.
  *
- * The final stage is data-driven (`isFinalStage`) — never hardcoded — so
- * future stages (Cutting, Grinding, Heat Treatment, Packaging, …) can be
+ * The final stage is data-driven (`isFinalStage`) â never hardcoded â so
+ * future stages (Cutting, Grinding, Heat Treatment, Packaging, â¦) can be
  * added through the stage master without code restructuring.
  *
  * Billing: Initial Processor keeps the legacy per-piece billing; Machine /
- * Acid / Polish bill per KG (e.g. 32 KG × Rs 32/KG = Rs 1,024), which is what
+ * Acid / Polish / Spot Machine bill per KG (e.g. 32 KG Ã Rs 32/KG = Rs 1,024), which is what
  * the real workflow needs.
  */
 export const DEFAULT_PROCESSING_STAGES: Omit<ProcessingStage, 'id'>[] = [
   {
     name: 'Initial Processor',
     sequence: 1,
-    description: 'First-stage processing — raw material is worked by the initial processor.',
+    description: 'First-stage processing â raw material is worked by the initial processor.',
     active: true,
     inputUnit: 'PCS',
     billingUnit: 'Per PCS',
@@ -28,7 +28,7 @@ export const DEFAULT_PROCESSING_STAGES: Omit<ProcessingStage, 'id'>[] = [
   {
     name: 'Machine',
     sequence: 2,
-    description: 'Machine processing — billed per KG processed.',
+    description: 'Machine processing â billed per KG processed.',
     active: true,
     inputUnit: 'PCS',
     billingUnit: 'Per KG',
@@ -39,7 +39,7 @@ export const DEFAULT_PROCESSING_STAGES: Omit<ProcessingStage, 'id'>[] = [
   {
     name: 'Acid',
     sequence: 3,
-    description: 'Acid treatment — billed per KG processed.',
+    description: 'Acid treatment â billed per KG processed.',
     active: true,
     inputUnit: 'PCS',
     billingUnit: 'Per KG',
@@ -50,7 +50,18 @@ export const DEFAULT_PROCESSING_STAGES: Omit<ProcessingStage, 'id'>[] = [
   {
     name: 'Polish',
     sequence: 4,
-    description: 'Polishing — the final stage. Completing it produces saleable Finished Goods.',
+    description: 'Polishing â the final stage. Completing it produces saleable Finished Goods.',
+    active: true,
+    inputUnit: 'PCS',
+    billingUnit: 'Per KG',
+    billingEnabled: true,
+    rateMethod: 'per_kg',
+    isFinalStage: false,
+  },
+  {
+    name: 'Spot Machine',
+    sequence: 5,
+    description: 'Spot machine processing  the final stage. Completing it produces saleable Finished Goods.',
     active: true,
     inputUnit: 'PCS',
     billingUnit: 'Per KG',
@@ -78,7 +89,7 @@ export function seedDefaultProcessingStages(
   DEFAULT_PROCESSING_STAGES.forEach((stage, i) => {
     const id = actions.addProcessingStage!({ ...stage });
     created += 1;
-    // Link nextStageId once all ids exist — do it via a second pass below.
+    // Link nextStageId once all ids exist â do it via a second pass below.
     if (i > 0) return;
     void id;
   });

@@ -75,11 +75,40 @@ export function migrateERPState(state: any): any {
   });
 
   // 4. Seed the processing stage master when empty (spec §4): the default
-  //    chain Initial Processor → Machine → Acid → Polish (final). Idempotent —
+  //    chain Initial Processor → Machine → Acid → Polish → Spot Machine (final). Idempotent —
   //    no-ops once stages exist, so user-configured stages are never overwritten.
   let processingStages: ProcessingStage[] = Array.isArray(state.processingStages) ? state.processingStages : [];
   if (processingStages.length === 0) {
     processingStages = buildDefaultStages();
+  } else if (processingStages.length < 5) {
+    // Migrate existing 4-stage data: add Spot Machine as the new final stage
+    // and remove the final flag from Polish.
+    const hasSpotMachine = processingStages.some(s => s.name === 'Spot Machine');
+    if (!hasSpotMachine) {
+      const spotMachine: ProcessingStage = {
+        id: 'stage-spot-machine-migrated',
+        name: 'Spot Machine',
+        sequence: 5,
+        description: 'Spot machine processing — the final stage. Completing it produces saleable Finished Goods.',
+        active: true,
+        inputUnit: 'PCS',
+        billingUnit: 'Per KG',
+        billingEnabled: true,
+        rateMethod: 'per_kg',
+        isFinalStage: true,
+      };
+      // Unset final on Polish (old stage 4)
+      processingStages = processingStages.map(s => ({
+        ...s,
+        isFinalStage: s.name === 'Polish' ? false : s.isFinalStage,
+      }));
+      processingStages.push(spotMachine);
+      // Wire nextStageId chain
+      const ordered = [...processingStages].sort((a, b) => a.sequence - b.sequence);
+      ordered.forEach((s, i) => {
+        s.nextStageId = ordered[i + 1]?.id;
+      });
+    }
   }
 
   // 5. Reconstruct per-batch stages (raw → WIP → finished) from the
@@ -155,27 +184,48 @@ export function migrateERPState(state: any): any {
       );
     }
 
-    // Non-final stage receipts: received pcs become available at the next stage
-    // in the chain (stageAvailablePcs += received, currentStageId -> next stage).
-    const stagesSorted = [...processingStages].sort((a: any, b: any) => a.sequence - b.sequence);
-    for (const r of orderedReceipts) {
-      const send = sends.find((x: any) => x.id === r.sendId);
-      const stageId = r.stageId ?? send?.stageId;
-      if (InventoryCalculationService.receiptProducesFinished(stageId, processingStages)) continue;
-      const currentStage = stagesSorted.find((s: any) => s.id === stageId);
-      const nextStageId = currentStage?.nextStageId;
-      trail = trail.map((b: any) => {
-        if (send?.batchId && b.id === send.batchId) {
-          return {
-            ...b,
-            currentStageId: nextStageId || undefined,
-            stageAvailablePcs: (b.stageAvailablePcs || 0) + (r.pcsReceived || 0),
-          };
-        }
-        return b;
-      });
-    }
-
+    // Non-final stage receipts: received pcs become available at the next stage
+
+    // in the chain (stageAvailablePcs += received, currentStageId -> next stage).
+
+    const stagesSorted = [...processingStages].sort((a: any, b: any) => a.sequence - b.sequence);
+
+    for (const r of orderedReceipts) {
+
+      const send = sends.find((x: any) => x.id === r.sendId);
+
+      const stageId = r.stageId ?? send?.stageId;
+
+      if (InventoryCalculationService.receiptProducesFinished(stageId, processingStages)) continue;
+
+      const currentStage = stagesSorted.find((s: any) => s.id === stageId);
+
+      const nextStageId = currentStage?.nextStageId;
+
+      trail = trail.map((b: any) => {
+
+        if (send?.batchId && b.id === send.batchId) {
+
+          return {
+
+            ...b,
+
+            currentStageId: nextStageId || undefined,
+
+            stageAvailablePcs: (b.stageAvailablePcs || 0) + (r.pcsReceived || 0),
+
+          };
+
+        }
+
+        return b;
+
+      });
+
+    }
+
+
+
     // Sales: finished → sold consume FIFO per material (same as the engine).
     const productMaterial = new Map<string, string>(
       products.map((p: any) => [p.id as string, p.materialId as string])
