@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // This vitest 4 + jsdom 29 setup does not expose window.localStorage (window
 // exists, sessionStorage exists, localStorage is undefined). The adapter's

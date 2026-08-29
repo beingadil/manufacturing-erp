@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { DashboardSummaryService, DashboardSummaryState, DashboardSummaryOptions } from './DashboardSummaryService';
+import { describe, expect, it } from 'vitest';
+import { DashboardSummaryOptions, DashboardSummaryService, DashboardSummaryState } from './DashboardSummaryService';
 
 /**
  * Pure fixture state — no zustand store, no SQLite. Exercises the summary

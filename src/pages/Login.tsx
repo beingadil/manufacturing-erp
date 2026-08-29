@@ -1,9 +1,9 @@
+import { Loader2, Lock, Mail, ShieldCheck } from 'lucide-react';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { useSettingsStore } from '../store/useSettingsStore';
-import { Loader2, Mail, Lock, ShieldCheck } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useSettingsStore } from '../store/useSettingsStore';
 
 export function Login() {
   const [email, setEmail] = useState('');

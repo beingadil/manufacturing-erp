@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { getSystemInventoryAccount, getSystemCOGSAccount } from './accountClassification';
+import { describe, expect, it } from 'vitest';
 import type { Account, AccountSubtype } from '../../types/erp';
+import { getSystemCOGSAccount, getSystemInventoryAccount } from './accountClassification';
 
 function build(): { accounts: Account[]; subtypes: AccountSubtype[] } {
   const subtypes: AccountSubtype[] = [

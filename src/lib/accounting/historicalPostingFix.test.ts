@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { fixHistoricalPostings, historicalWeightedAverageCost } from './historicalPostingFix';
+import { describe, expect, it } from 'vitest';
 import type { Account, AccountSubtype, Voucher } from '../../types/erp';
+import { fixHistoricalPostings, historicalWeightedAverageCost } from './historicalPostingFix';
 
 function buildFixture() {
   const subtypes: AccountSubtype[] = [

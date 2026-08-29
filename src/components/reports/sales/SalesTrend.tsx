@@ -1,8 +1,8 @@
+import { Activity, Calendar, DollarSign } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { SalesReportService } from "../../../lib/reporting/SalesReportService";
 import { formatCurrency, formatNumber } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
-import { Activity, DollarSign, Calendar } from 'lucide-react';
-import { SalesReportService } from "../../../lib/reporting/SalesReportService";
 
 export function SalesTrend() {
   const [dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });

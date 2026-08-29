@@ -1,5 +1,5 @@
-import { ISQLiteAdapter, ISQLiteTransaction } from './ISQLiteAdapter';
 import { Logger } from '../../lib/logger';
+import { ISQLiteAdapter, ISQLiteTransaction } from './ISQLiteAdapter';
 
 /**
  * Fallback Mock SQLite Adapter for Browser Environments.

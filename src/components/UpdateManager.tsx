@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Download, RotateCw, AlertCircle, CheckCircle, X } from 'lucide-react';
+import { AlertCircle, CheckCircle, Download, RotateCw, X } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { useCallback, useEffect, useState } from 'react';
 import { APP_VERSION } from '../config/version';
 
 interface UpdateStatus {

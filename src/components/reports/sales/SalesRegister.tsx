@@ -1,13 +1,13 @@
-import { useMemo, useState } from 'react';
-import { formatCurrency, formatNumber } from '../../../lib/utils';
-import { ReportFilterBar } from '../common/ReportFilterBar';
-import { DataTable, Column } from '../../DataTable';
-import { ReportKPICard } from '../common/ReportKPICard';
-import { DollarSign, Hash, Users, ShoppingCart } from 'lucide-react';
-import { generateEnterpriseDocument } from '../../../lib/pdfEngine';
-import { exportToExcel, exportToCSV } from '../../../lib/exportUtils';
 import { format } from 'date-fns';
+import { DollarSign, Hash, ShoppingCart, Users } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { exportToCSV, exportToExcel } from '../../../lib/exportUtils';
+import { generateEnterpriseDocument } from '../../../lib/pdfEngine';
 import { SalesReportService } from '../../../lib/reporting/SalesReportService';
+import { formatCurrency, formatNumber } from '../../../lib/utils';
+import { Column, DataTable } from '../../DataTable';
+import { ReportFilterBar } from '../common/ReportFilterBar';
+import { ReportKPICard } from '../common/ReportKPICard';
 
 export function SalesRegister() {
   const [dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });

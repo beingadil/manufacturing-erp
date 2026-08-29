@@ -1,8 +1,8 @@
 import { X } from 'lucide-react';
 import { cn } from '../lib/utils';
+import type { SourceModule } from '../types/erp';
 import { CashbookVoucherForm, VoucherFormMode } from './CashbookVoucherForm';
 import { ACCENT_BAR, ACCENT_SOFT, KIND_ACCENT, KIND_ICON } from './voucherAccents';
-import type { SourceModule } from '../types/erp';
 
 export type VoucherPageKind = VoucherFormMode;
 

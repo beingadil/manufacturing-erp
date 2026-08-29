@@ -1,6 +1,6 @@
 import { toast } from 'sonner';
-import { ValidationResult } from './ValidationTypes';
 import { AppError } from '../errorHandler';
+import { ValidationResult } from './ValidationTypes';
 
 export class ErrorManagement {
   /**

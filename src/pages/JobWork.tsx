@@ -83,7 +83,10 @@ export function JobWork() {
       // Non-first stage: show batches whose currentStageId is the stage BEFORE
       // the target (source stage), with pieces ready to send forward.
       const sourceStage = stages.find(s => s.sequence === (targetStage?.sequence ?? 0) - 1);
-      return b.currentStageId === sourceStage?.id && (b.stageAvailablePcs || 0) > 0;
+      if (sourceStage && b.currentStageId === sourceStage.id) return (b.stageAvailablePcs || 0) > 0;
+      // Fallback: if currentStageId doesn't match but has pieces (old data)
+      if (!b.currentStageId || !sourceStage) return (b.stageAvailablePcs || 0) > 0;
+      return false;
     });
   }, [batches, sendMaterialId, sendSelectedStage, processingStages]);
   
@@ -99,8 +102,13 @@ export function JobWork() {
     // Non-first: sum stageAvailablePcs for batches at the SOURCE stage
     // (the stage before the target — where pieces physically are)
     const sourceStage = stages.find(s => s.sequence === (targetStage?.sequence ?? 0) - 1);
-    return (batches || [])
+    const exactMatch = (batches || [])
       .filter(b => b.materialId === materialId && b.currentStageId === sourceStage?.id)
+      .reduce((sum, b) => sum + (b.stageAvailablePcs || 0), 0);
+    if (exactMatch > 0) return exactMatch;
+    // Fallback: if no batches match source stage but have pieces (old data)
+    return (batches || [])
+      .filter(b => b.materialId === materialId && (b.stageAvailablePcs || 0) > 0)
       .reduce((sum, b) => sum + (b.stageAvailablePcs || 0), 0);
   }, [sendSelectedStage, processingStages, materials, batches]);
 
@@ -130,6 +138,29 @@ export function JobWork() {
       totalStageAvailable += b.stageAvailablePcs || 0;
     }
 
+    // Fallback: if currentStageId didn't match any stage but the batch has
+    // stageAvailablePcs (received from a processor), determine the stage from
+    // the processing sends. This handles old data where currentStageId was
+    // never set or set to a now-deleted stage ID.
+    if (maxStageSequence === 0 && totalStageAvailable > 0) {
+      for (const b of materialBatches) {
+        if (b.stageAvailablePcs && b.stageAvailablePcs > 0) {
+          const batchSends = (processingSends || []).filter(
+            s => s.batchId === b.id && (s.status === 'Closed' || s.status === 'Partial')
+          );
+          for (const s of batchSends) {
+            if (s.stageId) {
+              const stage = sorted.find(st => st.id === s.stageId);
+              if (stage && stage.sequence > maxStageSequence) {
+                maxStageSequence = stage.sequence;
+                currentStageId = s.stageId;
+              }
+            }
+          }
+        }
+      }
+    }
+
     // If no batch has a currentStageId, the material is at stage 0 (raw, not yet sent)
     const nextStage = maxStageSequence === 0
       ? sorted[0]  // First stage (Initial Processor)
@@ -147,7 +178,7 @@ export function JobWork() {
       totalStageAvailable,
       canProgress: !!nextStage,
     };
-  }, [sendMaterialId, batches, processingStages]);
+  }, [sendMaterialId, batches, processingStages, processingSends]);
 
   // Auto-set stage when material changes (strict sequencing)
   useEffect(() => {

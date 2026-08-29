@@ -1,8 +1,8 @@
+import { DollarSign, FileText, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { SalesReportService } from "../../../lib/reporting/SalesReportService";
 import { formatCurrency } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
-import { Users, DollarSign, FileText } from 'lucide-react';
-import { SalesReportService } from "../../../lib/reporting/SalesReportService";
 
 export function CustomerLedgerSummary() {
   const [dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });

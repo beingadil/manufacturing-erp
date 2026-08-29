@@ -1,9 +1,9 @@
+import { format } from 'date-fns';
+import { Activity, DollarSign } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { ProcessingReportService } from "../../../lib/reporting/ProcessingReportService";
 import { formatCurrency, formatNumber } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
-import { DollarSign, Activity } from 'lucide-react';
-import { format } from 'date-fns';
-import { ProcessingReportService } from "../../../lib/reporting/ProcessingReportService";
 
 export function ProcessorBillingReport() {
   const [dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });

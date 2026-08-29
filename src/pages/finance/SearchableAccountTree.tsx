@@ -1,7 +1,7 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
-import { useERPStore } from '../../store/useERPStore';
-import { Search, ChevronRight, ChevronDown, FolderOpen, Check, FileText } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, FileText, FolderOpen, Search } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '../../lib/utils';
+import { useERPStore } from '../../store/useERPStore';
 import type { Account, AccountSubtype, AccountType } from '../../types/erp';
 
 interface SearchableAccountTreeProps {

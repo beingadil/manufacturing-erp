@@ -1,15 +1,15 @@
 
-import { PurchaseRegister } from './PurchaseRegister';
-import { PurchaseSummary } from './PurchaseSummary';
-import { PurchaseOrderReport } from './PurchaseOrderReport';
-import { SupplierPurchaseReport } from './SupplierPurchaseReport';
 import { MaterialPurchaseReport } from './MaterialPurchaseReport';
 import { PurchaseByCategory } from './PurchaseByCategory';
-import { PurchaseCostAnalysis } from './PurchaseCostAnalysis';
-import { PurchaseTrend } from './PurchaseTrend';
 import { PurchaseComparisonReport } from './PurchaseComparisonReport';
-import { SupplierOutstandingReport } from './SupplierOutstandingReport';
+import { PurchaseCostAnalysis } from './PurchaseCostAnalysis';
+import { PurchaseOrderReport } from './PurchaseOrderReport';
+import { PurchaseRegister } from './PurchaseRegister';
+import { PurchaseSummary } from './PurchaseSummary';
+import { PurchaseTrend } from './PurchaseTrend';
 import { SupplierLedgerSummary } from './SupplierLedgerSummary';
+import { SupplierOutstandingReport } from './SupplierOutstandingReport';
+import { SupplierPurchaseReport } from './SupplierPurchaseReport';
 
 export function PurchaseReports({ activeReport }: { activeReport: string }) {
   switch (activeReport) {

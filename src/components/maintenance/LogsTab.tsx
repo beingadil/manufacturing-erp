@@ -1,10 +1,10 @@
+import { format } from 'date-fns';
+import { Download, Filter, Search, Terminal } from 'lucide-react';
 import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Terminal, Search, Filter, Download } from 'lucide-react';
-import { format } from 'date-fns';
 import { useLogStore } from '@/store/useLogStore';
 
 export function LogsTab() {

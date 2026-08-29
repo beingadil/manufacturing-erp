@@ -1,7 +1,7 @@
-import { useERPStore } from '../../store/useERPStore';
-import { ReportEngine } from './ReportEngine';
 import { differenceInDays } from 'date-fns';
+import { useERPStore } from '../../store/useERPStore';
 import { InventoryCalculationService } from '../business/InventoryCalculationService';
+import { ReportEngine } from './ReportEngine';
 
 export class InventoryReportService {
   static getCurrentStock(searchQuery: string) {

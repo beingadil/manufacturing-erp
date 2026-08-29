@@ -1,5 +1,5 @@
-import { ValidationResult } from './ValidationTypes';
 import { useERPStore } from '../../store/useERPStore';
+import { ValidationResult } from './ValidationTypes';
 
 export class BusinessValidators {
   static mustExist(table: keyof ReturnType<typeof useERPStore.getState>, id: string, entityName: string, result: ValidationResult) {

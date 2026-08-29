@@ -1,22 +1,21 @@
-import React, { useState, useRef } from "react";
 import {
-  User, Image as ImageIcon, Palette, Bell,
-  Save, CheckCircle2, Monitor, Trash2,
-  Database, Hash, Info, ExternalLink, RotateCw, DownloadCloud,
-  AlertCircle,
-  Sparkles, ChevronDown, ChevronRight, Settings as SettingsIcon,
+  AlertCircle,Bell,CheckCircle2, ChevronDown, ChevronRight, 
+  Database, DownloadCloud,ExternalLink, Hash, Image as ImageIcon, Info, Monitor, Palette, RotateCw, 
+  Save, Settings as SettingsIcon,
+  Sparkles, Trash2,
+  User, 
   Users, Wrench
 } from "lucide-react";
-import { SeedChartOfAccountsButton } from "@/components/settings/SeedChartOfAccountsButton";
+import React, { useRef, useState } from "react";
 import { AccessManagementPanel } from "@/components/access/AccessManagementPanel";
 import { SystemMaintenancePanel } from "@/components/maintenance/SystemMaintenancePanel";
-import { cn } from "../lib/utils";
-import { useSettingsStore } from "../store/useSettingsStore";
-import { useERPStore, MODULE_WIPE_KEYS, WIPE_MODULE_LABELS } from "../store/useERPStore";
-
-import { useAuth } from '../contexts/AuthContext';
-import { APP_VERSION, BUILD_NUMBER, RELEASE_DATE, DATABASE_SCHEMA_VERSION } from '../config/version';
+import { SeedChartOfAccountsButton } from "@/components/settings/SeedChartOfAccountsButton";
 import { CHANGELOG, type ChangelogEntry } from '../config/changelog';
+import { APP_VERSION, BUILD_NUMBER, DATABASE_SCHEMA_VERSION, RELEASE_DATE } from '../config/version';
+import { useAuth } from '../contexts/AuthContext';
+import { cn } from "../lib/utils";
+import { MODULE_WIPE_KEYS, useERPStore, WIPE_MODULE_LABELS } from "../store/useERPStore";
+import { useSettingsStore } from "../store/useSettingsStore";
 
 export function Settings() {
   const [activeTab, setActiveTab] = useState('profile');

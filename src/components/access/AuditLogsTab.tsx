@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
 import { Loader2, Search } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Column, DataTable } from '@/components/DataTable';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { useAccessStore } from '@/store/useAccessStore';
 import { AuditLog } from '@/types/access';
-import { DataTable, Column } from '@/components/DataTable';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 
 export function AuditLogsTab() {
   const storeLogs = useAccessStore((state) => state.auditLogs);

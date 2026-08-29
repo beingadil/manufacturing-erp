@@ -1,11 +1,11 @@
+import { AlertTriangle, Coins, Database, PackageSearch } from 'lucide-react';
 import { useMemo } from 'react';
-import { formatCurrency, formatNumber, cn } from '../../../lib/utils';
+import { InventoryReportService } from "../../../lib/reporting/InventoryReportService";
+import { cn, formatCurrency, formatNumber } from '../../../lib/utils';
+import { useERPStore } from "../../../store/useERPStore";
+import { Column, DataTable } from '../../DataTable';
 import { ReportFilterBar } from '../common/ReportFilterBar';
 import { ReportKPICard } from '../common/ReportKPICard';
-import { DataTable, Column } from '../../DataTable';
-import { PackageSearch, AlertTriangle, Coins, Database } from 'lucide-react';
-import { InventoryReportService } from "../../../lib/reporting/InventoryReportService";
-import { useERPStore } from "../../../store/useERPStore";
 
 export function CurrentStockReport() {
   const { materials } = useERPStore();

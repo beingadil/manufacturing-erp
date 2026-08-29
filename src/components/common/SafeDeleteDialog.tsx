@@ -1,3 +1,4 @@
+import { AlertTriangle, Lock } from 'lucide-react';
 import { useState } from 'react';
 import {
   AlertDialog,
@@ -9,7 +10,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../ui/alert-dialog";
-import { AlertTriangle, Lock } from 'lucide-react';
 import { Input } from '../ui/input';
 
 interface SafeDeleteDialogProps {

@@ -1,5 +1,5 @@
 import { format, startOfMonth, startOfWeek, startOfYear, subDays } from 'date-fns';
-import { AlertTriangle, ArrowDownCircle, ArrowLeftRight, ArrowRight, ArrowUpCircle, Banknote, Building2, CircleDollarSign, DollarSign, Factory, Landmark, Layers, Package, PackageSearch, Scale, ShoppingCart, TrendingUp, Truck, Users, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowDownCircle, ArrowLeftRight, ArrowRight, ArrowUpCircle, Building2, CircleDollarSign, DollarSign, Factory, Landmark, Layers, Package, PackageSearch, Scale, ShoppingCart, TrendingUp, Truck, Users, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -201,13 +201,6 @@ export function Dashboard() {
             value={formatCurrency(summary.bankTotal)}
             description={bankSub}
             onClick={() => navigate('/accounting/general-ledger')}
-          />
-          <KpiCard
-            icon={Banknote}
-            iconClassName="text-slate-400"
-            label="Cheques in Hand"
-            value="—"
-            description={<span>Not tracked — cheque workflow not implemented (audit finding)</span>}
           />
           <KpiCard
             icon={Users}

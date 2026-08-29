@@ -1,8 +1,8 @@
+import { Scale } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { FinancialReportService } from '../../../lib/reporting/FinancialReportService';
 import { formatCurrency } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
-import { Scale } from 'lucide-react';
-import { FinancialReportService } from '../../../lib/reporting/FinancialReportService';
 
 export function TrialBalanceReport() {
   const [dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });

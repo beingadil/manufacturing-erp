@@ -2,11 +2,11 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import { AppWrapper } from "./components/common/PageMeta.tsx";
 import "./index.css";
+import { APP_VERSION, IS_PRODUCTION } from "./config/version.ts";
+import { dbService } from "./database/DatabaseService";
 import { Desktop } from "./lib/desktop/DesktopInterop";
 import { Logger } from "./lib/logger";
 import { useLogStore } from "./store/useLogStore";
-import { APP_VERSION, IS_PRODUCTION } from "./config/version.ts";
-import { dbService } from "./database/DatabaseService";
 
 // ── Global error capture (diagnostics) ────────────────────────────────────
 // Print unhandled rejections/errors with stacks so packaged-app crashes are

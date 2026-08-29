@@ -1,14 +1,14 @@
 
+import { CustomerLedgerSummary } from './CustomerLedgerSummary';
+import { CustomerOutstanding } from './CustomerOutstanding';
+import { CustomerSalesReport } from './CustomerSalesReport';
+import { ProductSalesAnalysis } from './ProductSalesAnalysis';
+import { ProductSalesReport } from './ProductSalesReport';
+import { ProfitByProduct } from './ProfitByProduct';
+import { SalesComparison } from './SalesComparison';
 import { SalesRegister } from './SalesRegister';
 import { SalesSummary } from './SalesSummary';
-import { CustomerSalesReport } from './CustomerSalesReport';
-import { ProductSalesReport } from './ProductSalesReport';
 import { SalesTrend } from './SalesTrend';
-import { ProductSalesAnalysis } from './ProductSalesAnalysis';
-import { CustomerOutstanding } from './CustomerOutstanding';
-import { CustomerLedgerSummary } from './CustomerLedgerSummary';
-import { SalesComparison } from './SalesComparison';
-import { ProfitByProduct } from './ProfitByProduct';
 
 export function SalesReports({ activeReport }: { activeReport: string }) {
   switch (activeReport) {

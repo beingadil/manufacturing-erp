@@ -11,16 +11,16 @@
  */
 
 import {
-    Player,
     BigPlayButton,
     ControlBar,
-    PlayToggle,
     CurrentTimeDisplay,
-    TimeDivider,
     DurationDisplay,
     FullscreenToggle,
-    VolumeMenuButton,
-    ProgressControl
+    Player,
+    PlayToggle,
+    ProgressControl, 
+    TimeDivider,
+    VolumeMenuButton
 } from 'video-react';
 import 'video-react/dist/video-react.css';
 import './video.css';

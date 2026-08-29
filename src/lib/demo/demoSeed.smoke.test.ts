@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { useERPStore } from '../../store/useERPStore';
-import { seedDefaultChartOfAccounts } from '../chartOfAccountsSeed';
-import { seedDefaultProcessingStages, buildDefaultStages } from '../processing/processingStageSeed';
-import { seedDemoData } from './demoSeed';
 import { AccountingEngine } from '../accounting/AccountingEngine';
+import { seedDefaultChartOfAccounts } from '../chartOfAccountsSeed';
+import { buildDefaultStages, seedDefaultProcessingStages } from '../processing/processingStageSeed';
+import { seedDemoData } from './demoSeed';
 
 /**
  * Smoke test for the multi-stage processing rollout:
