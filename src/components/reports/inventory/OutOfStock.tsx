@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
-import { GenericReportTemplate } from '../common/GenericReportTemplate';
 import { AlertOctagon } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { InventoryReportService } from "../../../lib/reporting/InventoryReportService";
+import { GenericReportTemplate } from '../common/GenericReportTemplate';
 
 export function OutOfStock() {
   const [_dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });

@@ -1,11 +1,11 @@
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Activity, Database, FileCode2, ShieldCheck, Terminal } from 'lucide-react';
 import { BackupRestoreTab } from '@/components/maintenance/BackupRestoreTab';
 import { DataIntegrityTab } from '@/components/maintenance/DataIntegrityTab';
-import { SystemHealthDashboard } from '@/pages/SystemHealth';
-import { SystemDiagnosticsTab } from '@/components/maintenance/SystemDiagnosticsTab';
 import { LogsTab } from '@/components/maintenance/LogsTab';
-import { FileCode2, Database, ShieldCheck, Activity, Terminal } from 'lucide-react';
+import { SystemDiagnosticsTab } from '@/components/maintenance/SystemDiagnosticsTab';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SystemHealthDashboard } from '@/pages/SystemHealth';
 
 // System Maintenance content — lives inside Settings → System Maintenance.
 // Moved here from the standalone /maintenance page so there is one admin surface.

@@ -14,8 +14,8 @@
  * never touches existing user data.
  */
 import { useERPStore } from '../../store/useERPStore';
-import { getSystemAccountBySubtype, getSystemInventoryAccount } from '../accounting/accountClassification';
 import type { Account, VoucherType } from '../../types/erp';
+import { getSystemAccountBySubtype, getSystemInventoryAccount } from '../accounting/accountClassification';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** ISO date `n` days before today, so "This Week / This Month" filters show data. */

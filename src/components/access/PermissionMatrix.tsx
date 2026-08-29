@@ -1,11 +1,11 @@
-import { useMemo } from 'react';
 import { Loader2, Shield } from 'lucide-react';
-import { Checkbox } from '@/components/ui/checkbox';
+import { useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Permission, Role, RolePermission } from '@/types/access';
-import { PERMISSION_ACTIONS, MODULE_ORDER } from '@/lib/access';
+import { Checkbox } from '@/components/ui/checkbox';
+import { MODULE_ORDER, PERMISSION_ACTIONS } from '@/lib/access';
 import { cn } from '@/lib/utils';
+import { Permission, Role, RolePermission } from '@/types/access';
 
 interface PermissionMatrixProps {
   role: Role | null;

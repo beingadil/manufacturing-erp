@@ -1,6 +1,6 @@
 
-import { KpiCard } from '../../ui/KpiCard';
 import type { LucideIcon } from 'lucide-react';
+import { KpiCard } from '../../ui/KpiCard';
 
 export interface ReportKPICardProps {
   title: string;

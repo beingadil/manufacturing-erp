@@ -1,8 +1,6 @@
-import { useState } from 'react';
 import { Database, Loader2 } from 'lucide-react';
+import { useState } from 'react';
 import { toast } from 'sonner';
-
-import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,10 +12,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-
-import { useERPStore } from '@/store/useERPStore';
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
-import { seedDefaultChartOfAccounts, SeedActions } from '@/lib/chartOfAccountsSeed';
+import { SeedActions, seedDefaultChartOfAccounts } from '@/lib/chartOfAccountsSeed';
+import { useERPStore } from '@/store/useERPStore';
 
 export function SeedChartOfAccountsButton() {
   const { hasPermission } = useAuth();

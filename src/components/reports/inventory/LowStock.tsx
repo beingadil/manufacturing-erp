@@ -1,8 +1,8 @@
+import { AlertCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { InventoryReportService } from "../../../lib/reporting/InventoryReportService";
 import { formatNumber } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
-import { AlertCircle } from 'lucide-react';
-import { InventoryReportService } from "../../../lib/reporting/InventoryReportService";
 
 export function LowStock() {
   const [_dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });

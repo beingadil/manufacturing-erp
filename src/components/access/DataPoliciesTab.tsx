@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { useAccessStore } from '@/store/useAccessStore';
-import { DataAccessPolicy } from '@/types/access';
+import { useEffect, useState } from 'react';
 import { DataTable } from '@/components/DataTable';
 import { Badge } from '@/components/ui/badge';
+import { useAccessStore } from '@/store/useAccessStore';
+import { DataAccessPolicy } from '@/types/access';
 
 export function DataPoliciesTab() {
   const storePolicies = useAccessStore((state) => state.dataPolicies);

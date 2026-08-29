@@ -1,8 +1,8 @@
-import { useState, useMemo } from 'react';
-import { formatCurrency } from '../../../lib/utils';
-import { ReportFilterBar } from '../common/ReportFilterBar';
+import { useMemo, useState } from 'react';
 import { generateEnterpriseDocument } from '../../../lib/pdfEngine';
 import { FinancialReportService } from "../../../lib/reporting/FinancialReportService";
+import { formatCurrency } from '../../../lib/utils';
+import { ReportFilterBar } from '../common/ReportFilterBar';
 import { ProfitLossStatement } from './ProfitLossStatement';
 
 export function ProfitLossReport() {

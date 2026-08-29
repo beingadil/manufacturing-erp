@@ -1,16 +1,16 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useERPStore } from '../store/useERPStore';
-import { formatCurrency, formatNumber } from '../lib/utils';
 import { 
-  ArrowLeft, RefreshCw, Maximize, Minimize,
-  TrendingUp, TrendingDown, Package, Users, Factory, DollarSign, Wallet,
-  ShoppingCart
+  ArrowLeft, DollarSign, Factory, Maximize, Minimize,Package, RefreshCw, 
+  ShoppingCart, TrendingDown, 
+  TrendingUp, Users, Wallet
 } from 'lucide-react';
-import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
-  ComposedChart
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {Bar, BarChart, CartesianGrid, 
+  ComposedChart, Legend, Line, 
+  LineChart, Tooltip as RechartsTooltip, ResponsiveContainer,XAxis, YAxis 
 } from 'recharts';
+import { formatCurrency, formatNumber } from '../lib/utils';
+import { useERPStore } from '../store/useERPStore';
 
 export function MonitorScreen() {
   const navigate = useNavigate();

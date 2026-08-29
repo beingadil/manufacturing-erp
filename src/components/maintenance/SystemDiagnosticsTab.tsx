@@ -1,11 +1,11 @@
+import { Cpu, Database, FileJson, HardDrive, ListOrdered, Server } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { getVersionInfo, IS_PRODUCTION } from '@/config/version';
+import { SQLiteStorageAdapter } from '@/database/sqlite/SQLiteStorageAdapter';
 import { Desktop } from '@/lib/desktop/DesktopInterop';
 import { useERPStore } from '@/store/useERPStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
-import { SQLiteStorageAdapter } from '@/database/sqlite/SQLiteStorageAdapter';
-import { Server, Cpu, HardDrive, Database, ListOrdered, FileJson } from 'lucide-react';
-import { getVersionInfo, IS_PRODUCTION } from '@/config/version';
 
 export function SystemDiagnosticsTab() {
   const [dbSize, setDbSize] = useState<string>('Calculating...');

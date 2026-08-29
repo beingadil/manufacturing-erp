@@ -1,9 +1,9 @@
-import { useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { useERPStore } from '../store/useERPStore';
-import { ArrowLeft, Package, History, ArrowRightLeft, Target, Clock, ArrowDown, ArrowUp } from 'lucide-react';
-import { cn, formatCurrency } from '../lib/utils';
 import { format } from 'date-fns';
+import { ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, Clock, History, Package, Target } from 'lucide-react';
+import { useMemo } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { cn, formatCurrency } from '../lib/utils';
+import { useERPStore } from '../store/useERPStore';
 
 export function MaterialDetail() {
   const { id } = useParams<{ id: string }>();

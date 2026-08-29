@@ -1,15 +1,15 @@
+import { Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Loader2, Plus, Pencil, Trash2 } from 'lucide-react';
-import { useAccessStore } from '@/store/useAccessStore';
-import { Role, Permission, RolePermission } from '@/types/access';
-import { DataTable, Column } from '@/components/DataTable';
-import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
+import { Column, DataTable } from '@/components/DataTable';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
+import { useAccessStore } from '@/store/useAccessStore';
+import { Permission, Role, RolePermission } from '@/types/access';
+import { ConfirmDialog } from './ConfirmDialog';
 import { PermissionMatrix } from './PermissionMatrix';
 import { RoleFormDialog, RoleFormValues } from './RoleFormDialog';
-import { ConfirmDialog } from './ConfirmDialog';
-import { toast } from 'sonner';
-import { useAuth } from '@/contexts/AuthContext';
 
 export function RolesTab() {
   const { isAdmin, refreshProfile, profile } = useAuth();

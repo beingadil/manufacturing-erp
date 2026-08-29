@@ -1,9 +1,9 @@
+import { format } from 'date-fns';
+import { Activity, AlertCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { InventoryReportService } from "../../../lib/reporting/InventoryReportService";
 import { formatNumber } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
-import { Activity, AlertCircle } from 'lucide-react';
-import { format } from 'date-fns';
-import { InventoryReportService } from "../../../lib/reporting/InventoryReportService";
 
 export function StockAdjustmentReport() {
   const [dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });

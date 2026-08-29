@@ -1,11 +1,11 @@
 
-import { Users, Shield, FileText, History } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { UsersTab } from '@/components/access/UsersTab';
-import { RolesTab } from '@/components/access/RolesTab';
-import { DataPoliciesTab } from '@/components/access/DataPoliciesTab';
+import { FileText, History, Shield, Users } from 'lucide-react';
 import { AuditLogsTab } from '@/components/access/AuditLogsTab';
+import { DataPoliciesTab } from '@/components/access/DataPoliciesTab';
 import { LoginHistoryTab } from '@/components/access/LoginHistoryTab';
+import { RolesTab } from '@/components/access/RolesTab';
+import { UsersTab } from '@/components/access/UsersTab';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // Access Management content — lives inside Settings → Access Management.
 // Moved here from the standalone /users page so there is one admin surface.

@@ -1,8 +1,8 @@
+import { DollarSign, Percent } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { SalesReportService } from "../../../lib/reporting/SalesReportService";
 import { formatCurrency, } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
-import { DollarSign, Percent } from 'lucide-react';
-import { SalesReportService } from "../../../lib/reporting/SalesReportService";
 
 export function SalesComparison() {
   const [dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });

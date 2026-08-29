@@ -1,8 +1,8 @@
+import { DollarSign, Factory, FileText } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { ProcessingReportService } from "../../../lib/reporting/ProcessingReportService";
 import { formatCurrency } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
-import { Factory, DollarSign, FileText } from 'lucide-react';
-import { ProcessingReportService } from "../../../lib/reporting/ProcessingReportService";
 
 export function ProcessorLedgerReport() {
   const [dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });

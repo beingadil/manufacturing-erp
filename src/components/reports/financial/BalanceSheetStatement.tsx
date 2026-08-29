@@ -1,8 +1,8 @@
 
+import { ChevronRight, HandCoins, Scale, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrency } from '../../../lib/utils';
 import { KpiCard } from '../../ui/KpiCard';
-import { ChevronRight, HandCoins, Scale, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 
 export interface StatementRow {
   id: string;
@@ -101,7 +101,7 @@ export function PositionSummary({ data, title = 'Your position — in plain word
           description="Your capital + earlier profits kept in the business"
         />
         <KpiCard
-          label={profitNegative ? 'Loss this period' : 'Profit this period'}
+          label='Net P/L'
           value={profitNegative ? `−${formatCurrency(Math.abs(profit))}` : formatCurrency(profit)}
           icon={profitNegative ? TrendingDown : TrendingUp}
           iconClassName={profitNegative ? 'text-destructive' : 'text-success'}

@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
-import { formatCurrency, formatNumber } from '../../../lib/utils';
-import { ReportFilterBar } from '../common/ReportFilterBar';
-import { DataTable, Column } from '../../DataTable';
 import { PurchaseReportService } from "../../../lib/reporting/PurchaseReportService";
+import { formatCurrency, formatNumber } from '../../../lib/utils';
+import { Column, DataTable } from '../../DataTable';
+import { ReportFilterBar } from '../common/ReportFilterBar';
 
 export function SupplierPurchaseSummary() {
   const data = useMemo(() => PurchaseReportService.getSupplierPurchaseSummaryData(), []);

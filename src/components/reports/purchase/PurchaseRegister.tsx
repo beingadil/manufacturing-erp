@@ -1,8 +1,8 @@
+import { DollarSign, Hash, Scale, ShoppingCart } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { PurchaseReportService } from '../../../lib/reporting/PurchaseReportService';
 import { formatCurrency, formatNumber } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
-import { ShoppingCart, Scale, Hash, DollarSign } from 'lucide-react';
-import { PurchaseReportService } from '../../../lib/reporting/PurchaseReportService';
 
 export function PurchaseRegister() {
   const [dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });

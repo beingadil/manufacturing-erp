@@ -1,8 +1,8 @@
+import { Activity, DollarSign, Target } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { PurchaseReportService } from "../../../lib/reporting/PurchaseReportService";
 import { formatCurrency, } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
-import { Activity, DollarSign, Target } from 'lucide-react';
-import { PurchaseReportService } from "../../../lib/reporting/PurchaseReportService";
 
 export function PurchaseCostAnalysis() {
   const [dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });

@@ -1,13 +1,12 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Monitor, PackageSearch, ShoppingCart, Users, Settings, Bell, Search, Menu, X, FileText, Truck, UserCog, Briefcase, Wallet, Moon, Sun, Database, Factory, Calculator, ChevronDown, ChevronRight, DollarSign, BarChart3 } from "lucide-react";
+import { BarChart3, Bell, Briefcase, Calculator, ChevronDown, ChevronRight, Database, DollarSign, Factory, FileText, LayoutDashboard, LogOut, Menu, Monitor, Moon, PackageSearch, Search, Settings, ShoppingCart, Sun, Truck, UserCog, Users, Wallet, X } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { SyncStatusIndicator } from '../components/common/SyncStatusIndicator';
+import { useAuth } from "../contexts/AuthContext";
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { cn, } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
 import { useSettingsStore } from "../store/useSettingsStore";
-import { useAuth } from "../contexts/AuthContext";
-import { LogOut } from "lucide-react";
-import { SyncStatusIndicator } from '../components/common/SyncStatusIndicator';
-import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 const NavAccordionItem: React.FC<{ item: any, onClose?: () => void }> = ({ item, onClose }) => {
   const location = useLocation();

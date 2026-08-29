@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeAll } from 'vitest';
-import { useERPStore } from './useERPStore';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { AccountingEngine } from '../lib/accounting/AccountingEngine';
+import { useERPStore } from './useERPStore';
 
 /**
  * Regression tests for the Supplier / Customer / Processor balance bug.

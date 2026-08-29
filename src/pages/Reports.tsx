@@ -1,17 +1,16 @@
-import { useMemo, useState } from 'react';
-import { 
-  ShoppingCart, DollarSign, Factory, 
-  PackageSearch, Calculator, ChevronRight, ChevronDown, ChevronUp,
-  Search, X, FileBarChart2
+import { Calculator, ChevronDown, ChevronRight, ChevronUp,DollarSign, Factory, FileBarChart2, 
+  PackageSearch, 
+  Search, 
+  ShoppingCart, X 
 } from "lucide-react";
-import { cn } from "../lib/utils";
-
+import { useMemo, useState } from 'react';
+import { FinancialReports } from '../components/reports/financial/FinancialReports';
+import { InventoryReports } from '../components/reports/inventory/InventoryReports';
+import { ProcessingReports } from '../components/reports/processing/ProcessingReports';
 import { PurchaseReports } from '../components/reports/purchase/PurchaseReports';
 import { SalesReports } from '../components/reports/sales/SalesReports';
-import { ProcessingReports } from '../components/reports/processing/ProcessingReports';
-import { InventoryReports } from '../components/reports/inventory/InventoryReports';
 import { DrillDownProvider } from '../contexts/DrillDownContext';
-import { FinancialReports } from '../components/reports/financial/FinancialReports';
+import { cn } from "../lib/utils";
 
 const REPORT_CATEGORIES = [
   {

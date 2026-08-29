@@ -1,20 +1,21 @@
 // src/lib/desktop/DesktopInterop.ts
+
+import { toast } from 'sonner';
 import { 
-  IDesktopInterop, 
-  IStorageService, 
-  IFileService, 
-  IPrintService, 
   IConfigService, 
-  IWindowService, 
+  IDesktopInterop, 
   IDialogService, 
+  IFileService, 
   INotificationService, 
   IPlatformService,
-  SaveFileOptions,
-  ReadFileOptions,
+  IPrintService, 
+  IStorageService, 
+  IWindowService, 
+  MessageBoxOptions, 
   PrintOptions,
-  MessageBoxOptions
+  ReadFileOptions,
+  SaveFileOptions
 } from './types';
-import { toast } from 'sonner';
 
 // Browser-based fallback implementations (pre-Electron)
 

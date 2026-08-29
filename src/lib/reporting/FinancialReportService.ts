@@ -1,7 +1,7 @@
 import { useERPStore } from '../../store/useERPStore';
-import { ReportEngine } from './ReportEngine';
-import { AccountingEngine } from '../accounting/AccountingEngine';
 import type { Account } from '../../types/erp';
+import { AccountingEngine } from '../accounting/AccountingEngine';
+import { ReportEngine } from './ReportEngine';
 
 export class FinancialReportService {
   static getTrialBalance(dateRange: { start: string; end: string }, searchQuery: string) {

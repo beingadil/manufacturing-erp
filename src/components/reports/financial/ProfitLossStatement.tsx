@@ -1,8 +1,8 @@
 
+import { BarChart3, ChevronRight, CircleDollarSign, Receipt, TrendingDown, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrency } from '../../../lib/utils';
 import { KpiCard } from '../../ui/KpiCard';
-import { BarChart3, ChevronRight, CircleDollarSign, Receipt, TrendingDown, TrendingUp } from 'lucide-react';
 
 export interface PLRow {
   id: string;

@@ -1,7 +1,7 @@
+import { Logger } from '../lib/logger';
+import { BetterSQLite3Adapter } from './sqlite/BetterSQLite3Adapter';
 import { ISQLiteAdapter } from './sqlite/ISQLiteAdapter';
 import { MockSQLiteAdapter } from './sqlite/MockSQLiteAdapter';
-import { BetterSQLite3Adapter } from './sqlite/BetterSQLite3Adapter';
-import { Logger } from '../lib/logger';
 
 function isElectron(): boolean {
   return typeof window !== 'undefined' && !!(window as any).electronDB;

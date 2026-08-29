@@ -1,8 +1,8 @@
+import { DollarSign, Package, Target } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { SalesReportService } from "../../../lib/reporting/SalesReportService";
 import { formatCurrency, formatNumber } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
-import { Package, DollarSign, Target } from 'lucide-react';
-import { SalesReportService } from "../../../lib/reporting/SalesReportService";
 
 export function TopSellingProducts() {
   const [dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });

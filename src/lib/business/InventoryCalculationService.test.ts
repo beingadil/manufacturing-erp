@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import type { Batch, ProcessingReceipt, ProcessingSend, Product, Sale } from '../../types/erp';
 import { InventoryCalculationService } from './InventoryCalculationService';
-import type { Batch, ProcessingSend, ProcessingReceipt, Sale, Product } from '../../types/erp';
 
 function batch(over: Partial<Batch>): Batch {
   return {

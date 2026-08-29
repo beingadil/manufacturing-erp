@@ -1,8 +1,8 @@
+import { Activity, DollarSign, Package } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { SalesReportService } from "../../../lib/reporting/SalesReportService";
 import { formatCurrency } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
-import { Package, DollarSign, Activity } from 'lucide-react';
-import { SalesReportService } from "../../../lib/reporting/SalesReportService";
 
 export function ProfitByProduct() {
   const [dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });

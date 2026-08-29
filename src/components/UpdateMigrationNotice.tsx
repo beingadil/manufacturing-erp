@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { TriangleAlert, X, PackageX, ShieldCheck } from 'lucide-react';
+import { PackageX, ShieldCheck, TriangleAlert, X } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { useCallback, useEffect, useState } from 'react';
 
 interface LegacyInstallInfo {
   runningFromLegacy: boolean;

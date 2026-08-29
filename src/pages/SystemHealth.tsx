@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useERPStore } from '../store/useERPStore';
 import { Activity, CheckCircle, XCircle, AlertTriangle, RefreshCw } from 'lucide-react';
 
@@ -9,15 +9,16 @@ interface Issue {
   details: string;
 }
 
+const electronDB = () => (window as any).electronDB;
+
 export function SystemHealthDashboard() {
   const state = useERPStore();
   const [healthStatus, setHealthStatus] = useState<Issue[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [lastScan, setLastScan] = useState<Date | null>(null);
 
-  const runHealthCheck = () => {
+  const runHealthCheck = useCallback(async () => {
     setIsScanning(true);
-    setTimeout(() => {
       const issues: Issue[] = [];
       let _passed = 0;
       let _failed = 0;
@@ -31,6 +32,76 @@ export function SystemHealthDashboard() {
       };
 
       try {
+
+      // ── Real SQLite Integrity Check (Electron IPC) ──────────────
+      if (electronDB()?.integrityCheck) {
+        try {
+          const r = await electronDB().integrityCheck();
+          if (r?.success && r?.details?.[0] === 'ok')
+            addIssue('Database', 'SQLite Integrity', 'pass', 'SQLite integrity check passed - no corruption detected.');
+          else if (r?.success)
+            addIssue('Database', 'SQLite Integrity', 'warn', 'Integrity check returned: ' + JSON.stringify(r.details));
+          else
+            addIssue('Database', 'SQLite Integrity', 'fail', 'Integrity check failed: ' + (r?.error || 'unknown error'));
+        } catch {
+          addIssue('Database', 'SQLite Integrity', 'warn', 'Could not reach SQLite integrity check.');
+        }
+      } else {
+        addIssue('Database', 'SQLite Integrity', 'warn', 'Browser mode - SQLite check skipped.');
+      }
+
+      // ── Database File Info (Electron IPC) ─────────────────────────
+      if (electronDB()?.diag) {
+        try {
+          const diag = await electronDB().diag();
+          if (diag?.success && diag?.data?.exists) {
+            const sizeMB = (diag.data.size / (1024 * 1024)).toFixed(2);
+            addIssue('Database', 'Database File', 'pass', 'SQLite file at ' + diag.data.path + ' (' + sizeMB + ' MB).');
+          } else {
+            addIssue('Database', 'Database File', 'fail', 'SQLite file not found on disk.');
+          }
+        } catch {
+          addIssue('Database', 'Database File', 'warn', 'Could not query database file info.');
+        }
+      } else {
+        addIssue('Database', 'Database File', 'warn', 'Browser mode - file check skipped.');
+      }
+
+      // ── Orphaned Processing Records ──────────────────────────────
+      const orphanedSends = state.processingSends?.filter((ps: any) => !state.materials?.find((m: any) => m.id === ps.materialId)) || [];
+      if (orphanedSends.length > 0) {
+        addIssue('Integrity', 'Orphaned Processing', 'fail', orphanedSends.length + ' sends reference deleted materials.');
+      } else {
+        addIssue('Integrity', 'Orphaned Processing', 'pass', 'All ' + (state.processingSends?.length || 0) + ' sends OK.');
+      }
+
+      // ── Batch Integrity ──────────────────────────────────────────
+      const orphanedBatches = state.batches?.filter((b: any) => !state.materials?.find((m: any) => m.id === b.materialId)) || [];
+      if (orphanedBatches.length > 0) {
+        addIssue('Inventory', 'Orphaned Batches', 'warn', orphanedBatches.length + ' batches reference deleted materials.');
+      } else {
+        addIssue('Inventory', 'Orphaned Batches', 'pass', 'All ' + (state.batches?.length || 0) + ' batches OK.');
+      }
+
+      // ── Unbilled Final-Stage Processing ──────────────────────────
+      const unbilledFinal = state.processingSends?.filter((ps: any) => {
+        if (ps.status === 'Completed' || ps.status === 'Billed') return false;
+        if (ps.isFinalStage && (ps.receivedPcs || 0) > 0) return true;
+        return false;
+      }) || [];
+      if (unbilledFinal.length > 0) {
+        addIssue('Processing', 'Unbilled Final Stage', 'warn', unbilledFinal.length + ' final-stage sends without bill.');
+      } else {
+        addIssue('Processing', 'Unbilled Final Stage', 'pass', 'No unbilled final-stage sends.');
+      }
+
+      // ── Chart of Accounts Seeded ─────────────────────────────────
+      if ((state.accounts?.length || 0) < 10) {
+        addIssue('Configuration', 'Chart of Accounts', 'warn', 'Only ' + (state.accounts?.length || 0) + ' accounts - may not be seeded.');
+      } else {
+        addIssue('Configuration', 'Chart of Accounts', 'pass', (state.accounts?.length || 0) + ' accounts seeded.');
+      }
+
         // 1. Database Connection & Basic Integrity
         addIssue('Database', 'Zustand Store Active', 'pass', `Store loaded. ${state.accounts?.length || 0} accounts found.`);
         
@@ -100,12 +171,9 @@ export function SystemHealthDashboard() {
       setHealthStatus(issues);
       setLastScan(new Date());
       setIsScanning(false);
-    }, 800);
-  };
+  }, [state]);
 
-  useEffect(() => {
-    runHealthCheck();
-  }, []);
+  useEffect(() => { runHealthCheck(); }, [runHealthCheck]);
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto p-4 md:p-8">

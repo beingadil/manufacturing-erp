@@ -1,6 +1,6 @@
-import { ISQLiteAdapter, ISQLiteTransaction } from './ISQLiteAdapter';
 import { v4 as uuidv4 } from 'uuid';
-import { DBRequest, TransactionRequest, DBResponse, ExecuteResult } from '../../electron/shared/databaseTypes';
+import { DBRequest, DBResponse, ExecuteResult, TransactionRequest } from '../../electron/shared/databaseTypes';
+import { ISQLiteAdapter, ISQLiteTransaction } from './ISQLiteAdapter';
 
 declare global {
   interface Window {

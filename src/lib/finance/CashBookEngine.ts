@@ -1,4 +1,4 @@
-import { Account, Voucher, JournalEntry, AccountSubtype } from '../../types/erp';
+import { Account, AccountSubtype, JournalEntry, Voucher } from '../../types/erp';
 import { getCashBankAccounts } from '../accounting/accountClassification';
 
 export interface CashBookRow {

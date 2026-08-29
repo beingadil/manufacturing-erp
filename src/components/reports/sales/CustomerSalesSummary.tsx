@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
-import { formatCurrency, formatNumber } from '../../../lib/utils';
-import { ReportFilterBar } from '../common/ReportFilterBar';
-import { DataTable, Column } from '../../DataTable';
 import { SalesReportService } from "../../../lib/reporting/SalesReportService";
+import { formatCurrency, formatNumber } from '../../../lib/utils';
+import { Column, DataTable } from '../../DataTable';
+import { ReportFilterBar } from '../common/ReportFilterBar';
 
 export function CustomerSalesSummary() {
   const data = useMemo(() => SalesReportService.getCustomerSalesSummaryData(), []);

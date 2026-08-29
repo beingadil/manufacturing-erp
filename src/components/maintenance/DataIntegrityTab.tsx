@@ -1,9 +1,9 @@
+import { AlertCircle, CheckCircle2, RefreshCw, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { useERPStore } from '@/store/useERPStore';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, } from '@/components/ui/card';
 import { InventoryReportService } from '@/lib/reporting/InventoryReportService';
-import { ShieldCheck, AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react';
+import { useERPStore } from '@/store/useERPStore';
 
 interface IntegrityIssue {
   id: string;

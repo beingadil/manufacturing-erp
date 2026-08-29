@@ -1,5 +1,5 @@
-import { ValidationResult, IValidator } from './ValidationTypes';
 import { ErrorManagement } from './ErrorManagement';
+import { IValidator, ValidationResult } from './ValidationTypes';
 
 export class ValidationEngine {
   /**
