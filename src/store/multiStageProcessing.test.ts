@@ -10,11 +10,11 @@ import { useERPStore } from './useERPStore';
  * Multi-stage processing test suite (spec §26 — test plan A–M).
  *
  * The ONE economic asset (a batch) moves through the chain
- *   Purchase → Initial Processor → Machine → Acid → Polish → Finished → Sale
+ *   Purchase → Initial Processor → Machine → Acid → Polish → Spot Machine → Finished → Sale
  * and must NEVER be counted twice at any stage. Total inventory value stays
  * PKR 300,000 until a sale actually removes finished goods.
  *
- * Stage semantics: only the configured FINAL stage (Polish) produces Finished
+ * Stage semantics: only the configured FINAL stage (Spot Machine) produces Finished
  * Goods; Intermediate stages (Initial Processor, Machine, Acid) are WIP→WIP
  * passthroughs that relocate the same pcs without touching the finished bucket.
  *
@@ -70,6 +70,7 @@ function seed() {
   st.addProcessor({ name: 'Acid Man' });
   st.addProcessor({ name: 'Polisher' });
   st.addProcessor({ name: 'Initial Processor' });
+    st.addProcessor({ name: 'Spot Machine Man' });
   st.addRawMaterial({ name: 'Steel Coil', categoryId: 'c1' });
   st.addProduct({ name: 'Jug', materialId: useERPStore.getState().materials[0].id, price: 3000 });
 }
@@ -222,14 +223,14 @@ describe('multi-stage processing engine', () => {
     expect(inventoryValue()).toBe(300000); // still no double-count
   });
 
-  // ── TEST E — Polish (final) completes → Finished Goods ────────────────────
+  // ── TEST E — Spot Machine (final) completes → Finished Goods ────────────────────
   it('TEST E: completing the final stage produces finished goods exactly once', () => {
     purchase();
     const initSend = sendToStage('Initial Processor', 'Initial Processor', 2000, 5, '2026-08-02');
     receiveFromStage(initSend, 'Initial Processor', 'Initial Processor', 2000, '2026-08-03');
 
-    const polishSend = sendToStage('Polish', 'Polisher', 64, 50, '2026-08-09');
-    receiveFromStage(polishSend, 'Polish', 'Polisher', 64, '2026-08-10');
+    const spotSend = sendToStage('Spot Machine', 'Spot Machine Man', 64, 50, '2026-08-10');
+    receiveFromStage(spotSend, 'Spot Machine', 'Spot Machine Man', 64, '2026-08-11');
 
     const stages = InventoryCalculationService.getMaterialStageValues(material().id, st().batches);
     expect(material().processedStockPcs).toBe(64);
@@ -328,7 +329,7 @@ describe('multi-stage processing engine', () => {
     // Initial Processor is a NON-final stage, so the batch stays in WIP after
     // the receipt (WIP→WIP) — only the final stage would produce finished.
     const migrated = migrateERPState(snapshot as any);
-    expect(migrated.processingStages.length).toBe(4);
+    expect(migrated.processingStages.length).toBe(5);
     expect(migrated.batches[0].atProcessorPcs).toBe(2000);
     expect(migrated.batches[0].processedPcs).toBe(0);
     expect(migrated.vouchers.length).toBe(before.vouchers.length);
@@ -336,7 +337,7 @@ describe('multi-stage processing engine', () => {
     const migrated2 = migrateERPState(migrated as any);
     expect(migrated2.batches[0].atProcessorPcs).toBe(2000);
     expect(migrated2.batches[0].processedPcs).toBe(0);
-    expect(migrated2.processingStages.length).toBe(4);
+    expect(migrated2.processingStages.length).toBe(5);
   });
 
   // ── TEST L — Accounting reconciliation ────────────────────────────────────
@@ -380,6 +381,9 @@ describe('multi-stage processing engine', () => {
 
     const polishSend = sendToStage('Polish', 'Polisher', 100, 50, '2026-08-08');
     receiveFromStage(polishSend, 'Polish', 'Polisher', 100, '2026-08-09');
+
+    const spotSend = sendToStage('Spot Machine', 'Spot Machine Man', 100, 60, '2026-08-10');
+    receiveFromStage(spotSend, 'Spot Machine', 'Spot Machine Man', 100, '2026-08-11');
 
     // 100 pcs finished, 1900 raw on hand, 0 WIP — total value still 300,000
     expect(material().processedStockPcs).toBe(100);

@@ -214,7 +214,7 @@ export function Processors() {
                 >
                   <option value="">General Worker (any stage)</option>
                   {sortedStages.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}{s.isFinalStage ? ' (Final Polish)' : ''}</option>
+                    <option key={s.id} value={s.id}>{s.name}{s.isFinalStage ? ' (Final)' : ''}</option>
                   ))}
                 </select>
                 <p className="mt-1 text-xs text-muted-foreground">The processing job this worker performs. The Job Work module only offers workers matching the selected stage.</p>

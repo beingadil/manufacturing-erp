@@ -55,15 +55,17 @@ describe('multi-stage rollout smoke', () => {
   it('seeds the full default stage chain (Initial Processor → Machine → Acid → Polish) with Polish final', () => {
     const s = useERPStore.getState();
     const stages = [...s.processingStages].sort((a, b) => a.sequence - b.sequence);
-    expect(stages.map(x => x.name)).toEqual(['Initial Processor', 'Machine', 'Acid', 'Polish']);
-    expect(stages.map(x => x.rateMethod)).toEqual(['per_piece', 'per_kg', 'per_kg', 'per_kg']);
-    expect(stages.find(x => x.name === 'Polish')?.isFinalStage).toBe(true);
+    expect(stages.map(x => x.name)).toEqual(['Initial Processor', 'Machine', 'Acid', 'Polish', 'Spot Machine']);
+    expect(stages.map(x => x.rateMethod)).toEqual(['per_piece', 'per_kg', 'per_kg', 'per_kg', 'per_kg']);
+    expect(stages.find(x => x.name === 'Spot Machine')?.isFinalStage).toBe(true);
+    expect(stages.find(x => x.name === 'Polish')?.isFinalStage).toBe(false);
     expect(stages.find(x => x.name === 'Initial Processor')?.isFinalStage).toBe(false);
     // Chain is linked
     expect(stages[0].nextStageId).toBe(stages[1].id);
     expect(stages[1].nextStageId).toBe(stages[2].id);
     expect(stages[2].nextStageId).toBe(stages[3].id);
-    expect(stages[3].nextStageId).toBeUndefined();
+    expect(stages[3].nextStageId).toBe(stages[4].id);
+    expect(stages[4].nextStageId).toBeUndefined();
   });
 
   it('demo seed runs end-to-end with legacy stage-less calls and balances the books', () => {
@@ -111,8 +113,8 @@ describe('multi-stage rollout smoke', () => {
 
   it('buildDefaultStages produces a linked, final-flagged chain (test helper parity)', () => {
     const stages = buildDefaultStages();
-    expect(stages.length).toBe(4);
-    expect(stages[3].isFinalStage).toBe(true);
+    expect(stages.length).toBe(5);
+    expect(stages[4].isFinalStage).toBe(true);
     expect(stages[0].nextStageId).toBe(stages[1].id);
   });
 });
