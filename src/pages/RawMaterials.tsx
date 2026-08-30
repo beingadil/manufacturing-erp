@@ -1,4 +1,4 @@
-import { Layers, PackageSearch, Pencil, Plus, Trash2, Wallet, X } from "lucide-react";
+import { Layers, PackageSearch, Pencil, Plus, Trash2, Wallet, } from "lucide-react";
 import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from 'sonner';

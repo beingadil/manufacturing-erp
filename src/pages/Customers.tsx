@@ -1,4 +1,4 @@
-import { CircleDollarSign, Pencil, Plus, Users, Wallet, X } from "lucide-react";
+import { CircleDollarSign, Pencil, Plus, Users, Wallet, } from "lucide-react";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
