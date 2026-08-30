@@ -23,13 +23,28 @@ export const CHANGELOG: ChangelogEntry[] = [
     version: '1.0.26',
     date: '2026-08-30',
     title: 'Accessibility Overhaul',
-    changes: [
-      'Accessible modals with focus trap, Escape key, and ARIA attributes on all pages',
-      'AlertDialog replaces native confirm()/alert() in BackupRestore, Settings, Accounting',
-      'Currency standardization: PKR throughout, shared formatCurrency() and formatDate() utils',
-      'Dead code removal: 3 orphaned report stubs, unused multi-select component',
-      'DataTable tabular-nums for proper number alignment',
-      'Global accessibility: color-scheme, reduced-motion, overscroll-behavior, tabular-nums',
+    sections: [
+      {
+        title: 'Accessibility',
+        items: [
+          'Accessible modals with focus trap, Escape key, and ARIA attributes on all pages',
+          'AlertDialog replaces native confirm()/alert() in BackupRestore, Settings, Accounting',
+          'Global CSS: color-scheme, reduced-motion, overscroll-behavior, tabular-nums',
+        ],
+      },
+      {
+        title: 'Currency & Formatting',
+        items: [
+          'PKR currency throughout, shared formatCurrency() and formatDate() Intl utilities',
+          'DataTable tabular-nums for proper financial number alignment',
+        ],
+      },
+      {
+        title: 'Cleanup',
+        items: [
+          'Dead code removal: 3 orphaned report stubs, unused multi-select component',
+        ],
+      },
     ],
   },
   {
