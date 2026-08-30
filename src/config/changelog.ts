@@ -20,6 +20,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.26',
+    date: '2026-08-30',
+    title: 'Accessibility Overhaul',
+    changes: [
+      'Accessible modals with focus trap, Escape key, and ARIA attributes on all pages',
+      'AlertDialog replaces native confirm()/alert() in BackupRestore, Settings, Accounting',
+      'Currency standardization: PKR throughout, shared formatCurrency() and formatDate() utils',
+      'Dead code removal: 3 orphaned report stubs, unused multi-select component',
+      'DataTable tabular-nums for proper number alignment',
+      'Global accessibility: color-scheme, reduced-motion, overscroll-behavior, tabular-nums',
+    ],
+  },
+  {
     version: '1.0.24',
     date: '2026-08-30',
     title: 'Spot Machine stage + auto-migration for existing data',
