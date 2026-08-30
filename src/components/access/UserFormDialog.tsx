@@ -142,7 +142,7 @@ export function UserFormDialog({
                     <FormItem>
                       <FormLabel>Password (required for new users)</FormLabel>
                       <FormControl>
-                        <Input type="password" placeholder="••••••••" {...field} />
+                        <Input type="password" autoComplete="new-password" placeholder="••••••••" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

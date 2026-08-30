@@ -1,4 +1,5 @@
 import { Calculator, CalendarRange, Edit, Folder, FolderOpen, Plus, Printer, Search, Trash2 } from "lucide-react";
+import { toast } from 'sonner';
 import { useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { AddAccountModal } from "../components/AddAccountModal";
@@ -10,7 +11,7 @@ import { AccountingEngine } from "../lib/accounting/AccountingEngine";
 import { getCashBankAccounts } from "../lib/accounting/accountClassification";
 import { generateLedgerStatementPDF } from "../lib/documentGenerators";
 import { FinancialReportService } from "../lib/reporting/FinancialReportService";
-import { cn } from "../lib/utils";
+import { cn, formatCurrency } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
 import { Account, AccountType, JournalEntry, Voucher } from "../types/erp";
 
@@ -241,7 +242,7 @@ function ChartOfAccounts() {
     const store = useERPStore.getState();
     const hasEntries = store.journalEntries.some(je => je.accountId === deleteModal.id);
     if (hasEntries) {
-      alert("Cannot delete this account because it has linked financial transactions.");
+      toast.error('Cannot delete this account — it has linked financial transactions.');
       return;
     }
     store.deleteAccount(deleteModal.id);
@@ -467,8 +468,8 @@ function TrialBalance() {
               <tfoot className="bg-muted/30 font-semibold border-t-2 border-border">
                 <tr>
                   <td colSpan={2} className="py-4 px-6 text-sm text-right text-foreground">Totals</td>
-                  <td className={cn("py-4 px-6 text-sm text-right", isBalanced ? "text-foreground" : "text-rose-500")}>PKR {grandTotalDebit.toLocaleString()}</td>
-                  <td className={cn("py-4 px-6 text-sm text-right", isBalanced ? "text-foreground" : "text-rose-500")}>PKR {grandTotalCredit.toLocaleString()}</td>
+                  <td className={cn("py-4 px-6 text-sm text-right", isBalanced ? "text-foreground" : "text-rose-500")}>{formatCurrency(grandTotalDebit)}</td>
+                  <td className={cn("py-4 px-6 text-sm text-right", isBalanced ? "text-foreground" : "text-rose-500")}>{formatCurrency(grandTotalCredit)}</td>
                 </tr>
               </tfoot>
             )}
@@ -479,7 +480,7 @@ function TrialBalance() {
           <div className="mt-4 p-4 bg-destructive/10 border border-rose-500/20 rounded-lg flex items-center justify-between">
             <div className="text-destructive text-sm font-medium flex items-center gap-2">
               <Calculator className="h-4 w-4" />
-              Trial Balance is not balanced. Difference: PKR {Math.abs(grandTotalDebit - grandTotalCredit).toLocaleString()}
+              Trial Balance is not balanced. Difference: {formatCurrency(Math.abs(grandTotalDebit - grandTotalCredit))}
             </div>
           </div>
         )}
@@ -646,7 +647,7 @@ function CashFlow() {
           <div className="flex justify-between items-center text-base font-bold bg-muted/30 p-3 rounded-lg mb-6 border border-border/50">
             <span className="text-foreground">Net Increase (Decrease) in Cash</span>
             <span className={cn(netIncreaseInCash >= 0 ? "text-success" : "text-destructive")}>
-              PKR {netIncreaseInCash.toLocaleString()}
+              {formatCurrency(netIncreaseInCash)}
             </span>
           </div>
 
@@ -657,7 +658,7 @@ function CashFlow() {
           
           <div className="flex justify-between items-center text-lg font-bold bg-primary/10 border border-primary/20 p-4 rounded-lg mt-4">
             <span className="text-foreground">Closing Cash Balance</span>
-            <span className="text-foreground">PKR {closingCash.toLocaleString()}</span>
+            <span className="text-foreground">{formatCurrency(closingCash)}</span>
           </div>
         </div>
       </div>

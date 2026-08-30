@@ -11,6 +11,7 @@ import { formatCurrency } from "../lib/utils";
 import { ErrorManagement } from '../lib/validation';
 import { SalesService } from '../services/SalesService';
 import { useERPStore } from "../store/useERPStore";
+import { PageModal } from "../components/ui/PageModal";
 
 export function Sales() {
   const { sales, products, materials, customers, vouchers } = useERPStore();
@@ -178,14 +179,8 @@ export function Sales() {
         <VoucherHistoryTab sourceModule="Sales" />
       )}
 
-      {isModalOpen && !isAddCustomerOpen && !isAddProductOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-card rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="px-6 py-4 border-b flex justify-between">
-              <h3 className="text-lg font-bold">{editSaleId ? "Edit Sale" : "New Sale"}</h3>
-              <button onClick={() => { setIsModalOpen(false); setEditSaleId(undefined); }}><X className="h-5 w-5 text-muted-foreground/80" /></button>
-            </div>
-            <form onSubmit={handleCreate} className="p-6 space-y-3">
+      <PageModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditSaleId(undefined) }} title={editSaleId ? 'Edit Sale' : 'Add Sale'}>
+              <form onSubmit={handleCreate} className="p-6 space-y-3">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-foreground/80 mb-1">Customer</label>
@@ -220,7 +215,7 @@ export function Sales() {
                   <input type="number" required placeholder="Quantity" value={pcsSold} onChange={e => setPcsSold(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-foreground/80 mb-1">Price Per Piece (₹) *</label>
+                  <label className="block text-sm font-medium text-foreground/80 mb-1">Price Per Piece (PKR) *</label>
                   <input type="number" step="0.01" required placeholder="Rate" value={pricePerPiece} onChange={e => setPricePerPiece(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" />
                 </div>
                 <div>
@@ -233,9 +228,7 @@ export function Sales() {
                 <button type="submit" className="flex-1 rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-md">{editSaleId ? "Update Sale" : "Confirm Sale"}</button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+            </PageModal>
 
       <DeleteConfirmationModal
         isOpen={deleteModal.isOpen}

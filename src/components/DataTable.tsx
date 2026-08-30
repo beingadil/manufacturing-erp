@@ -222,7 +222,7 @@ function DataTableInner<T extends Record<string, any>>({
                 {columns.map((col) => (
                   <td 
                     key={col.key} 
-                    className={`px-6 py-4 ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : ''}`}
+                    className={`px-6 py-4 tabular-nums ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : ''}`}
                   >
                     {col.render ? col.render(item) : item[col.key]}
                   </td>

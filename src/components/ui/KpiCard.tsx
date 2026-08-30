@@ -104,7 +104,7 @@ export function KpiCard({
         type="button"
         onClick={onClick}
         className={cn(
-          'rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col text-left transition-all hover:shadow-md hover:border-primary/30',
+          'rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col text-left transition-all hover:shadow-md hover:border-primary/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
           className
         )}
       >

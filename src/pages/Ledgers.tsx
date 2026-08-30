@@ -63,7 +63,7 @@ export function Ledgers() {
         pcsSent: s.pcsSent,
         pcsRecvd: '-',
         pcsPending: s.pcsSent,
-        rate: `₹${s.ratePerPiece}`,
+        rate: formatCurrency(s.ratePerPiece),
         billAmount: 'Pending',
         timestamp: new Date(s.date).getTime()
       });
@@ -79,8 +79,8 @@ export function Ledgers() {
         pcsSent: '-',
         pcsRecvd: r.pcsReceived,
         pcsPending: s ? (s.pcsSent - s.pcsReceived) : '-',
-        rate: s ? `₹${s.ratePerPiece}` : '-',
-        billAmount: `₹${r.billAmount}`,
+        rate: s ? formatCurrency(s.ratePerPiece) : '-',
+        billAmount: formatCurrency(r.billAmount),
         timestamp: new Date(r.date).getTime()
       });
     });

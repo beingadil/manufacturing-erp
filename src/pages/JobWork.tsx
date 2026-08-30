@@ -11,6 +11,7 @@ import { formatCurrency, formatNumber } from "../lib/utils";
 import { ErrorManagement } from '../lib/validation';
 import { ProcessingService } from '../services/ProcessingService';
 import { useERPStore } from "../store/useERPStore";
+import { PageModal } from "../components/ui/PageModal";
 
 export function JobWork() {
   const { 
@@ -807,14 +808,8 @@ export function JobWork() {
         </div>
       )}
 
-      {isSendModalOpen && !isAddProcessorOpen && !isAddMaterialOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-card rounded-2xl shadow-xl w-full max-w-2xl">
-            <div className="px-6 py-4 border-b flex justify-between">
-              <h3 className="text-lg font-bold">Send to Processor</h3>
-              <button onClick={() => { setIsSendModalOpen(false); setEditSendId(undefined); }}><X className="h-5 w-5 text-muted-foreground/80" /></button>
-            </div>
-            <form onSubmit={handleSend} className="p-6 space-y-3">
+      <PageModal isOpen={isSendModalOpen && !isAddProcessorOpen && !isAddMaterialOpen} onClose={() => setIsSendModalOpen(false)} title="Send to Processor" maxWidth="max-w-2xl">
+              <form onSubmit={handleSend} className="p-6 space-y-3">
               <div>
                 <label className="block text-sm font-medium text-foreground/80 mb-1">
 Processor
@@ -947,18 +942,10 @@ Processor
                 <button type="submit" className="flex-1 rounded-xl bg-primary p-3 text-primary-foreground font-semibold">Send Items</button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+            </PageModal>
 
-      {isReceiveModalOpen && !isAddProcessorOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-card rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="px-6 py-4 border-b flex justify-between">
-              <h3 className="text-lg font-bold">Receive from Processor</h3>
-              <button onClick={() => { setIsReceiveModalOpen(false); setEditReceiveId(undefined); }}><X className="h-5 w-5 text-muted-foreground/80" /></button>
-            </div>
-            <form onSubmit={handleReceive} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+      <PageModal isOpen={isReceiveModalOpen && !isAddProcessorOpen} onClose={() => setIsReceiveModalOpen(false)} title="Receive from Processor" maxWidth="max-w-2xl">
+              <form onSubmit={handleReceive} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
               <div>
                 <label className="block text-sm font-medium text-foreground/80 mb-1">Processor</label>
                 <SearchableSelect 
@@ -984,18 +971,10 @@ Processor
                 <button type="submit" className="flex-1 rounded-xl bg-primary p-3 text-primary-foreground font-semibold">Receive Items</button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+            </PageModal>
 
-      {isBillModalOpen && !isAddProcessorOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-card rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="px-6 py-4 border-b flex justify-between">
-              <h3 className="text-lg font-bold">Generate Processor Bill</h3>
-              <button onClick={() => { setIsBillModalOpen(false); setEditBillId(undefined); }}><X className="h-5 w-5 text-muted-foreground/80" /></button>
-            </div>
-            <form onSubmit={handleCreateBill} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+      <PageModal isOpen={isBillModalOpen && !isAddProcessorOpen} onClose={() => setIsBillModalOpen(false)} title="Create Processor Bill" maxWidth="max-w-2xl">
+              <form onSubmit={handleCreateBill} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
               <div className="flex gap-4">
                 <div className="flex-1">
                   <SearchableSelect 
@@ -1069,69 +1048,53 @@ Processor
                 <button type="submit" disabled={selectedReceiptsForBill.length === 0} className="flex-1 rounded-xl bg-primary p-3 text-primary-foreground font-semibold disabled:opacity-50">Create Bill</button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+            </PageModal>
 
-      {stageModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-card rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="px-6 py-4 border-b flex justify-between">
-              <h3 className="text-lg font-bold">{editStageId ? 'Edit Processing Stage' : 'Add Processing Stage'}</h3>
-              <button onClick={() => setStageModalOpen(false)}><X className="h-5 w-5 text-muted-foreground/80" /></button>
-            </div>
-            <form onSubmit={handleStageSubmit} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground/80 mb-1">Stage Name</label>
-                <input required value={stageName} onChange={e => setStageName(e.target.value)} placeholder="e.g. Machine, Acid, Polish" className="w-full rounded-xl border p-3 text-sm" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+      <PageModal isOpen={stageModalOpen} onClose={() => setStageModalOpen(false)} title={editStageId ? 'Edit Processing Stage' : 'Add Processing Stage'} maxWidth="max-w-2xl">
+              <form onSubmit={handleStageSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-foreground/80 mb-1">Sequence</label>
-                  <input required type="number" min="1" value={stageSequence} onChange={e => setStageSequence(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
+                  <label className="block text-sm font-medium text-foreground/80 mb-1">Stage Name</label>
+                  <input required value={stageName} onChange={e => setStageName(e.target.value)} placeholder="e.g. Machine, Acid, Polish" className="w-full rounded-xl border border-border bg-background p-3 text-sm" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-foreground/80 mb-1">Sequence</label>
+                    <input required type="number" min="1" value={stageSequence} onChange={e => setStageSequence(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground/80 mb-1">Rate Method</label>
+                    <select value={stageRateMethod} onChange={e => setStageRateMethod(e.target.value as any)} className="w-full rounded-xl border border-border bg-background p-3 text-sm">
+                      <option value="per_piece">Per Piece</option>
+                      <option value="per_kg">Per KG</option>
+                    </select>
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-foreground/80 mb-1">Rate Method</label>
-                  <select value={stageRateMethod} onChange={e => setStageRateMethod(e.target.value as any)} className="w-full rounded-xl border p-3 text-sm">
-                    <option value="per_piece">Per Piece</option>
-                    <option value="per_kg">Per KG</option>
-                  </select>
+                  <label className="block text-sm font-medium text-foreground/80 mb-1">Billing Unit</label>
+                  <input value={stageBillingUnit} onChange={e => setStageBillingUnit(e.target.value)} placeholder="e.g. Per KG" className="w-full rounded-xl border border-border bg-background p-3 text-sm" />
                 </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground/80 mb-1">Billing Unit</label>
-                <input value={stageBillingUnit} onChange={e => setStageBillingUnit(e.target.value)} placeholder="e.g. Per KG" className="w-full rounded-xl border p-3 text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground/80 mb-1">Description</label>
-                <input value={stageDescription} onChange={e => setStageDescription(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
-              </div>
-              <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2 text-sm text-foreground/80">
-                  <input type="checkbox" checked={stageBillingEnabled} onChange={e => setStageBillingEnabled(e.target.checked)} className="h-4 w-4" />
-                  Billing enabled
-                </label>
-                <label className="flex items-center gap-2 text-sm text-foreground/80">
-                  <input type="checkbox" checked={stageIsFinal} onChange={e => setStageIsFinal(e.target.checked)} className="h-4 w-4" />
-                  Final stage (produces Finished Goods)
-                </label>
-              </div>
-              <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">
-                {editStageId ? 'Save Changes' : 'Add Stage'}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+                <div>
+                  <label className="block text-sm font-medium text-foreground/80 mb-1">Description</label>
+                  <input value={stageDescription} onChange={e => setStageDescription(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" />
+                </div>
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 text-sm text-foreground/80">
+                    <input type="checkbox" checked={stageBillingEnabled} onChange={e => setStageBillingEnabled(e.target.checked)} className="h-4 w-4" />
+                    Billing enabled
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-foreground/80">
+                    <input type="checkbox" checked={stageIsFinal} onChange={e => setStageIsFinal(e.target.checked)} className="h-4 w-4" />
+                    Final stage (produces Finished Goods)
+                  </label>
+                </div>
+                <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">
+                  {editStageId ? 'Save Changes' : 'Add Stage'}
+                </button>
+              </form>
+            </PageModal>
 
-      {lossModal.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-card rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="px-6 py-4 border-b flex justify-between">
-              <h3 className="text-lg font-bold">Record Loss / Wastage</h3>
-              <button onClick={() => { setLossModal({ isOpen: false, sendId: '', dispatchNo: '', pending: 0 }); setLossQty(''); }}><X className="h-5 w-5 text-muted-foreground/80" /></button>
-            </div>
-            <form onSubmit={(e) => { e.preventDefault(); handleRecordLoss(); }} className="p-6 space-y-4">
+      <PageModal isOpen={lossModal.isOpen} onClose={() => setLossModal({...lossModal, isOpen: false})} title="Record Loss">
+              <form onSubmit={(e) => { e.preventDefault(); handleRecordLoss(); }} className="p-6 space-y-4">
               <div className="text-sm text-muted-foreground">
                 Dispatch <span className="font-mono">{lossModal.dispatchNo}</span> — pending {lossModal.pending} PCS. Loss is recorded explicitly; pending pcs can still be received later.
               </div>
@@ -1141,9 +1104,7 @@ Processor
               </div>
               <button type="submit" className="w-full rounded-xl bg-destructive p-3 text-destructive-foreground font-semibold">Record Loss</button>
             </form>
-          </div>
-        </div>
-      )}
+            </PageModal>
 
       <QuickAddProcessor 
         isOpen={isAddProcessorOpen} 
