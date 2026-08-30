@@ -36,7 +36,7 @@ done
 
 # Known false positives — items that are actually used elsewhere
 # or re-exported for bundler tree-shaking.
-BASE_SKIP='(default$|\.d\.ts$|\.test\.ts$|\.spec\.ts$|vite\.config|\.cjs$|/ui/|AppWrapper|ReportContext|\(used in module\)|CurrentStock|DispatchRegister|ReceiveRegister|SupplierPurchaseSummary|CustomerOutstandingReport|CustomerSalesSummary|TopSellingProducts|ValidationLevel|ValidationMessage|ValidationResult|IValidator|FieldValidators|BusinessValidators|ErrorManagement|ValidationEngine|PurchaseDTO|PurchaseValidator|SalesDTO|SalesValidator|ProcessingDispatchDTO|ProcessingDispatchValidator|ProcessingReceiveDTO|ProcessingReceiveValidator|VoucherDTO|VoucherValidator|Sidebar|RELEASE_DATE|DATABASE_SCHEMA_VERSION|isElectron|moduleIcon|moduleDisplayName|actionDisplayName|logAuditEvent|PermissionAction)'
+BASE_SKIP='(default$|\.d\.ts$|\.test\.ts$|\.spec\.ts$|vite\.config|\.cjs$|/ui/|AppWrapper|ReportContext|\(used in module\)|CurrentStock|DispatchRegister|ReceiveRegister|SupplierPurchaseSummary|CustomerOutstandingReport|CustomerSalesSummary|TopSellingProducts|ValidationLevel|ValidationMessage|ValidationResult|IValidator|FieldValidators|BusinessValidators|ErrorManagement|ValidationEngine|PurchaseDTO|PurchaseValidator|SalesDTO|SalesValidator|ProcessingDispatchDTO|ProcessingDispatchValidator|ProcessingReceiveDTO|ProcessingReceiveValidator|VoucherDTO|VoucherValidator|Sidebar|RELEASE_DATE|DATABASE_SCHEMA_VERSION|isElectron|moduleIcon|moduleDisplayName|actionDisplayName|logAuditEvent|PermissionAction|formatDate|formatDateISO|ProcessingRateMethod|ProcessingLossDTO|ProcessingLossValidator|ProcessingStageDTO|ProcessingStageValidator|useIsMobile)'
 
 if [ -n "$ALLOW_EXTRAS" ]; then
   SKIP="$BASE_SKIP$ALLOW_EXTRAS"
