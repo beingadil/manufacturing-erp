@@ -11,6 +11,7 @@ import { formatCurrency } from "../lib/utils";
 import { ErrorManagement } from '../lib/validation';
 import { PurchaseService } from '../services/PurchaseService';
 import { useERPStore } from "../store/useERPStore";
+import { PageModal } from "../components/ui/PageModal";
 
 export function Purchases() {
   const { purchases, materials, suppliers, vouchers } = useERPStore();
@@ -181,14 +182,8 @@ export function Purchases() {
         <VoucherHistoryTab sourceModule="Purchase" />
       )}
 
-      {isModalOpen && !isAddSupplierOpen && !isAddMaterialOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-card rounded-2xl shadow-xl w-full max-w-2xl">
-            <div className="px-6 py-4 border-b border-border/50 flex items-center justify-between sticky top-0 bg-card z-10">
-              <h3 className="text-lg font-bold">{editPurchaseId ? "Edit Purchase" : "Add Purchase"}</h3>
-              <button onClick={() => { setIsModalOpen(false); setEditPurchaseId(undefined); }}><X className="h-5 w-5 text-muted-foreground/80" /></button>
-            </div>
-            <form onSubmit={handleCreate} className="p-6 space-y-3">
+      <PageModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editPurchaseId ? 'Edit Purchase' : 'Add Purchase'}>
+              <form onSubmit={handleCreate} className="p-6 space-y-3">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-semibold">Supplier *</label>
@@ -258,9 +253,7 @@ export function Purchases() {
                 <button type="submit" className="flex-1 rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-md">Save Purchase</button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+            </PageModal>
 
       <DeleteConfirmationModal
         isOpen={deleteModal.isOpen}

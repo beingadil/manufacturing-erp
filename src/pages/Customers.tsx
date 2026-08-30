@@ -7,6 +7,7 @@ import { PartyLedgerModal } from "../components/PartyLedgerModal";
 import { KpiCard } from '../components/ui/KpiCard';
 import { cn, formatCurrency, formatNumber } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
+import { PageModal } from "../components/ui/PageModal";
 
 export function Customers() {
   const { customers, addCustomer, updateCustomer } = useERPStore();
@@ -183,28 +184,20 @@ export function Customers() {
         defaultSortKey="name"
       />
 
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-card rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="px-6 py-4 border-b flex justify-between">
-              <h3 className="text-lg font-bold">{editingCustomer ? 'Edit Customer' : 'Add Customer'}</h3>
-              <button onClick={closeModal}><X className="h-5 w-5 text-muted-foreground/80" /></button>
-            </div>
-            <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
-              <input type="text" required value={name} onChange={e => setName(e.target.value)} className="w-full rounded-xl border p-3 text-sm" placeholder="Customer Name *" />
-              <input type="text" value={contactPerson} onChange={e => setContactPerson(e.target.value)} className="w-full rounded-xl border p-3 text-sm" placeholder="Contact Person" />
-              <div className="grid grid-cols-2 gap-3">
-                <input type="text" value={phone} onChange={e => setPhone(e.target.value)} className="w-full rounded-xl border p-3 text-sm" placeholder="Phone" />
-                <input type="text" value={ntn} onChange={e => setNtn(e.target.value)} className="w-full rounded-xl border p-3 text-sm" placeholder="NTN Number" />
-              </div>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full rounded-xl border p-3 text-sm" placeholder="Email" />
-              <textarea value={address} onChange={e => setAddress(e.target.value)} rows={2} className="w-full rounded-xl border p-3 text-sm" placeholder="Address" />
-              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="w-full rounded-xl border p-3 text-sm" placeholder="Notes" />
-              <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">{editingCustomer ? 'Save Changes' : 'Add Customer'}</button>
-            </form>
-          </div>
-        </div>
-      )}
+      <PageModal isOpen={isModalOpen} onClose={closeModal} title={editingCustomer ? 'Edit Customer' : 'Add Customer'}>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <input type="text" required value={name} onChange={e => setName(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Customer Name *" />
+                <input type="text" value={contactPerson} onChange={e => setContactPerson(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Contact Person" />
+                <div className="grid grid-cols-2 gap-3">
+                  <input type="text" value={phone} onChange={e => setPhone(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Phone" />
+                  <input type="text" value={ntn} onChange={e => setNtn(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="NTN Number" />
+                </div>
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Email" />
+                <textarea value={address} onChange={e => setAddress(e.target.value)} rows={2} className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Address" />
+                <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Notes" />
+                <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">{editingCustomer ? 'Save Changes' : 'Add Customer'}</button>
+              </form>
+            </PageModal>
 
       {ledgerParty && <PartyLedgerModal party={ledgerParty} onClose={() => setLedgerParty(null)} />}
     </div>

@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import {
   AlertCircle,Bell,CheckCircle2, ChevronDown, ChevronRight, 
   Database, DownloadCloud,ExternalLink, Hash, Image as ImageIcon, Info, Monitor, Palette, RotateCw, 
@@ -105,11 +106,11 @@ function ProfileTab({ onSave, showSavedToast }: { onSave: () => void, showSavedT
     const file = e.target.files?.[0];
     if (file) {
       if (!file.type.startsWith('image/')) {
-        alert('Please upload a valid image file');
+        toast.error('Please upload a valid image file');
         return;
       }
       if (file.size > 2 * 1024 * 1024) {
-        alert('File size must be less than 2MB');
+        toast.error('File size must be less than 2MB');
         return;
       }
       const reader = new FileReader();
@@ -202,8 +203,8 @@ function BrandingTab({ onSave, showSavedToast }: { onSave: () => void, showSaved
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (!file.type.startsWith('image/')) return alert('Please upload a valid image file');
-      if (file.size > 2 * 1024 * 1024) return alert('File size must be less than 2MB');
+      if (!file.type.startsWith('image/')) return toast.error('Please upload a valid image file');
+      if (file.size > 2 * 1024 * 1024) return toast.error('File size must be less than 2MB');
       
       const reader = new FileReader();
       reader.onloadend = () => setLocal(prev => ({ ...prev, logo: reader.result as string }));
@@ -325,7 +326,7 @@ function BrandingTab({ onSave, showSavedToast }: { onSave: () => void, showSaved
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
-                      if (file.size > 500 * 1024) return alert('File size must be less than 500KB');
+                      if (file.size > 500 * 1024) return toast.error('File size must be less than 500KB');
                       const reader = new FileReader();
                       reader.onloadend = () => setLocal(p => ({ ...p, favicon: reader.result as string }));
                       reader.readAsDataURL(file);
@@ -456,15 +457,22 @@ function AdvancedTab() {
     .map(([id]) => id);
 
   const handleWipeSelected = () => {
-    if (!isAdmin) return alert('Only admins can wipe data');
-    if (selectedIds.length === 0) return alert('Select at least one module to wipe.');
+    if (!isAdmin) return toast.error('Only admins can wipe data');
+    if (selectedIds.length === 0) return toast.error('Select at least one module to wipe.');
     const labels = selectedIds.map(id => WIPE_MODULE_LABELS[id]).join('\n• ');
-    if (confirm(`WARNING: This will permanently erase the following module data. Cannot be undone.\n\n• ${labels}\n\nAre you absolutely sure?`)) {
-      wipeModules(selectedIds);
-      setSelectedWipe({});
-      alert('Selected module data has been wiped. The application will now reload.');
-      window.location.reload();
-    }
+    toast('This will permanently erase the selected module data. This cannot be undone.', {
+      action: {
+        label: 'Wipe',
+        onClick: () => {
+          wipeModules(selectedIds);
+          setSelectedWipe({});
+          toast.success('Selected module data wiped. Reloading...');
+          setTimeout(() => window.location.reload(), 1500);
+        },
+      },
+      cancel: { label: 'Cancel', onClick: () => {} },
+      duration: 10000,
+    });
   };
 
   return (
@@ -486,7 +494,7 @@ function AdvancedTab() {
                 onClick={async () => {
                   const { SeedDataService } = await import('../lib/seed/SeedDataService');
                   await SeedDataService.seedAll();
-                  alert('Demo data seeded successfully!');
+                  toast.success('Demo data seeded successfully!');
                 }}
                 className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
               >
@@ -588,12 +596,19 @@ function AdvancedTab() {
               </div>
               <button
                 onClick={() => {
-                  if (!isAdmin) return alert('Only admins can wipe all data');
-                  if (confirm('WARNING: This will permanently erase ALL ERP data stored locally. Are you absolutely sure?')) {
-                    wipeAllData();
-                    alert('All ERP data has been wiped. The application will now reload.');
-                    window.location.reload();
-                  }
+                  if (!isAdmin) return toast.error('Only admins can wipe all data');
+                  toast('This will permanently erase ALL ERP data. This cannot be undone.', {
+                    action: {
+                      label: 'Wipe All',
+                      onClick: () => {
+                        wipeAllData();
+                        toast.success('All ERP data wiped. Reloading...');
+                        setTimeout(() => window.location.reload(), 1500);
+                      },
+                    },
+                    cancel: { label: 'Cancel', onClick: () => {} },
+                    duration: 10000,
+                  });
                 }}
                 className="shrink-0 px-4 py-2 text-sm font-medium bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors flex items-center justify-center gap-2"
               >

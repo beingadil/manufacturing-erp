@@ -58,7 +58,7 @@ export function PasswordDialog({ open, onOpenChange, userName, onSubmit, isLoadi
                 <FormItem>
                   <FormLabel>New Password</FormLabel>
                   <FormControl>
-                    <Input type="password" placeholder="••••••••" {...field} />
+                    <Input type="password" autoComplete="new-password" placeholder="••••••••" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -71,7 +71,7 @@ export function PasswordDialog({ open, onOpenChange, userName, onSubmit, isLoadi
                 <FormItem>
                   <FormLabel>Confirm Password</FormLabel>
                   <FormControl>
-                    <Input type="password" placeholder="••••••••" {...field} />
+                    <Input type="password" autoComplete="new-password" placeholder="••••••••" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

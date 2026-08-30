@@ -4,6 +4,11 @@ import {AlertTriangle, CheckCircle2, Database,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from '../ui/alert-dialog';
 import { clearStorageMirrors } from '../../database/sqlite/SQLiteStorageAdapter';
 
 // ─── Single canonical backup/restore component ──────────────────────────────
@@ -45,6 +50,19 @@ export function BackupRestoreTab() {
   const [busy, setBusy] = useState<string | null>(null);
   const [lastManifest, setLastManifest] = useState<BackupManifest | null>(null);
 
+  // AlertDialog state for destructive confirmations
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    variant: 'destructive' | 'warning';
+    onConfirm: () => void;
+  }>({ open: false, title: '', description: '', variant: 'destructive', onConfirm: () => {} });
+
+  const openConfirm = (title: string, description: string, variant: 'destructive' | 'warning', onConfirm: () => void) => {
+    setConfirmDialog({ open: true, title, description, variant, onConfirm });
+  };
+
   const loadBackups = useCallback(async () => {
     setLoading(true);
     try {
@@ -84,24 +102,17 @@ export function BackupRestoreTab() {
     setBusy(null);
   };
 
-  const handleRestore = async (snapshot: Snapshot) => {
+  const executeRestore = async (snapshot: Snapshot) => {
     const db = electronDB();
     if (!db?.restore) return;
-    if (!confirm(
-      'WARNING: Restoring will replace ALL current data with this snapshot. ' +
-      'This cannot be undone.\n\nA safety backup of your current database will be created first.\n\nAre you sure?'
-    )) return;
     setBusy(snapshot.filename);
     try {
-      if (db.backup) await db.backup(); // safety backup of current state
+      if (db.backup) await db.backup();
       const res = await db.restore(snapshot.path);
       if (res.success) {
-        // The main process replaced SQLite with the snapshot. The localStorage
-        // mirrors still hold the newer pre-restore state and would override it
-        // on rehydration — clear them so the restored SQLite rows win.
         clearStorageMirrors();
-        alert('Database restored successfully. The application will now reload.');
-        window.location.reload();
+        toast.success('Database restored successfully. Reloading...');
+        setTimeout(() => window.location.reload(), 1500);
       } else {
         toast.error('Restore Failed', { description: res.error || 'Unknown error' });
       }
@@ -111,10 +122,18 @@ export function BackupRestoreTab() {
     setBusy(null);
   };
 
-  const handleDeleteBackup = async (snapshot: Snapshot) => {
+  const handleRestore = (snapshot: Snapshot) => {
+    openConfirm(
+      'Restore Database Snapshot',
+      'Restoring will replace ALL current data with this snapshot. This cannot be undone. A safety backup of your current database will be created first.',
+      'destructive',
+      () => executeRestore(snapshot)
+    );
+  };
+
+  const executeDeleteBackup = async (snapshot: Snapshot) => {
     const db = electronDB();
     if (!db?.deleteBackup) return;
-    if (!confirm(`Delete snapshot "${snapshot.filename}"?\n\nThis permanently removes this backup file.`)) return;
     setBusy(snapshot.filename);
     try {
       const res = await db.deleteBackup(snapshot.filename);
@@ -128,6 +147,15 @@ export function BackupRestoreTab() {
       toast.error('Delete Failed', { description: e.message });
     }
     setBusy(null);
+  };
+
+  const handleDeleteBackup = (snapshot: Snapshot) => {
+    openConfirm(
+      'Delete Snapshot',
+      `Delete snapshot "${snapshot.filename}"? This permanently removes this backup file.`,
+      'destructive',
+      () => executeDeleteBackup(snapshot)
+    );
   };
 
   const handleExportBackup = async () => {
@@ -151,13 +179,9 @@ export function BackupRestoreTab() {
     setBusy(null);
   };
 
-  const handleImportBackup = async () => {
+  const executeImportBackup = async () => {
     const db = electronDB();
     if (!db?.importBackup) return;
-    if (!confirm(
-      'WARNING: Importing will REPLACE ALL current data with the backup file.\n\n' +
-      'A safety backup of your current database will be created first.\n\nAre you sure?'
-    )) return;
     setBusy('import');
     try {
       const result = await db.importBackup();
@@ -165,15 +189,12 @@ export function BackupRestoreTab() {
       if (result.success) {
         const m = result.manifest as BackupManifest | undefined;
         setLastManifest(m || null);
-        // Same as restore: drop stale mirrors so rehydration reads the imported DB.
         clearStorageMirrors();
-        alert(
-          'Database imported successfully. The application will now reload.\n\n' +
-          (m
-            ? `Manifest: v${m.appVersion ?? '?'} · ${m.stores?.length ?? 0} store(s) · ${formatDate(m.createdAt ?? '')}`
-            : 'Legacy SQLite backup restored.')
-        );
-        window.location.reload();
+        const manifestInfo = m
+          ? `v${m.appVersion ?? '?'} · ${m.stores?.length ?? 0} store(s) · ${formatDate(m.createdAt ?? '')}`
+          : 'Legacy SQLite backup restored.';
+        toast.success('Database imported successfully. Reloading...', { description: manifestInfo });
+        setTimeout(() => window.location.reload(), 1500);
       } else {
         toast.error('Import Failed', { description: result.error || 'Unknown error' });
       }
@@ -181,6 +202,15 @@ export function BackupRestoreTab() {
       toast.error('Import Failed', { description: e.message });
     }
     setBusy(null);
+  };
+
+  const handleImportBackup = () => {
+    openConfirm(
+      'Import Backup',
+      'Importing will REPLACE ALL current data with the backup file. A safety backup of your current database will be created first.',
+      'destructive',
+      () => executeImportBackup()
+    );
   };
 
   const formatSize = (bytes: number) => {

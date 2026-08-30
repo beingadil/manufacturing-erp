@@ -8,6 +8,7 @@ import { SearchableSelect } from "../components/SearchableSelect";
 import { KpiCard } from '../components/ui/KpiCard';
 import { formatCurrency, formatNumber } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
+import { PageModal } from "../components/ui/PageModal";
 
 export function FinishedGoods() {
   const { products, materials, categories, sales, addProduct, updateModuleItem, removeModuleItem } = useERPStore();
@@ -198,14 +199,8 @@ export function FinishedGoods() {
         description="Are you sure you want to permanently delete this product? This cannot be undone."
       />
 
-      {isModalOpen && !isAddMaterialOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-card rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="px-6 py-4 border-b flex justify-between">
-              <h3 className="text-lg font-bold">{editingProduct ? 'Edit Product' : 'Add Product'}</h3>
-              <button onClick={closeModal}><X className="h-5 w-5 text-muted-foreground/80" /></button>
-            </div>
-            <form onSubmit={editingProduct ? handleEdit : handleCreate} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+      <PageModal isOpen={isModalOpen && !isAddMaterialOpen} onClose={closeModal} title={editingProduct ? 'Edit Product' : 'Add Finished Product'}>
+              <form onSubmit={editingProduct ? handleEdit : handleCreate} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
               <input type="text" required placeholder="Product Name" value={name} onChange={e => setName(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
               
               <div className="grid grid-cols-2 gap-3">
@@ -236,9 +231,7 @@ export function FinishedGoods() {
               <input type="text" placeholder="Description (Optional)" value={description} onChange={e => setDescription(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
               <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">{editingProduct ? 'Save Changes' : 'Save Product'}</button>
             </form>
-          </div>
-        </div>
-      )}
+            </PageModal>
 
       <QuickAddMaterial 
         isOpen={isAddMaterialOpen} 
