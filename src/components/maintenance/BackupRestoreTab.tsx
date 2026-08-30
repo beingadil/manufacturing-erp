@@ -4,11 +4,6 @@ import {AlertTriangle, CheckCircle2, Database,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel,
-  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
-  AlertDialogHeader, AlertDialogTitle,
-} from '../ui/alert-dialog';
 import { clearStorageMirrors } from '../../database/sqlite/SQLiteStorageAdapter';
 
 // ─── Single canonical backup/restore component ──────────────────────────────
@@ -51,7 +46,7 @@ export function BackupRestoreTab() {
   const [lastManifest, setLastManifest] = useState<BackupManifest | null>(null);
 
   // AlertDialog state for destructive confirmations
-  const [confirmDialog, setConfirmDialog] = useState<{
+  const [_confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
     title: string;
     description: string;

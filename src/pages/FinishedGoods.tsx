@@ -1,4 +1,4 @@
-import { Boxes, Package, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Boxes, Package, Pencil, Plus, Trash2, } from "lucide-react";
 import React, { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Column, DataTable, RowActionButton } from "../components/DataTable";

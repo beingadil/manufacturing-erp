@@ -459,7 +459,7 @@ function AdvancedTab() {
   const handleWipeSelected = () => {
     if (!isAdmin) return toast.error('Only admins can wipe data');
     if (selectedIds.length === 0) return toast.error('Select at least one module to wipe.');
-    const labels = selectedIds.map(id => WIPE_MODULE_LABELS[id]).join('\n• ');
+    const _labels = selectedIds.map(id => WIPE_MODULE_LABELS[id]).join('\n• ');
     toast('This will permanently erase the selected module data. This cannot be undone.', {
       action: {
         label: 'Wipe',

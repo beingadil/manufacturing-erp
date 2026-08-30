@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, CheckCircle2, Edit, Eye, PackageCheck, Plus, Printer, Trash2, X } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, CheckCircle2, Edit, Eye, PackageCheck, Plus, Printer, Trash2, } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from 'react-router-dom';
 import { Column, DataTable } from "../components/DataTable";
