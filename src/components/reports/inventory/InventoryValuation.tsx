@@ -5,7 +5,6 @@ import { formatCurrency, formatNumber } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
 
 export function InventoryValuation() {
-  const [_dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });
   const [search, setSearch] = useState('');
 
   const data = useMemo(() => InventoryReportService.getInventoryValuationData(search), [search]);
@@ -16,8 +15,8 @@ export function InventoryValuation() {
     <GenericReportTemplate
       title="Inventory Valuation"
       data={data}
-      onDateRangeChange={setDateRange}
       onSearch={setSearch}
+      showDateRange={false}
       kpis={[
         { title: "Valued Items", value: data.length, icon: Database },
         { title: "Total Value", value: formatCurrency(totalValue), icon: DollarSign }

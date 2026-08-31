@@ -3,7 +3,8 @@ import { Calculator, ChevronDown, ChevronRight, ChevronUp,DollarSign, Factory, F
   Search, 
   ShoppingCart, X 
 } from "lucide-react";
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { FinancialReports } from '../components/reports/financial/FinancialReports';
 import { InventoryReports } from '../components/reports/inventory/InventoryReports';
 import { ProcessingReports } from '../components/reports/processing/ProcessingReports';
@@ -38,7 +39,6 @@ const REPORT_CATEGORIES = [
     reports: [
       { id: 'sales-register', label: 'Sales Register' },
       { id: 'sales-summary', label: 'Sales Summary' },
-      { id: 'customer-sales', label: 'Sales by Customer' },
       { id: 'product-sales', label: 'Sales by Product' },
       { id: 'sales-trend', label: 'Sales Trend' },
       { id: 'product-sales-analysis', label: 'Product Sales Analysis' },
@@ -55,14 +55,13 @@ const REPORT_CATEGORIES = [
     reports: [
       { id: 'processing-dispatch', label: 'Dispatch Register' },
       { id: 'processing-receive', label: 'Receive Register' },
-      { id: 'pending-processing', label: 'Pending Processing' },
+      { id: 'pending-pcs', label: 'Pending PCS Report' },
       { id: 'processor-billing', label: 'Processing Billing' },
       { id: 'processor-ledger', label: 'Processor Ledger' },
       { id: 'processing-charges', label: 'Processing Charges' },
       { id: 'processing-efficiency', label: 'Processing Efficiency' },
       { id: 'processing-loss', label: 'Processing Loss/Wastage' },
-      { id: 'processor-performance', label: 'Processor Performance' },
-      { id: 'pending-pcs', label: 'Pending PCS Report' }
+      { id: 'processor-performance', label: 'Processor Performance' }
     ]
   },
   {
@@ -77,8 +76,7 @@ const REPORT_CATEGORIES = [
       { id: 'low-stock', label: 'Low Stock' },
       { id: 'out-of-stock', label: 'Out of Stock' },
       { id: 'inventory-valuation', label: 'Inventory Valuation' },
-      { id: 'batch-history', label: 'Batch History' },
-      { id: 'lot-history', label: 'Lot History' },
+      { id: 'lot-history', label: 'Lot / Batch History' },
       { id: 'inventory-aging', label: 'Inventory Aging' },
       { id: 'inventory-turnover', label: 'Inventory Turnover' },
       { id: 'stock-adjustment', label: 'Stock Adjustment Report' },
@@ -115,10 +113,25 @@ interface SearchResult {
 }
 
 export function Reports() {
-  const [activeCategory, setActiveCategory] = useState('purchase');
-  const [activeReport, setActiveReport] = useState('purchase-register');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeCategory, setActiveCategory] = useState(() => searchParams.get('cat') || 'purchase');
+  const [activeReport, setActiveReport] = useState(() => searchParams.get('rep') || 'purchase-register');
   const [searchTerm, setSearchTerm] = useState('');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
+  // Keep the active report/category synced to the URL (?cat=&rep=) so refresh,
+  // back/forward and deep links preserve position.
+  useEffect(() => {
+    const current = searchParams.get('cat');
+    const rep = searchParams.get('rep');
+    if (current !== activeCategory || rep !== activeReport) {
+      const params = new URLSearchParams(searchParams);
+      params.set('cat', activeCategory);
+      params.set('rep', activeReport);
+      setSearchParams(params, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCategory, activeReport]);
 
   const currentCategory = REPORT_CATEGORIES.find(c => c.id === activeCategory);
   const currentReportName = currentCategory?.reports.find(r => r.id === activeReport)?.label || '';
@@ -294,32 +307,75 @@ export function Reports() {
       {/* Mobile Category Select */}
       <div className="md:hidden w-full border-b border-border bg-card p-3 absolute top-16 left-0 right-0 z-20 space-y-2">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/70" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/70" aria-hidden="true" />
           <input
             type="text"
+            aria-label="Search reports"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search reports..."
-            className="w-full h-9 pl-9 pr-3 bg-muted/40 border border-border rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+            className="w-full h-9 pl-9 pr-8 bg-muted/40 border border-border rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
           />
+          {searchActive && (
+            <button
+              onClick={() => setSearchTerm('')}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
-        <select
-          value={`${activeCategory}:${activeReport}`}
-          onChange={(e) => {
-            const [cat, rep] = e.target.value.split(':');
-            setActiveCategory(cat);
-            setActiveReport(rep);
-          }}
-          className="w-full bg-muted border-none rounded-xl text-sm font-medium py-2 px-3 focus:ring-2 focus:ring-primary"
-        >
-          {REPORT_CATEGORIES.map(cat => (
-            <optgroup key={cat.id} label={cat.label}>
-              {cat.reports.map(rep => (
-                <option key={rep.id} value={`${cat.id}:${rep.id}`}>{rep.label}</option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
+        {searchActive ? (
+          <div className="bg-card rounded-xl border border-border overflow-hidden">
+            <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/50">
+              {filteredResults.length > 0 ? `${filteredResults.length} result${filteredResults.length === 1 ? '' : 's'}` : 'No results'}
+            </div>
+            {filteredResults.length === 0 ? (
+              <div className="px-4 py-6 text-center">
+                <p className="text-sm text-muted-foreground">No reports match</p>
+                <p className="text-xs text-muted-foreground/70 mt-0.5">Try a different keyword</p>
+              </div>
+            ) : (
+              <div className="max-h-72 overflow-y-auto">
+                {filteredResults.map((result) => (
+                  <button
+                    key={result.id}
+                    onClick={() => selectSearchResult(result)}
+                    className={cn(
+                      "w-full text-left px-3 py-2 rounded-lg transition-colors",
+                      activeReport === result.id && activeCategory === result.categoryId
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    )}
+                  >
+                    <span className="text-sm font-medium flex items-center gap-2">{result.label}</span>
+                    <span className="block text-[10px] text-muted-foreground/80 mt-0.5">{result.categoryLabel}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <select
+            value={`${activeCategory}:${activeReport}`}
+            onChange={(e) => {
+              const [cat, rep] = e.target.value.split(':');
+              setActiveCategory(cat);
+              setActiveReport(rep);
+            }}
+            aria-label="Select report"
+            className="w-full bg-muted border-none rounded-xl text-sm font-medium py-2 px-3 focus:ring-2 focus:ring-primary"
+          >
+            {REPORT_CATEGORIES.map(cat => (
+              <optgroup key={cat.id} label={cat.label}>
+                {cat.reports.map(rep => (
+                  <option key={rep.id} value={`${cat.id}:${rep.id}`}>{rep.label}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Main Content Area */}

@@ -32,6 +32,10 @@ interface DataTableProps<T> {
   emptyStateHint?: string;
   defaultSortKey?: string;
   itemsPerPageOptions?: number[];
+  /** Render without the card chrome (used when wrapped in an outer card). */
+  embedded?: boolean;
+  /** Optional footer row rendered after the data rows (e.g. column totals). */
+  summaryRow?: React.ReactNode[];
 }
 
 /**
@@ -52,7 +56,9 @@ function DataTableInner<T extends Record<string, any>>({
   emptyStateIcon = <FileText className="h-8 w-8 mb-3 mx-auto text-muted-foreground/40" />,
   emptyStateHint,
   defaultSortKey,
-  itemsPerPageOptions = [10, 25, 50, 100]
+  itemsPerPageOptions = [10, 25, 50, 100],
+  embedded = false,
+  summaryRow
 }: DataTableProps<T>) {
   // Try to load state from localStorage if persistKey is provided
   const loadState = (key: string, defaultValue: any) => {
@@ -137,7 +143,10 @@ function DataTableInner<T extends Record<string, any>>({
     "p-2 rounded-lg border border-border text-muted-foreground hover:bg-muted/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-150";
 
   return (
-    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col">
+    <div className={cn(
+      "flex flex-col",
+      !embedded && "rounded-2xl border border-border bg-card shadow-sm overflow-hidden"
+    )}>
       <div className="p-4 border-b border-border/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-card">
         {searchKeys && searchKeys.length > 0 ? (
           <div className="relative flex-1 w-full sm:max-w-sm">
@@ -222,13 +231,22 @@ function DataTableInner<T extends Record<string, any>>({
                 {columns.map((col) => (
                   <td 
                     key={col.key} 
-                    className={`px-6 py-4 tabular-nums ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : ''}`}
+                    className={`px-6 py-4 ${col.align === 'right' ? 'text-right tabular-nums' : col.align === 'center' ? 'text-center' : ''}`}
                   >
                     {col.render ? col.render(item) : item[col.key]}
                   </td>
                 ))}
               </tr>
             ))}
+            {summaryRow && (
+              <tr className="border-t-2 border-border bg-muted/40 font-semibold text-foreground">
+                {summaryRow.map((cell, i) => (
+                  <td key={i} className={`px-6 py-4 ${columns[i]?.align === 'right' ? 'text-right tabular-nums' : ''}`}>
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            )}
             {paginatedData.length === 0 && (
               <tr>
                 <td colSpan={columns.length} className="px-6 py-12 text-center text-muted-foreground">

@@ -30,7 +30,7 @@ export function CustomerLedgerSummary() {
         { key: "transactions", label: "Transactions", align: "right" },
         { key: "totalDebit", label: "Total Debit (Sales)", align: "right", render: (item) => formatCurrency(item.totalDebit) },
         { key: "totalCredit", label: "Total Credit (Receipts)", align: "right", render: (item) => formatCurrency(item.totalCredit) },
-        { key: "netChange", label: "Net Change", align: "right", render: (item) => <span className={item.netChange > 0 ? "text-emerald-600 font-medium" : "text-rose-600 font-medium"}>{formatCurrency(Math.abs(item.netChange))} {item.netChange > 0 ? 'Dr' : 'Cr'}</span> }
+        { key: "netChange", label: "Net Change", align: "right", render: (item) => <span className={item.netChange > 0 ? "text-success font-medium" : "text-destructive font-medium"}>{formatCurrency(Math.abs(item.netChange))} {item.netChange > 0 ? 'Dr' : 'Cr'}</span> }
       ]}
       exportDataMapping={(item) => ({
         ...item,

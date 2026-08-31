@@ -51,7 +51,7 @@ export function SupplierOutstandingReport() {
         }},
         { key: "contact", label: "Contact Info" },
         { key: "status", label: "Status" },
-        { key: "balance", label: "Outstanding Balance", align: "right", render: (item) => <span className={item.balance > 0 ? "text-rose-600 font-medium" : "text-emerald-600 font-medium"}>{formatCurrency(Math.abs(item.balance))} {item.balance > 0 ? 'Cr' : 'Dr'}</span> }
+        { key: "balance", label: "Outstanding Balance", align: "right", render: (item) => <span className={item.balance > 0 ? "text-destructive font-medium" : "text-success font-medium"}>{formatCurrency(Math.abs(item.balance))} {item.balance > 0 ? 'Cr' : 'Dr'}</span> }
       ]}
       exportDataMapping={(item) => ({
         ...item,

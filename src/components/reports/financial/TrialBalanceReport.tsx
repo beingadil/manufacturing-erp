@@ -39,6 +39,11 @@ export function TrialBalanceReport() {
         credit: item.credit > 0 ? formatCurrency(item.credit) : ''
       })}
       summaryRows={[[{ type: 'TOTAL', debit: formatCurrency(totalDebit), credit: formatCurrency(totalCredit) }]]}
+      tableSummaryRow={[
+        'TOTAL', '', '',
+        formatCurrency(totalDebit),
+        formatCurrency(totalCredit)
+      ]}
     />
   );
 }

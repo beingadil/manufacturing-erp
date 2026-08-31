@@ -1,7 +1,7 @@
 import { Activity, DollarSign, Package } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { SalesReportService } from "../../../lib/reporting/SalesReportService";
-import { formatCurrency } from '../../../lib/utils';
+import { formatCurrency, formatPercent } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
 
 export function ProfitByProduct() {
@@ -28,15 +28,18 @@ export function ProfitByProduct() {
         { key: "productName", label: "Product Name" },
         { key: "revenue", label: "Revenue", align: "right", render: (item) => formatCurrency(item.revenue) },
         { key: "cost", label: "Est. Cost", align: "right", render: (item) => formatCurrency(item.cost) },
-        { key: "profit", label: "Profit", align: "right", render: (item) => <span className="font-medium text-emerald-600">{formatCurrency(item.profit)}</span> },
-        { key: "margin", label: "Margin", align: "right", render: (item) => `${item.margin.toFixed(2)}%` }
+        { key: "profit", label: "Profit", align: "right", render: (item) => {
+          const tone = item.profit > 0 ? 'text-success' : item.profit < 0 ? 'text-destructive' : 'text-muted-foreground';
+          return <span className={`font-medium ${tone}`}>{formatCurrency(item.profit)}</span>;
+        } },
+        { key: "margin", label: "Margin", align: "right", render: (item) => formatPercent(item.margin / 100) }
       ]}
       exportDataMapping={(item) => ({
         ...item,
         revenue: formatCurrency(item.revenue),
         cost: formatCurrency(item.cost),
         profit: formatCurrency(item.profit),
-        margin: `${item.margin.toFixed(2)}%`
+        margin: formatPercent(item.margin / 100)
       })}
     />
   );

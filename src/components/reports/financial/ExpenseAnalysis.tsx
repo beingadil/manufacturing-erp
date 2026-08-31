@@ -1,7 +1,7 @@
 import { Calculator, DollarSign, } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { FinancialReportService } from "../../../lib/reporting/FinancialReportService";
-import { formatCurrency } from '../../../lib/utils';
+import { formatCurrency, formatPercent } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
 
 export function ExpenseAnalysis() {
@@ -27,14 +27,14 @@ export function ExpenseAnalysis() {
         { key: "code", label: "Account Code" },
         { key: "accountName", label: "Expense Account" },
         { key: "balance", label: "Amount", align: "right", render: (item) => formatCurrency(item.balance) },
-        { key: "percentage", label: "% of Total", align: "right", render: (item) => `${item.percentage.toFixed(2)}%` }
+        { key: "percentage", label: "% of Total", align: "right", render: (item) => formatPercent(item.percentage / 100) }
       ]}
       exportDataMapping={(item) => ({
         ...item,
         balance: formatCurrency(item.balance),
-        percentage: `${item.percentage.toFixed(2)}%`
+        percentage: formatPercent(item.percentage / 100)
       })}
-      summaryRows={[[{ accountName: 'TOTAL EXPENSES', balance: formatCurrency(grandTotal), percentage: '100.00%' }]]}
+      summaryRows={[[{ accountName: 'TOTAL EXPENSES', balance: formatCurrency(grandTotal), percentage: formatPercent(1) }]]}
     />
   );
 }

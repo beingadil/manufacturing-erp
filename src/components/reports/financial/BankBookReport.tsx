@@ -24,7 +24,7 @@ export function BankBookReport() {
         { key: "date", label: "Date", render: (item) => format(new Date(item.date), 'dd-MMM-yyyy') },
         { key: "voucherNo", label: "Voucher No" },
         { key: "accountName", label: "Bank Account" },
-        { key: "type", label: "Type", render: (item) => <span className={item.type === 'Debit' ? "text-emerald-600" : "text-rose-600"}>{item.type === 'Debit' ? 'Receipt' : 'Payment'}</span> },
+        { key: "type", label: "Type", render: (item) => <span className={item.type === 'Debit' ? "text-success" : "text-destructive"}>{item.type === 'Debit' ? 'Receipt' : 'Payment'}</span> },
         { key: "amount", label: "Amount", align: "right", render: (item) => formatCurrency(item.amount) },
         { key: "runningBalance", label: "Balance", align: "right", render: (item) => <span className="font-medium">{formatCurrency(item.runningBalance)}</span> }
       ]}

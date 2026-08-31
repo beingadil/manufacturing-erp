@@ -45,7 +45,7 @@ export function GeneralLedgerReport() {
           { key: "accountName", label: "Account" },
           { key: "partyName", label: "Party" },
           { key: "description", label: "Description", render: (item) => <span className="truncate max-w-[200px] block" title={item.description}>{item.description}</span> },
-          { key: "type", label: "Type", render: (item) => <span className={item.type === 'Debit' ? "text-emerald-600" : "text-rose-600"}>{item.type}</span> },
+          { key: "type", label: "Type", render: (item) => <span className={item.type === 'Debit' ? "text-success" : "text-destructive"}>{item.type}</span> },
           { key: "amount", label: "Amount", align: "right", render: (item) => formatCurrency(item.amount) }
         ]}
         exportDataMapping={(item) => ({

@@ -30,7 +30,7 @@ export function SupplierLedgerSummary() {
         { key: "transactions", label: "Transactions", align: "right" },
         { key: "totalDebit", label: "Total Debit (Payments)", align: "right", render: (item) => formatCurrency(item.totalDebit) },
         { key: "totalCredit", label: "Total Credit (Purchases)", align: "right", render: (item) => formatCurrency(item.totalCredit) },
-        { key: "netChange", label: "Net Change", align: "right", render: (item) => <span className={item.netChange > 0 ? "text-rose-600 font-medium" : "text-emerald-600 font-medium"}>{formatCurrency(Math.abs(item.netChange))} {item.netChange > 0 ? 'Cr' : 'Dr'}</span> }
+        { key: "netChange", label: "Net Change", align: "right", render: (item) => <span className={item.netChange > 0 ? "text-destructive font-medium" : "text-success font-medium"}>{formatCurrency(Math.abs(item.netChange))} {item.netChange > 0 ? 'Cr' : 'Dr'}</span> }
       ]}
       exportDataMapping={(item) => ({
         ...item,

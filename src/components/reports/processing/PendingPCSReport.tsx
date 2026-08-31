@@ -5,7 +5,6 @@ import { formatNumber } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
 
 export function PendingPCSReport() {
-  const [_dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });
   const [search, setSearch] = useState('');
 
   const data = useMemo(() => ProcessingReportService.getPendingPCSReportData(search), [search]);
@@ -16,8 +15,8 @@ export function PendingPCSReport() {
     <GenericReportTemplate
       title="Pending PCS Report"
       data={data}
-      onDateRangeChange={setDateRange}
       onSearch={setSearch}
+      showDateRange={false}
       kpis={[
         { title: "Pending Orders", value: data.length, icon: Factory },
         { title: "Total Pending PCS", value: formatNumber(totalPending), icon: AlertCircle }
@@ -27,7 +26,7 @@ export function PendingPCSReport() {
         { key: "processorName", label: "Processor" },
         { key: "materialName", label: "Material" },
         { key: "sentPcs", label: "Sent PCS", align: "right", render: (item) => formatNumber(item.sentPcs) },
-        { key: "pendingPcs", label: "Pending PCS", align: "right", render: (item) => <span className="font-medium text-rose-600">{formatNumber(item.pendingPcs)}</span> }
+        { key: "pendingPcs", label: "Pending PCS", align: "right", render: (item) => <span className="font-medium text-destructive">{formatNumber(item.pendingPcs)}</span> }
       ]}
       exportDataMapping={(item) => ({
         ...item,

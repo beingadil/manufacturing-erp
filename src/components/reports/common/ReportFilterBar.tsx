@@ -1,4 +1,4 @@
-import { Calendar as CalendarIcon, Search, SlidersHorizontal, } from 'lucide-react';
+import { Calendar as CalendarIcon, Search, SlidersHorizontal } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { ReportExportBar } from './ReportExportBar';
 
@@ -65,18 +65,17 @@ export const DATE_RANGE_OPTIONS = [
   },
   { label: 'Current Financial Year', getValue: () => { 
       const d = new Date();
-      // Assuming Financial Year starts in July, adjust as needed. Let's use April for general standard or July.
-      // The requirement doesn't specify, so let's assume Jan to Dec for simplicity, or we can use 01-Apr to 31-Mar
+      // Pakistan fiscal year: 1 July - 30 June (July-start).
       const currentMonth = d.getMonth();
-      const startYear = currentMonth >= 3 ? d.getFullYear() : d.getFullYear() - 1;
-      return { start: new Date(startYear, 3, 1).toISOString(), end: new Date(startYear + 1, 2, 31).toISOString() }; 
+      const startYear = currentMonth >= 6 ? d.getFullYear() : d.getFullYear() - 1;
+      return { start: new Date(startYear, 6, 1).toISOString(), end: new Date(startYear + 1, 5, 30).toISOString() }; 
     } 
   },
   { label: 'Previous Financial Year', getValue: () => { 
       const d = new Date();
       const currentMonth = d.getMonth();
-      const startYear = currentMonth >= 3 ? d.getFullYear() - 1 : d.getFullYear() - 2;
-      return { start: new Date(startYear, 3, 1).toISOString(), end: new Date(startYear + 1, 2, 31).toISOString() }; 
+      const startYear = currentMonth >= 6 ? d.getFullYear() - 1 : d.getFullYear() - 2;
+      return { start: new Date(startYear, 6, 1).toISOString(), end: new Date(startYear + 1, 5, 30).toISOString() }; 
     } 
   },
   { label: 'Custom Date Range', getValue: () => ({ start: '', end: '' }) }
@@ -122,9 +121,10 @@ export function ReportFilterBar({
           {showDateRange && (
             <div className="flex items-center gap-2 w-full sm:w-auto">
               <div className="relative w-full sm:w-48">
-                <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 <select 
-                  className="w-full pl-9 pr-8 py-2 bg-muted/50 border border-transparent hover:border-border focus:bg-background rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all appearance-none cursor-pointer"
+                  aria-label="Date range"
+                  className="w-full pl-9 pr-8 py-2 bg-muted/50 border border-transparent hover:border-border focus:bg-background rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/50 transition-[border-color,box-shadow,background-color] appearance-none cursor-pointer"
                   value={selectedRangeIndex}
                   onChange={(e) => setSelectedRangeIndex(Number(e.target.value))}
                 >
@@ -136,9 +136,9 @@ export function ReportFilterBar({
               
               {DATE_RANGE_OPTIONS[selectedRangeIndex].label === 'Custom Date Range' && (
                 <div className="flex items-center gap-2">
-                  <input type="date" className="px-3 py-2 bg-muted/50 border border-transparent hover:border-border focus:bg-background rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" value={customStart} onChange={e => setCustomStart(e.target.value)} />
+                  <input type="date" aria-label="Custom range start" className="px-3 py-2 bg-muted/50 border border-transparent hover:border-border focus:bg-background rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" value={customStart} onChange={e => setCustomStart(e.target.value)} />
                   <span className="text-muted-foreground">to</span>
-                  <input type="date" className="px-3 py-2 bg-muted/50 border border-transparent hover:border-border focus:bg-background rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" value={customEnd} onChange={e => setCustomEnd(e.target.value)} />
+                  <input type="date" aria-label="Custom range end" className="px-3 py-2 bg-muted/50 border border-transparent hover:border-border focus:bg-background rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" value={customEnd} onChange={e => setCustomEnd(e.target.value)} />
                 </div>
               )}
             </div>
@@ -146,16 +146,17 @@ export function ReportFilterBar({
 
           {onSearch && (
             <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
               <input
                 type="text"
-                placeholder="Search report data..."
+                placeholder="Search report data…"
+                aria-label="Search report data"
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value);
                   onSearch(e.target.value);
                 }}
-                className="w-full pl-9 pr-4 py-2 bg-muted/50 border border-transparent hover:border-border focus:bg-background rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
+                className="w-full pl-9 pr-4 py-2 bg-muted/50 border border-transparent hover:border-border focus:bg-background rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-[border-color,box-shadow,background-color]"
               />
             </div>
           )}
@@ -167,7 +168,7 @@ export function ReportFilterBar({
               onClick={onFilterClick}
               className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-card text-sm font-medium text-foreground hover:bg-muted transition-colors whitespace-nowrap"
             >
-              <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+              <SlidersHorizontal className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
               <span className="hidden sm:inline">Advanced Filters</span>
               <span className="sm:hidden">Filters</span>
             </button>

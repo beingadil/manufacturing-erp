@@ -1,5 +1,4 @@
 
-import { BatchHistory } from './BatchHistory';
 import { CurrentStockReport } from './CurrentStockReport';
 import { FinishedGoodsStock } from './FinishedGoodsStock';
 import { InventoryAging } from './InventoryAging';
@@ -22,7 +21,6 @@ export function InventoryReports({ activeReport }: { activeReport: string }) {
     case 'low-stock': return <LowStockReport />;
     case 'out-of-stock': return <OutOfStock />;
     case 'inventory-valuation': return <InventoryValuation />;
-    case 'batch-history': return <BatchHistory />;
     case 'lot-history': return <LotHistory />;
     case 'inventory-aging': return <InventoryAging />;
     case 'inventory-turnover': return <InventoryTurnover />;

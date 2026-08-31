@@ -48,7 +48,7 @@ export function CustomerOutstanding() {
         }},
         { key: "contact", label: "Contact Info" },
         { key: "status", label: "Status" },
-        { key: "balance", label: "Outstanding Balance", align: "right", render: (item) => <span className={item.balance > 0 ? "text-emerald-600 font-medium" : "text-rose-600 font-medium"}>{formatCurrency(Math.abs(item.balance))} {item.balance > 0 ? 'Dr' : 'Cr'}</span> }
+        { key: "balance", label: "Outstanding Balance", align: "right", render: (item) => <span className={item.balance > 0 ? "text-success font-medium" : "text-destructive font-medium"}>{formatCurrency(Math.abs(item.balance))} {item.balance > 0 ? 'Dr' : 'Cr'}</span> }
       ]}
       exportDataMapping={(item) => ({
         ...item,

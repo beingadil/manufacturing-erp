@@ -1,7 +1,7 @@
 import { DollarSign, Percent } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { SalesReportService } from "../../../lib/reporting/SalesReportService";
-import { formatCurrency, } from '../../../lib/utils';
+import { formatCurrency, formatPercent } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
 
 export function SalesComparison() {
@@ -23,20 +23,26 @@ export function SalesComparison() {
       kpis={[
         { title: "Current Revenue", value: formatCurrency(totalCurrent), icon: DollarSign },
         { title: "Previous Revenue", value: formatCurrency(totalPrev), icon: DollarSign },
-        { title: "Growth %", value: `${totalGrowth.toFixed(2)}%`, icon: Percent }
+        { title: "Growth %", value: formatPercent(totalGrowth / 100), icon: Percent }
       ]}
       columns={[
         { key: "productName", label: "Product Name" },
         { key: "currentAmount", label: "Current Revenue", align: "right", render: (item) => formatCurrency(item.currentAmount) },
         { key: "prevAmount", label: "Prev Revenue", align: "right", render: (item) => formatCurrency(item.prevAmount) },
-        { key: "growth", label: "Growth", align: "right", render: (item) => <span className={item.growth > 0 ? "text-emerald-600" : "text-rose-600"}>{item.growth > 0 ? '+' : ''}{item.growth.toFixed(2)}%</span> }
+        { key: "growth", label: "Growth", align: "right", render: (item) => <span className={item.growth > 0 ? "text-success" : item.growth < 0 ? "text-destructive" : "text-muted-foreground"}>{item.growth > 0 ? '+' : ''}{formatPercent(item.growth / 100)}</span> }
       ]}
       exportDataMapping={(item) => ({
         ...item,
         currentAmount: formatCurrency(item.currentAmount),
         prevAmount: formatCurrency(item.prevAmount),
-        growth: `${item.growth > 0 ? '+' : ''}${item.growth.toFixed(2)}%`
+        growth: `${item.growth > 0 ? '+' : ''}${formatPercent(item.growth / 100)}`
       })}
+      tableSummaryRow={[
+        'TOTAL',
+        formatCurrency(totalCurrent),
+        formatCurrency(totalPrev),
+        <span className={totalGrowth > 0 ? "text-success" : totalGrowth < 0 ? "text-destructive" : "text-muted-foreground"}>{formatPercent(totalGrowth / 100)}</span>
+      ]}
     />
   );
 }

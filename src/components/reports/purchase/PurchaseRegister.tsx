@@ -1,3 +1,4 @@
+import { format } from 'date-fns';
 import { DollarSign, Hash, Scale, ShoppingCart } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { PurchaseReportService } from '../../../lib/reporting/PurchaseReportService';
@@ -30,24 +31,31 @@ export function PurchaseRegister() {
         { title: "Total Amount", value: formatCurrency(totalAmount), icon: DollarSign }
       ]}
       columns={[
-        { key: "date", label: "Date", sortable: true },
+        { key: "date", label: "Date", sortable: true, render: (item) => format(new Date(item.date), 'dd-MMM-yyyy') },
         { key: "purchaseNo", label: "Purchase No", sortable: true },
         { key: "supplierName", label: "Supplier", sortable: true },
         { key: "materialName", label: "Material", sortable: true },
-        { key: "weight", label: "Weight", align: "right" },
-        { key: "calculatedPcs", label: "PCS", align: "right" },
-        { key: "ratePerUnit", label: "Rate", align: "right" },
-        { key: "amount", label: "Amount", align: "right" }
+        { key: "weight", label: "Weight", align: "right", render: (item) => `${formatNumber(item.weight)} ${item.weightUnit || 'KGs'}` },
+        { key: "calculatedPcs", label: "PCS", align: "right", render: (item) => formatNumber(item.calculatedPcs) },
+        { key: "ratePerUnit", label: "Rate", align: "right", render: (item) => formatCurrency(item.ratePerUnit) },
+        { key: "amount", label: "Amount", align: "right", render: (item) => formatCurrency(item.amount) }
       ]}
       exportDataMapping={(item) => ({
         ...item,
         date: item.date,
-        weight: `${formatNumber(item.weight)} ${item.weightUnit}`,
+        weight: `${formatNumber(item.weight)} ${item.weightUnit || 'KGs'}`,
         calculatedPcs: formatNumber(item.calculatedPcs),
         ratePerUnit: formatCurrency(item.ratePerUnit),
         amount: formatCurrency(item.amount)
       })}
-      summaryRows={[[{ ratePerUnit: 'TOTAL', amount: formatCurrency(totalAmount) }]]}
+      summaryRows={[[{ amount: 'TOTAL', ratePerUnit: formatCurrency(totalAmount) }]]}
+      tableSummaryRow={[
+        'TOTAL', '', '', '',
+        `${formatNumber(totalWeight)} KGs`,
+        formatNumber(totalPcs),
+        '',
+        formatCurrency(totalAmount)
+      ]}
     />
   );
 }

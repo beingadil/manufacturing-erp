@@ -30,7 +30,7 @@ export function ProcessingDispatchReport() {
       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
         item.status === 'Closed' ? 'bg-success/20 text-success' :
         item.status === 'Partial' ? 'bg-warning/20 text-warning' :
-        'bg-info/20 text-blue-700'
+        'bg-info/20 text-info'
       }`}>
         {item.status}
       </span>
