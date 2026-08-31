@@ -15,6 +15,9 @@ export function CustomerOutstanding() {
 
   const data = useMemo(() => SalesReportService.getCustomerOutstandingData(dateRange, search), [dateRange, search]);
 
+  // Precompute a name->account map once instead of accounts.find per row per render.
+  const accountByName = useMemo(() => new Map(accounts.map(a => [a.name, a])), [accounts]);
+
   const totalReceivable = data.reduce((sum, item) => sum + (item.balance > 0 ? item.balance : 0), 0);
 
   return (
@@ -29,7 +32,7 @@ export function CustomerOutstanding() {
       ]}
       columns={[
         { key: "customerName", label: "Customer Name", render: (item) => {
-          const acc = accounts.find(a => a.name === item.customerName);
+          const acc = accountByName.get(item.customerName);
           return (
             <button
               onClick={() => {

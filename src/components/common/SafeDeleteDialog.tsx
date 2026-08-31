@@ -115,7 +115,7 @@ export function SafeDeleteDialog({
             disabled={isDeleting || (step === 2 && authCode !== actionType.toUpperCase())}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            {isDeleting ? "Processing..." : step === 1 && requiresAuth ? "Continue" : `Confirm ${actionType}`}
+            {isDeleting ? "Processing…" : step === 1 && requiresAuth ? "Continue" : `Confirm ${actionType}`}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

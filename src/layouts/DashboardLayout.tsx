@@ -267,6 +267,7 @@ function NotificationBell() {
     <div ref={wrapperRef} className="relative">
       <button 
         onClick={() => setIsOpen(!isOpen)}
+        aria-label={isOpen ? 'Close notifications' : 'Open notifications'}
         className="relative p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
       >
         <Bell className="h-5 w-5" />
@@ -292,7 +293,7 @@ function NotificationBell() {
             {recentActivity.length > 0 ? (
               <div className="divide-y divide-border/50">
                 {recentActivity.map(activity => (
-                  <div 
+                  <button
                     key={activity.id}
                     onClick={() => {
                       const newRead = new Set(readIds);
@@ -300,7 +301,7 @@ function NotificationBell() {
                       setReadIds(newRead);
                     }}
                     className={cn(
-                      "px-4 py-3 hover:bg-muted/40 cursor-pointer transition-colors flex gap-3",
+                      "w-full text-left px-4 py-3 hover:bg-muted/40 transition-colors flex gap-3",
                       !readIds.has(activity.id) && "bg-info/10"
                     )}
                   >
@@ -316,7 +317,7 @@ function NotificationBell() {
                         {new Date(activity.date).toLocaleDateString()}
                       </span>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             ) : (
@@ -429,6 +430,7 @@ export function DashboardLayout() {
         <div className="flex items-center gap-4">
           <button 
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
             className="p-2 -ml-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg lg:hidden"
           >
             {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -465,6 +467,7 @@ export function DashboardLayout() {
         <div className="flex items-center gap-1 sm:gap-3">
           <button 
             onClick={() => setTheme(isDarkMode ? 'light' : 'dark')}
+            aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
             className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
             title="Toggle Theme"
           >
@@ -485,6 +488,7 @@ export function DashboardLayout() {
           </div>
           <button 
             onClick={signOut}
+            aria-label="Sign out"
             className="p-2 ml-2 text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
             title="Sign Out"
           >
@@ -529,7 +533,14 @@ export function DashboardLayout() {
         </div>
       </aside>
 
-      <main className={cn(
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-foreground focus:ring-2 focus:ring-ring"
+      >
+        Skip to main content
+      </a>
+
+      <main id="main-content" className={cn(
         "pt-16 min-h-screen transition-all duration-300",
         "lg:pl-64"
       )}>

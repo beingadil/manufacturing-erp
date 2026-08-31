@@ -134,7 +134,7 @@ export function DataIntegrityTab() {
         </div>
         <Button onClick={runIntegrityCheck} disabled={isScanning}>
           <RefreshCw className={`h-4 w-4 mr-2 ${isScanning ? 'animate-spin' : ''}`} />
-          {isScanning ? 'Scanning Database...' : 'Run Full Scan'}
+          {isScanning ? 'Scanning Database…' : 'Run Full Scan'}
         </Button>
       </CardHeader>
       <CardContent className="flex-1">

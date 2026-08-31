@@ -270,7 +270,7 @@ export function BackupRestoreTab() {
               className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
               {busy === 'create' ? <Loader2 className="h-4 w-4 animate-spin" /> : <DownloadCloud className="h-4 w-4" />}
-              {busy === 'create' ? 'Backing up...' : 'Create Backup'}
+              {busy === 'create' ? 'Backing up…' : 'Create Backup'}
             </button>
             <button
               onClick={handleExportBackup}
@@ -278,7 +278,7 @@ export function BackupRestoreTab() {
               className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium bg-secondary text-secondary-foreground rounded-xl hover:bg-secondary/80 transition-colors disabled:opacity-50"
             >
               {busy === 'export' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-              {busy === 'export' ? 'Exporting...' : 'Export Backup (.merpbak)'}
+              {busy === 'export' ? 'Exporting' : 'Export Backup (.merpbak)'}
             </button>
             <button
               onClick={handleImportBackup}
@@ -286,7 +286,7 @@ export function BackupRestoreTab() {
               className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium border border-warning/40 text-warning rounded-xl hover:bg-warning/10 transition-colors disabled:opacity-50"
             >
               {busy === 'import' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
-              {busy === 'import' ? 'Importing...' : 'Import Backup'}
+              {busy === 'import' ? 'Importing' : 'Import Backup'}
             </button>
             <div className="flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground bg-muted/20 rounded-xl border border-dashed border-border/50">
               <HardDrive className="h-4 w-4 shrink-0" />
@@ -373,7 +373,7 @@ export function BackupRestoreTab() {
         </div>
         <div className="p-6">
           {loading ? (
-            <div className="p-8 text-center text-sm text-muted-foreground">Loading backups...</div>
+            <div className="p-8 text-center text-sm text-muted-foreground">Loading backups</div>
           ) : backups.length === 0 ? (
             <div className="p-8 text-center text-sm text-muted-foreground border border-dashed border-border/50 rounded-xl">
               No snapshots yet. Create one to get started.
@@ -402,7 +402,7 @@ export function BackupRestoreTab() {
                       disabled={busy !== null}
                       className="px-3 py-1.5 text-xs font-medium border border-border text-foreground rounded-lg hover:bg-muted transition-colors disabled:opacity-50"
                     >
-                      {busy === b.filename ? 'Restoring...' : 'Restore'}
+                      {busy === b.filename ? 'Restoring' : 'Restore'}
                     </button>
                   </div>
                 </div>

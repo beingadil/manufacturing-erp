@@ -1,6 +1,6 @@
 import { Edit, Eye, Plus, Printer, Trash2 } from 'lucide-react';
-import React, { useMemo, useState } from "react";
-import { Link } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from 'react-router-dom';
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
 import { QuickAddCustomer, QuickAddProduct } from "../components/QuickAddModals";
@@ -15,10 +15,19 @@ import { PageModal } from "../components/ui/PageModal";
 
 export function Sales() {
   const { sales, products, materials, customers, vouchers } = useERPStore();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editSaleId, setEditSaleId] = useState<string | undefined>();
   const [deleteModal, setDeleteModal] = useState<{isOpen: boolean, id: string, no: string}>({isOpen: false, id: '', no: ''});
-  const [activeTab, setActiveTab] = useState<'data' | 'vouchers'>('data');
+  const [activeTab, setActiveTab] = useState<'data' | 'vouchers'>(() => (searchParams.get('tab') === 'vouchers' ? 'vouchers' : 'data'));
+
+  // Sync tab to URL (?tab=data|vouchers) so refresh/back preserves the view.
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams);
+    params.set('tab', activeTab);
+    setSearchParams(params, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
   
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);

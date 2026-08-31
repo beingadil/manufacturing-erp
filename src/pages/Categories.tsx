@@ -177,7 +177,7 @@ export default function Categories() {
       render: (item: any) => (
         item.isOptimistic ? (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 px-2.5 py-1 text-xs font-medium text-blue-500 ring-1 ring-blue-500/20">
-            <RefreshCw className="h-3 w-3 animate-spin" /> Syncing...
+            <RefreshCw className="h-3 w-3 animate-spin" /> Syncing
           </span>
         ) : (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 text-xs font-medium text-success ring-1 ring-success/20">

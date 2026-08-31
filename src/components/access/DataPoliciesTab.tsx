@@ -59,7 +59,7 @@ export function DataPoliciesTab() {
       {isLoading ? (
         <div className="py-12 text-center text-muted-foreground">
           <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
-          Loading policies...
+          Loading policies…
         </div>
       ) : (
         <DataTable

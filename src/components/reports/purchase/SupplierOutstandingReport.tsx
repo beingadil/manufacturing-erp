@@ -15,6 +15,9 @@ export function SupplierOutstandingReport() {
 
   const data = useMemo(() => PurchaseReportService.getSupplierOutstandingReportData(dateRange, search), [dateRange, search]);
 
+  // Precompute a name->account map once instead of accounts.find per row per render.
+  const accountByName = useMemo(() => new Map(accounts.map(a => [a.name, a])), [accounts]);
+
   const totalOutstanding = data.reduce((sum, item) => sum + (item.balance > 0 ? item.balance : 0), 0);
   const totalAdvances = data.reduce((sum, item) => sum + (item.balance < 0 ? Math.abs(item.balance) : 0), 0);
 
@@ -32,7 +35,7 @@ export function SupplierOutstandingReport() {
       ]}
       columns={[
         { key: "supplierName", label: "Supplier Name", render: (item) => {
-          const acc = accounts.find(a => a.name === item.supplierName);
+          const acc = accountByName.get(item.supplierName);
           return (
             <button
               onClick={() => {

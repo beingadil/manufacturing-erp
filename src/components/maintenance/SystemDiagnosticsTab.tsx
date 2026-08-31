@@ -8,7 +8,7 @@ import { useERPStore } from '@/store/useERPStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 
 export function SystemDiagnosticsTab() {
-  const [dbSize, setDbSize] = useState<string>('Calculating...');
+  const [dbSize, setDbSize] = useState<string>('Calculating…');
 
   const state = useERPStore();
   const settings = useSettingsStore();

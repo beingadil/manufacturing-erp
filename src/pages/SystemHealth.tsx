@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useERPStore } from '../store/useERPStore';
+import { formatCurrency } from '../lib/utils';
 import { Activity, CheckCircle, XCircle, AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface Issue {
@@ -12,7 +13,20 @@ interface Issue {
 const electronDB = () => (window as any).electronDB;
 
 export function SystemHealthDashboard() {
-  const state = useERPStore();
+  // Per-slice selectors so the component only re-renders when a slice it reads
+  // actually changes (previously subscribed to the entire store).
+  const processingSends = useERPStore(s => s.processingSends);
+  const materials = useERPStore(s => s.materials);
+  const batches = useERPStore(s => s.batches);
+  const accounts = useERPStore(s => s.accounts);
+  const purchases = useERPStore(s => s.purchases);
+  const suppliers = useERPStore(s => s.suppliers);
+  const sales = useERPStore(s => s.sales);
+  const customers = useERPStore(s => s.customers);
+  const journalEntries = useERPStore(s => s.journalEntries);
+  const vouchers = useERPStore(s => s.vouchers);
+  const companySettings = useERPStore(s => s.companySettings);
+
   const [healthStatus, setHealthStatus] = useState<Issue[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [lastScan, setLastScan] = useState<Date | null>(null);
@@ -68,23 +82,23 @@ export function SystemHealthDashboard() {
       }
 
       // ── Orphaned Processing Records ──────────────────────────────
-      const orphanedSends = state.processingSends?.filter((ps: any) => !state.materials?.find((m: any) => m.id === ps.materialId)) || [];
+      const orphanedSends = processingSends?.filter((ps: any) => !materials?.find((m: any) => m.id === ps.materialId)) || [];
       if (orphanedSends.length > 0) {
         addIssue('Integrity', 'Orphaned Processing', 'fail', orphanedSends.length + ' sends reference deleted materials.');
       } else {
-        addIssue('Integrity', 'Orphaned Processing', 'pass', 'All ' + (state.processingSends?.length || 0) + ' sends OK.');
+        addIssue('Integrity', 'Orphaned Processing', 'pass', 'All ' + (processingSends?.length || 0) + ' sends OK.');
       }
 
       // ── Batch Integrity ──────────────────────────────────────────
-      const orphanedBatches = state.batches?.filter((b: any) => !state.materials?.find((m: any) => m.id === b.materialId)) || [];
+      const orphanedBatches = batches?.filter((b: any) => !materials?.find((m: any) => m.id === b.materialId)) || [];
       if (orphanedBatches.length > 0) {
         addIssue('Inventory', 'Orphaned Batches', 'warn', orphanedBatches.length + ' batches reference deleted materials.');
       } else {
-        addIssue('Inventory', 'Orphaned Batches', 'pass', 'All ' + (state.batches?.length || 0) + ' batches OK.');
+        addIssue('Inventory', 'Orphaned Batches', 'pass', 'All ' + (batches?.length || 0) + ' batches OK.');
       }
 
       // ── Unbilled Final-Stage Processing ──────────────────────────
-      const unbilledFinal = state.processingSends?.filter((ps: any) => {
+      const unbilledFinal = processingSends?.filter((ps: any) => {
         if (ps.status === 'Completed' || ps.status === 'Billed') return false;
         if (ps.isFinalStage && (ps.receivedPcs || 0) > 0) return true;
         return false;
@@ -96,24 +110,24 @@ export function SystemHealthDashboard() {
       }
 
       // ── Chart of Accounts Seeded ─────────────────────────────────
-      if ((state.accounts?.length || 0) < 10) {
-        addIssue('Configuration', 'Chart of Accounts', 'warn', 'Only ' + (state.accounts?.length || 0) + ' accounts - may not be seeded.');
+      if ((accounts?.length || 0) < 10) {
+        addIssue('Configuration', 'Chart of Accounts', 'warn', 'Only ' + (accounts?.length || 0) + ' accounts - may not be seeded.');
       } else {
-        addIssue('Configuration', 'Chart of Accounts', 'pass', (state.accounts?.length || 0) + ' accounts seeded.');
+        addIssue('Configuration', 'Chart of Accounts', 'pass', (accounts?.length || 0) + ' accounts seeded.');
       }
 
         // 1. Database Connection & Basic Integrity
-        addIssue('Database', 'Zustand Store Active', 'pass', `Store loaded. ${state.accounts?.length || 0} accounts found.`);
+        addIssue('Database', 'Zustand Store Active', 'pass', `Store loaded. ${accounts?.length || 0} accounts found.`);
         
         // 2. Orphaned Records Check
-        const orphanedPurchases = state.purchases?.filter((p: any) => !state.suppliers?.find((s: any) => s.id === p.supplierId)) || [];
+        const orphanedPurchases = purchases?.filter((p: any) => !suppliers?.find((s: any) => s.id === p.supplierId)) || [];
         if (orphanedPurchases.length > 0) {
           addIssue('Integrity', 'Orphaned Purchases', 'fail', `${orphanedPurchases.length} purchases linked to deleted suppliers.`);
         } else {
           addIssue('Integrity', 'Orphaned Purchases', 'pass', 'All purchases have valid suppliers.');
         }
 
-        const orphanedSales = state.sales?.filter((s: any) => !state.customers?.find((c: any) => c.id === s.customerId)) || [];
+        const orphanedSales = sales?.filter((s: any) => !customers?.find((c: any) => c.id === s.customerId)) || [];
         if (orphanedSales.length > 0) {
           addIssue('Integrity', 'Orphaned Sales', 'fail', `${orphanedSales.length} sales linked to deleted customers.`);
         } else {
@@ -123,26 +137,26 @@ export function SystemHealthDashboard() {
         // 3. Financial Integrity (Trial Balance Check)
         let totalDebit = 0;
         let totalCredit = 0;
-        state.journalEntries?.forEach((entry: any) => {
+        journalEntries?.forEach((entry: any) => {
           if (entry.debit) totalDebit += entry.debit;
           if (entry.credit) totalCredit += entry.credit;
         });
 
         // Add opening balances
-        state.accounts?.forEach((a: any) => {
+        accounts?.forEach((a: any) => {
           if (a.openingBalanceType === 'Debit') totalDebit += a.openingBalance;
           if (a.openingBalanceType === 'Credit') totalCredit += a.openingBalance;
         });
 
         const diff = Math.abs(totalDebit - totalCredit);
         if (diff > 0.01) {
-          addIssue('Financial', 'Trial Balance Match', 'fail', `Mismatch of ${diff.toFixed(2)}. Dr: ${totalDebit}, Cr: ${totalCredit}`);
+          addIssue('Financial', 'Trial Balance Match', 'fail', `Mismatch of ${formatCurrency(diff)}. Dr: ${formatCurrency(totalDebit)}, Cr: ${formatCurrency(totalCredit)}`);
         } else {
-          addIssue('Financial', 'Trial Balance Match', 'pass', `Books are balanced. Total: ${totalDebit.toFixed(2)}`);
+          addIssue('Financial', 'Trial Balance Match', 'pass', `Books are balanced. Total: ${formatCurrency(totalDebit)}`);
         }
 
         // 4. Voucher Integrity
-        const invalidVouchers = state.vouchers?.filter((v: any) => v.totalDebit !== v.totalCredit) || [];
+        const invalidVouchers = vouchers?.filter((v: any) => v.totalDebit !== v.totalCredit) || [];
         if (invalidVouchers.length > 0) {
           addIssue('Financial', 'Voucher Balancing', 'fail', `${invalidVouchers.length} vouchers have mismatched Dr/Cr.`);
         } else {
@@ -150,7 +164,7 @@ export function SystemHealthDashboard() {
         }
 
         // 5. Inventory Integrity
-        const negativeStocks = state.materials?.filter((m: any) => m.stockPcs < 0) || [];
+        const negativeStocks = materials?.filter((m: any) => m.stockPcs < 0) || [];
         if (negativeStocks.length > 0) {
           addIssue('Inventory', 'Negative Stock', 'warn', `${negativeStocks.length} materials have negative stock.`);
         } else {
@@ -158,7 +172,7 @@ export function SystemHealthDashboard() {
         }
 
         // 6. Settings Check
-        if (!state.companySettings?.name || state.companySettings.name === '') {
+        if (!companySettings?.name || companySettings.name === '') {
           addIssue('Configuration', 'Company Profile', 'warn', 'Company name is not configured.');
         } else {
           addIssue('Configuration', 'Company Profile', 'pass', 'Company profile is configured.');
@@ -171,7 +185,7 @@ export function SystemHealthDashboard() {
       setHealthStatus(issues);
       setLastScan(new Date());
       setIsScanning(false);
-  }, [state]);
+  }, [processingSends, materials, batches, accounts, purchases, suppliers, sales, customers, journalEntries, vouchers, companySettings]);
 
   useEffect(() => { runHealthCheck(); }, [runHealthCheck]);
 
@@ -181,7 +195,7 @@ export function SystemHealthDashboard() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">System Health Check</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            {lastScan ? `Last scanned: ${lastScan.toLocaleTimeString()}` : 'Initializing scan...'}
+            {lastScan ? `Last scanned: ${lastScan.toLocaleTimeString()}` : 'Initializing scan'}
           </p>
         </div>
         <button
@@ -190,7 +204,7 @@ export function SystemHealthDashboard() {
           className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
         >
           <RefreshCw className={`h-4 w-4 ${isScanning ? 'animate-spin' : ''}`} />
-          {isScanning ? 'Scanning...' : 'Run Diagnostics'}
+          {isScanning ? 'Scanning…' : 'Run Diagnostics'}
         </button>
       </div>
 
