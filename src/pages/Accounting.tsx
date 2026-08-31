@@ -276,9 +276,9 @@ function ChartOfAccounts() {
               {account.status}
             </span>
             <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button onClick={() => { setQuickAddType(undefined); setEditAccountId(account.id); setIsAddAccountModalOpen(true); }} className="p-1 hover:bg-muted text-muted-foreground rounded transition-colors"><Edit className="h-4 w-4" /></button>
+              <button onClick={() => { setQuickAddType(undefined); setEditAccountId(account.id); setIsAddAccountModalOpen(true); }} className="p-1 hover:bg-muted text-muted-foreground rounded transition-colors" aria-label={`Edit account ${account.name}`}><Edit className="h-4 w-4" /></button>
               {!account.isSystem && (
-                <button onClick={() => setDeleteModal({isOpen: true, id: account.id, no: account.code + ' - ' + account.name})} className="p-1 hover:bg-destructive/10 text-destructive rounded transition-colors"><Trash2 className="h-4 w-4" /></button>
+                <button onClick={() => setDeleteModal({isOpen: true, id: account.id, no: account.code + ' - ' + account.name})} className="p-1 hover:bg-destructive/10 text-destructive rounded transition-colors" aria-label={`Delete account ${account.name}`}><Trash2 className="h-4 w-4" /></button>
               )}
             </div>
           </div>
