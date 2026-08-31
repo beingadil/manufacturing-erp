@@ -28,7 +28,7 @@ export function PurchaseCostAnalysis() {
         { key: "minRate", label: "Min Rate", align: "right", render: (item) => formatCurrency(item.minRate) },
         { key: "maxRate", label: "Max Rate", align: "right", render: (item) => formatCurrency(item.maxRate) },
         { key: "avgRate", label: "Avg Rate", align: "right", render: (item) => formatCurrency(item.avgRate) },
-        { key: "variance", label: "Variance", align: "right", render: (item) => <span className={item.variance > 0 ? "text-rose-600 font-medium" : ""}>{formatCurrency(item.variance)}</span> }
+        { key: "variance", label: "Variance", align: "right", render: (item) => <span className={item.variance > 0 ? "text-destructive font-medium" : ""}>{formatCurrency(item.variance)}</span> }
       ]}
       exportDataMapping={(item) => ({
         ...item,

@@ -1,7 +1,7 @@
 import { AlertCircle, Factory, } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ProcessingReportService } from "../../../lib/reporting/ProcessingReportService";
-import { formatNumber } from '../../../lib/utils';
+import { formatNumber, formatPercent } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
 
 export function ProcessingLossReport() {
@@ -27,9 +27,9 @@ export function ProcessingLossReport() {
         { key: "stageName", label: "Stage" },
         { key: "sentPcs", label: "Sent (PCS)", align: "right", render: (item) => formatNumber(item.sentPcs) },
         { key: "receivedPcs", label: "Received (PCS)", align: "right", render: (item) => formatNumber(item.receivedPcs) },
-        { key: "lossPcs", label: "Loss (PCS)", align: "right", render: (item) => <span className="text-rose-600 font-medium">{formatNumber(item.lossPcs)}</span> },
+        { key: "lossPcs", label: "Loss (PCS)", align: "right", render: (item) => <span className="text-destructive font-medium">{formatNumber(item.lossPcs)}</span> },
         { key: "pendingPcs", label: "Pending (PCS)", align: "right", render: (item) => formatNumber(item.pendingPcs || 0) },
-        { key: "lossPercentage", label: "Loss %", align: "right", render: (item) => `${item.lossPercentage.toFixed(2)}%` }
+        { key: "lossPercentage", label: "Loss %", align: "right", render: (item) => formatPercent(item.lossPercentage / 100) }
       ]}
       exportDataMapping={(item) => ({
         ...item,
@@ -37,7 +37,7 @@ export function ProcessingLossReport() {
         receivedPcs: formatNumber(item.receivedPcs),
         lossPcs: formatNumber(item.lossPcs),
         pendingPcs: formatNumber(item.pendingPcs || 0),
-        lossPercentage: `${item.lossPercentage.toFixed(2)}%`
+        lossPercentage: formatPercent(item.lossPercentage / 100)
       })}
     />
   );

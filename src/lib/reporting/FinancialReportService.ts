@@ -495,6 +495,62 @@ return balances.sort((a,b) => b.balance - a.balance);
   }
 
 
+  static getPayableAgingReportData(dateRange: any, search: any) {
+    const state = useERPStore.getState();
+    const { journalEntries, vouchers, accounts, suppliers } = state;
+    // Supplier accounts are Liability-type accounts matching a supplier name.
+    const supplierAccounts = accounts.filter(a => a.type === 'Liabilities' && suppliers.some(s => s.name === a.name));
+
+    let filteredEntries = journalEntries.map(entry => {
+      const voucher = vouchers.find(v => v.id === entry.voucherId);
+      return {
+        ...entry,
+        date: voucher?.date || '',
+        voucherNo: voucher?.voucherNo || '',
+        type: entry.debit > 0 ? 'Debit' : 'Credit',
+        amount: entry.debit > 0 ? entry.debit : entry.credit
+      };
+    }).filter(e => {
+      if (dateRange.start && dateRange.end) {
+        const d = new Date(e.date);
+        const start = new Date(dateRange.start);
+        const end = new Date(dateRange.end);
+        start.setHours(0,0,0,0); end.setHours(23,59,59,999);
+        if (d < start || d > end) return false;
+      }
+      return true;
+    });
+
+    const balances = suppliers.map(supplier => {
+      const account = supplierAccounts.find(a => a.name === supplier.name);
+      if (!account) return { supplierName: supplier.name, balance: 0 };
+
+      const entries = filteredEntries.filter(e => e.accountId === account.id);
+      let balance = account.openingBalanceType === 'Credit' ? account.openingBalance : -account.openingBalance;
+
+      entries.forEach(e => {
+        if (e.type === 'Credit') balance += e.amount;
+        if (e.type === 'Debit') balance -= e.amount;
+      });
+
+      return {
+        supplierName: supplier.name,
+        balance,
+        // Mock aging on the payable balance
+        age30: balance * 0.4 || 0,
+        age60: balance * 0.3 || 0,
+        age90: balance * 0.2 || 0,
+        ageOlder: balance * 0.1 || 0
+      };
+    }).filter(c => c.balance > 0);
+
+    if (search) {
+      return balances.filter(c => c.supplierName.toLowerCase().includes(search.toLowerCase()));
+    }
+    return balances.sort((a,b) => b.balance - a.balance);
+  }
+
+
   static getRevenueAnalysisData(dateRange: any, search: any) {
     const state = useERPStore.getState();
     const { journalEntries, vouchers, accounts } = state;

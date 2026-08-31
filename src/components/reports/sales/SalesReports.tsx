@@ -1,7 +1,6 @@
 
 import { CustomerLedgerSummary } from './CustomerLedgerSummary';
 import { CustomerOutstanding } from './CustomerOutstanding';
-import { CustomerSalesReport } from './CustomerSalesReport';
 import { ProductSalesAnalysis } from './ProductSalesAnalysis';
 import { ProductSalesReport } from './ProductSalesReport';
 import { ProfitByProduct } from './ProfitByProduct';
@@ -14,7 +13,6 @@ export function SalesReports({ activeReport }: { activeReport: string }) {
   switch (activeReport) {
     case 'sales-register': return <SalesRegister />;
     case 'sales-summary': return <SalesSummary />;
-    case 'customer-sales': return <CustomerSalesReport />;
     case 'product-sales': return <ProductSalesReport />;
     case 'sales-trend': return <SalesTrend />;
     case 'product-sales-analysis': return <ProductSalesAnalysis />;

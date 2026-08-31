@@ -1,7 +1,7 @@
 import { Factory, Percent, } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ProcessingReportService } from "../../../lib/reporting/ProcessingReportService";
-import { formatNumber } from '../../../lib/utils';
+import { formatNumber, formatPercent } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
 
 export function ProcessingEfficiency() {
@@ -21,20 +21,20 @@ export function ProcessingEfficiency() {
       onSearch={setSearch}
       kpis={[
         { title: "Processors Tracked", value: data.length, icon: Factory },
-        { title: "Overall Efficiency", value: `${totalSent ? ((totalReceived / totalSent)*100).toFixed(2) : 0}%`, icon: Percent }
+        { title: "Overall Efficiency", value: totalSent ? formatPercent(totalReceived / totalSent) : formatPercent(0), icon: Percent }
       ]}
       columns={[
         { key: "processorName", label: "Processor" },
         { key: "sentPcs", label: "Sent PCS", align: "right", render: (item) => formatNumber(item.sentPcs) },
         { key: "receivedPcs", label: "Received PCS", align: "right", render: (item) => formatNumber(item.receivedPcs) },
-        { key: "efficiency", label: "Efficiency", align: "right", render: (item) => <span className={item.efficiency < 95 ? "text-rose-600" : "text-emerald-600"}>{item.efficiency.toFixed(2)}%</span> },
+        { key: "efficiency", label: "Efficiency", align: "right", render: (item) => <span className={item.efficiency < 95 ? "text-destructive" : "text-success"}>{formatPercent(item.efficiency / 100)}</span> },
         { key: "avgTurnaround", label: "Avg Turnaround", align: "right", render: (item) => `${item.avgTurnaround.toFixed(1)} Days` }
       ]}
       exportDataMapping={(item) => ({
         ...item,
         sentPcs: formatNumber(item.sentPcs),
         receivedPcs: formatNumber(item.receivedPcs),
-        efficiency: `${item.efficiency.toFixed(2)}%`,
+        efficiency: formatPercent(item.efficiency / 100),
         avgTurnaround: `${item.avgTurnaround.toFixed(1)} Days`
       })}
     />

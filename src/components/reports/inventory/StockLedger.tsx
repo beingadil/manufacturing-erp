@@ -25,7 +25,7 @@ export function StockLedger() {
         { key: "transactions", label: "Transactions", align: "right" },
         { key: "inQty", label: "Total In", align: "right", render: (item) => formatNumber(item.inQty) },
         { key: "outQty", label: "Total Out", align: "right", render: (item) => formatNumber(item.outQty) },
-        { key: "netChange", label: "Net Change", align: "right", render: (item) => <span className={item.netChange > 0 ? "text-emerald-600" : (item.netChange < 0 ? "text-rose-600" : "")}>{item.netChange > 0 ? '+' : ''}{formatNumber(item.netChange)}</span> }
+        { key: "netChange", label: "Net Change", align: "right", render: (item) => <span className={item.netChange > 0 ? "text-success" : (item.netChange < 0 ? "text-destructive" : "")}>{item.netChange > 0 ? '+' : ''}{formatNumber(item.netChange)}</span> }
       ]}
       exportDataMapping={(item) => ({
         ...item,

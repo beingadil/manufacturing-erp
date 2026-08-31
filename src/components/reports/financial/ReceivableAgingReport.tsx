@@ -28,7 +28,7 @@ export function ReceivableAgingReport() {
         { key: "age60", label: "31-60 Days", align: "right", render: (item) => formatCurrency(item.age60 as number) },
         { key: "age90", label: "61-90 Days", align: "right", render: (item) => formatCurrency(item.age90 as number) },
         { key: "ageOlder", label: "> 90 Days", align: "right", render: (item) => formatCurrency(item.ageOlder as number) },
-        { key: "balance", label: "Total Outstanding", align: "right", render: (item) => <span className="font-medium text-emerald-600">{formatCurrency(item.balance)}</span> }
+        { key: "balance", label: "Total Outstanding", align: "right", render: (item) => <span className="font-medium text-success">{formatCurrency(item.balance)}</span> }
       ]}
       exportDataMapping={(item) => ({
         ...item,

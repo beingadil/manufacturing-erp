@@ -5,10 +5,9 @@ import { formatNumber } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
 
 export function RawMaterialStock() {
-  const [_dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });
   const [search, setSearch] = useState('');
 
-  const data = useMemo(() => InventoryReportService.getRawMaterialStockData(search), [search]); // ignoring dateRange since stock is absolute
+  const data = useMemo(() => InventoryReportService.getRawMaterialStockData(search), [search]);
 
   const totalStock = data.reduce((sum, item) => sum + item.currentStock, 0);
 
@@ -16,8 +15,8 @@ export function RawMaterialStock() {
     <GenericReportTemplate
       title="Raw Material Stock"
       data={data}
-      onDateRangeChange={setDateRange}
       onSearch={setSearch}
+      showDateRange={false}
       kpis={[
         { title: "Material Types", value: data.length, icon: Database },
         { title: "Total Units in Stock", value: formatNumber(totalStock), icon: PackageSearch }
@@ -26,7 +25,7 @@ export function RawMaterialStock() {
         { key: "name", label: "Material Name" },
         { key: "unit", label: "Unit" },
         { key: "minStockLevel", label: "Min Level", align: "right", render: (item) => formatNumber(((item as any).minStockLevel || 0)) },
-        { key: "currentStock", label: "Current Stock", align: "right", render: (item) => <span className={item.currentStock <= ((item as any).minStockLevel || 0) ? "text-rose-600 font-medium" : "text-emerald-600 font-medium"}>{formatNumber(item.currentStock)}</span> }
+        { key: "currentStock", label: "Current Stock", align: "right", render: (item) => <span className={item.currentStock <= ((item as any).minStockLevel || 0) ? "text-destructive font-medium" : "text-success font-medium"}>{formatNumber(item.currentStock)}</span> }
       ]}
       exportDataMapping={(item) => ({
         ...item,

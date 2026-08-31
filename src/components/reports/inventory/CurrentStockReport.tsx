@@ -3,12 +3,12 @@ import { useMemo } from 'react';
 import { InventoryReportService } from "../../../lib/reporting/InventoryReportService";
 import { cn, formatCurrency, formatNumber } from '../../../lib/utils';
 import { useERPStore } from "../../../store/useERPStore";
-import { Column, DataTable } from '../../DataTable';
-import { ReportFilterBar } from '../common/ReportFilterBar';
-import { ReportKPICard } from '../common/ReportKPICard';
+import { Column } from '../../DataTable';
+import { GenericReportTemplate } from '../common/GenericReportTemplate';
 
 export function CurrentStockReport() {
   const { materials } = useERPStore();
+
   const totalRawMaterial = materials.reduce((sum, m) => sum + m.stockPcs, 0);
   const totalWIP = materials.reduce((sum, m) => sum + m.processedStockPcs, 0);
   const totalAtProcessor = materials.reduce((sum, m) => sum + (m.atProcessorPcs || 0), 0);
@@ -31,26 +31,29 @@ export function CurrentStockReport() {
   ];
 
   return (
-    <div className="space-y-6">
-      <ReportFilterBar showDateRange={false} />
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <ReportKPICard title="Total Raw Material" value={formatNumber(totalRawMaterial)} icon={Database} />
-        <ReportKPICard title="Total WIP / Processed" value={formatNumber(totalWIP + totalAtProcessor)} icon={PackageSearch} />
-        <ReportKPICard title="Est. Inventory Value" value={formatCurrency(totalValue)} icon={Coins} />
-        <ReportKPICard title="Low Stock Items" value={lowStockCount} icon={AlertTriangle} className={lowStockCount > 0 ? "border-red-500/50 bg-destructive/100/5" : ""} />
-      </div>
-
-      <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden">
-        <DataTable
-          data={data}
-          columns={columns}
-          searchKeys={["name", "categoryName"]}
-          searchPlaceholder="Search materials..."
-          persistKey="reports-inventory-current"
-          defaultSortKey="name"
-        />
-      </div>
-    </div>
+    <GenericReportTemplate
+      title="Current Stock"
+      data={data}
+      onSearch={() => {}}
+      showDateRange={false}
+      tableTitle="Current Stock"
+      kpis={[
+        { title: "Total Raw Material", value: formatNumber(totalRawMaterial), icon: Database },
+        { title: "Total WIP / Processed", value: formatNumber(totalWIP + totalAtProcessor), icon: PackageSearch },
+        { title: "Est. Inventory Value", value: formatCurrency(totalValue), icon: Coins },
+        { title: "Low Stock Items", value: lowStockCount, icon: AlertTriangle }
+      ]}
+      columns={columns}
+      searchKeys={["name", "categoryName"]}
+      searchPlaceholder="Search materials…"
+      tableSummaryRow={[
+        'TOTAL', '', '',
+        formatNumber(totalRawMaterial),
+        formatNumber(totalAtProcessor),
+        formatNumber(totalWIP),
+        '',
+        formatCurrency(totalValue)
+      ]}
+    />
   );
 }

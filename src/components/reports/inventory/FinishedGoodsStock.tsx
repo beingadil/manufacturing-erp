@@ -5,7 +5,6 @@ import { formatNumber } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
 
 export function FinishedGoodsStock() {
-  const [_dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });
   const [search, setSearch] = useState('');
 
   const data = useMemo(() => InventoryReportService.getFinishedGoodsStockData(search), [search]);
@@ -16,8 +15,8 @@ export function FinishedGoodsStock() {
     <GenericReportTemplate
       title="Finished Goods Stock"
       data={data}
-      onDateRangeChange={setDateRange}
       onSearch={setSearch}
+      showDateRange={false}
       kpis={[
         { title: "Product Types", value: data.length, icon: Database },
         { title: "Total PCS in Stock", value: formatNumber(totalStock), icon: Package }

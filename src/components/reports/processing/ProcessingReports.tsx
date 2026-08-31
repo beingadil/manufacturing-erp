@@ -1,6 +1,5 @@
 
 import { PendingPCSReport } from './PendingPCSReport';
-import { PendingProcessingReport } from './PendingProcessingReport';
 import { ProcessingChargesReport } from './ProcessingChargesReport';
 import { ProcessingDispatchReport } from './ProcessingDispatchReport';
 import { ProcessingEfficiency } from './ProcessingEfficiency';
@@ -14,7 +13,6 @@ export function ProcessingReports({ activeReport }: { activeReport: string }) {
   switch (activeReport) {
     case 'processing-dispatch': return <ProcessingDispatchReport />;
     case 'processing-receive': return <ProcessingReceiveReport />;
-    case 'pending-processing': return <PendingProcessingReport />;
     case 'processor-billing': return <ProcessorBillingReport />;
     case 'processor-ledger': return <ProcessorLedgerReport />;
     case 'processing-charges': return <ProcessingChargesReport />;

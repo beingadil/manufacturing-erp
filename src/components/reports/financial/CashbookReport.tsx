@@ -26,19 +26,19 @@ export function CashbookReport() {
   const balance = data.length > 0 ? data[0].currentBal : 0;
 
   const columns: Column<typeof data[0]>[] = [
-    { key: "date", label: "Date", sortable: true, render: (item) => format(new Date(item.date), 'MMM d, yyyy') },
+    { key: "date", label: "Date", sortable: true, render: (item) => format(new Date(item.date), 'dd-MMM-yyyy') },
     { key: "accountName", label: "Account", sortable: true },
-    { key: "referenceNo", label: "Ref #", sortable: true },
+    { key: "referenceNo", label: "Voucher No", sortable: true },
     { key: "description", label: "Description", sortable: true },
-    { key: "amount", label: "Inflow (Dr)", align: "right", render: (item) => item.type === 'Debit' ? <span className="text-emerald-600 font-medium">{formatCurrency(item.amount)}</span> : null },
-    { key: "amount", label: "Outflow (Cr)", align: "right", render: (item) => item.type === 'Credit' ? <span className="text-destructive font-medium">{formatCurrency(item.amount)}</span> : null },
+    { key: "inflow", label: "Inflow (Dr)", align: "right", render: (item) => item.type === 'Debit' ? <span className="text-success font-medium">{formatCurrency(item.amount)}</span> : null },
+    { key: "outflow", label: "Outflow (Cr)", align: "right", render: (item) => item.type === 'Credit' ? <span className="text-destructive font-medium">{formatCurrency(item.amount)}</span> : null },
     { key: "currentBal", label: "Balance", align: "right", render: (item) => <span className="font-bold">{formatCurrency(item.currentBal)}</span> }
   ];
 
   const exportColumns = [
     { header: 'Date', dataKey: 'date' },
     { header: 'Account', dataKey: 'accountName' },
-    { header: 'Ref #', dataKey: 'referenceNo' },
+    { header: 'Voucher No', dataKey: 'referenceNo' },
     { header: 'Description', dataKey: 'description' },
     { header: 'Inflow', dataKey: 'inflow' },
     { header: 'Outflow', dataKey: 'outflow' },
@@ -67,18 +67,28 @@ export function CashbookReport() {
       <ReportFilterBar 
         onSearch={setSearch} onDateRangeChange={setDateRange}
         onExportPDF={handleExportPDF}
-        onExportExcel={() => exportToExcel({ filename: 'Cashbook.xlsx', data: exportData, columns: exportColumns })}
-        onExportCSV={() => exportToCSV({ filename: 'Cashbook.csv', data: exportData, columns: exportColumns })}
+        onExportExcel={() => exportToExcel({ filename: `Cashbook_${format(new Date(), 'yyyyMMdd')}.xlsx`, data: exportData, columns: exportColumns })}
+        onExportCSV={() => exportToCSV({ filename: `Cashbook_${format(new Date(), 'yyyyMMdd')}.csv`, data: exportData, columns: exportColumns })}
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <ReportKPICard title="Total Cash Inflow" value={formatCurrency(totalIn)} icon={ArrowDownRight} valueClassName="text-emerald-600" />
+        <ReportKPICard title="Total Cash Inflow" value={formatCurrency(totalIn)} icon={ArrowDownRight} valueClassName="text-success" />
         <ReportKPICard title="Total Cash Outflow" value={formatCurrency(totalOut)} icon={ArrowUpRight} valueClassName="text-destructive" />
         <ReportKPICard title="Closing Balance" value={formatCurrency(balance)} icon={Wallet} />
       </div>
 
-      <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
-        <DataTable data={data} columns={columns} />
+      <div className="bg-card border border-border/50 rounded-xl shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-border/50 bg-muted/10">
+          <h3 className="text-base font-semibold text-foreground">Cashbook Report</h3>
+        </div>
+        <DataTable data={data} columns={columns} embedded
+          summaryRow={[
+            'TOTAL', '', '', '',
+            <span className="text-success font-medium">{formatCurrency(totalIn)}</span>,
+            <span className="text-destructive font-medium">{formatCurrency(totalOut)}</span>,
+            <span className="font-bold">{formatCurrency(balance)}</span>
+          ]}
+        />
       </div>
     </div>
   );

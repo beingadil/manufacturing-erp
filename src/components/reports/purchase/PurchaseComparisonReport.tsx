@@ -1,7 +1,7 @@
 import { Activity, DollarSign, Percent } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { PurchaseReportService } from "../../../lib/reporting/PurchaseReportService";
-import { formatCurrency, formatNumber } from '../../../lib/utils';
+import { formatCurrency, formatNumber, formatPercent } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
 
 export function PurchaseComparisonReport() {
@@ -23,7 +23,7 @@ export function PurchaseComparisonReport() {
       kpis={[
         { title: "Current Period Purchases", value: formatCurrency(totalCurrent), icon: DollarSign },
         { title: "Previous Period Purchases", value: formatCurrency(totalPrev), icon: DollarSign },
-        { title: "Growth %", value: `${totalGrowth.toFixed(2)}%`, icon: Percent },
+        { title: "Growth %", value: formatPercent(totalGrowth / 100), icon: Percent },
         { title: "Materials Compared", value: data.length, icon: Activity }
       ]}
       columns={[
@@ -32,7 +32,7 @@ export function PurchaseComparisonReport() {
         { key: "prevWeight", label: "Prev Weight", align: "right", render: (item) => formatNumber(item.prevWeight) },
         { key: "currentAmount", label: "Current Amount", align: "right", render: (item) => formatCurrency(item.currentAmount) },
         { key: "prevAmount", label: "Prev Amount", align: "right", render: (item) => formatCurrency(item.prevAmount) },
-        { key: "growth", label: "Growth", align: "right", render: (item) => <span className={item.growth > 0 ? "text-emerald-600" : "text-rose-600"}>{item.growth > 0 ? '+' : ''}{item.growth.toFixed(2)}%</span> }
+        { key: "growth", label: "Growth", align: "right", render: (item) => <span className={item.growth > 0 ? "text-success" : item.growth < 0 ? "text-destructive" : "text-muted-foreground"}>{item.growth > 0 ? '+' : ''}{formatPercent(item.growth / 100)}</span> }
       ]}
       exportDataMapping={(item) => ({
         ...item,
@@ -40,9 +40,15 @@ export function PurchaseComparisonReport() {
         prevWeight: formatNumber(item.prevWeight),
         currentAmount: formatCurrency(item.currentAmount),
         prevAmount: formatCurrency(item.prevAmount),
-        growth: `${item.growth > 0 ? '+' : ''}${item.growth.toFixed(2)}%`
+        growth: `${item.growth > 0 ? '+' : ''}${formatPercent(item.growth / 100)}`
       })}
-      summaryRows={[[{ materialName: 'TOTAL', currentAmount: formatCurrency(totalCurrent), prevAmount: formatCurrency(totalPrev), growth: `${totalGrowth > 0 ? '+' : ''}${totalGrowth.toFixed(2)}%` }]]}
+      summaryRows={[[{ materialName: 'TOTAL', currentAmount: formatCurrency(totalCurrent), prevAmount: formatCurrency(totalPrev), growth: `${totalGrowth > 0 ? '+' : ''}${formatPercent(totalGrowth / 100)}` }]]}
+      tableSummaryRow={[
+        'TOTAL', '', '',
+        formatCurrency(totalCurrent),
+        formatCurrency(totalPrev),
+        <span className={totalGrowth > 0 ? "text-success" : totalGrowth < 0 ? "text-destructive" : "text-muted-foreground"}>{formatPercent(totalGrowth / 100)}</span>
+      ]}
     />
   );
 }

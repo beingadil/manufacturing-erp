@@ -38,7 +38,7 @@ export function AccountSummaryReport() {
         { key: "type", label: "Type" },
         { key: "debit", label: "Total Debit", align: "right", render: (item) => formatCurrency(item.debit) },
         { key: "credit", label: "Total Credit", align: "right", render: (item) => formatCurrency(item.credit) },
-        { key: "netChange", label: "Net Change", align: "right", render: (item) => <span className={item.netChange > 0 ? "text-emerald-600" : (item.netChange < 0 ? "text-rose-600" : "")}>{item.netChange > 0 ? '+' : ''}{formatCurrency(item.netChange)}</span> }
+        { key: "netChange", label: "Net Change", align: "right", render: (item) => <span className={item.netChange > 0 ? "text-success" : (item.netChange < 0 ? "text-destructive" : "")}>{item.netChange > 0 ? '+' : ''}{formatCurrency(item.netChange)}</span> }
       ]}
       exportDataMapping={(item) => ({
         ...item,

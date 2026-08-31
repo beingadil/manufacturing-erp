@@ -22,7 +22,7 @@ export function StockMovement() {
       ]}
       columns={[
         { key: "date", label: "Date", render: (item) => format(new Date(item.date), 'dd-MMM-yyyy') },
-        { key: "type", label: "Type", render: (item) => <span className={item.transactionType.startsWith('IN') ? "text-emerald-600" : "text-rose-600"}>{item.transactionType}</span> },
+        { key: "type", label: "Type", render: (item) => <span className={item.transactionType.startsWith('IN') ? "text-success" : "text-destructive"}>{item.transactionType}</span> },
         { key: "itemName", label: "Item Name" },
         { key: "referenceNo", label: "Reference" },
         { key: "quantity", label: "Quantity", align: "right", render: (item) => formatNumber(item.quantity) }

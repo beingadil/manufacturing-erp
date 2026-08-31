@@ -5,7 +5,6 @@ import { formatNumber } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
 
 export function InventoryAging() {
-  const [_dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });
   const [search, setSearch] = useState('');
 
   const data = useMemo(() => InventoryReportService.getInventoryAgingData(search), [search]);
@@ -14,8 +13,8 @@ export function InventoryAging() {
     <GenericReportTemplate
       title="Inventory Aging Report"
       data={data}
-      onDateRangeChange={setDateRange}
       onSearch={setSearch}
+      showDateRange={false}
       kpis={[
         { title: "Active Batches", value: data.length, icon: Clock }
       ]}
@@ -23,7 +22,7 @@ export function InventoryAging() {
         { key: "batchNo", label: "Batch/Lot" },
         { key: "materialName", label: "Material" },
         { key: "remainingPcs", label: "Remaining PCS", align: "right", render: (item) => formatNumber(item.remainingPcs) },
-        { key: "daysOld", label: "Age (Days)", align: "right", render: (item) => <span className={item.daysOld > 90 ? "text-rose-600 font-medium" : ""}>{item.daysOld}</span> },
+        { key: "daysOld", label: "Age (Days)", align: "right", render: (item) => <span className={item.daysOld > 90 ? "text-destructive font-medium" : ""}>{item.daysOld}</span> },
         { key: "bracket", label: "Aging Bracket" }
       ]}
       exportDataMapping={(item) => ({
