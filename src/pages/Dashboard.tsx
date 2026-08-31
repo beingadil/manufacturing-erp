@@ -6,6 +6,7 @@ import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Too
 import { PositionSummary } from '../components/reports/financial/BalanceSheetStatement';
 import { KpiCard } from "../components/ui/KpiCard";
 import { useAuth } from "../contexts/AuthContext";
+import { DatePicker } from "../components/ui/date-picker";
 import { filterFinancialData } from "../lib/abac";
 import { getSystemAccountBySubtype } from '../lib/accounting/accountClassification';
 import { DashboardSummaryService } from '../lib/dashboard/DashboardSummaryService';
@@ -171,9 +172,9 @@ export function Dashboard() {
         </div>
         {preset === 'custom' && (
           <div className="flex items-center gap-2">
-            <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="px-3 py-2 rounded-lg border border-border bg-background text-sm" title="From" />
+            <DatePicker value={customStart} onChange={setCustomStart} size="sm" className="w-40" placeholder="From" />
             <span className="text-muted-foreground text-sm">to</span>
-            <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="px-3 py-2 rounded-lg border border-border bg-background text-sm" title="To" />
+            <DatePicker value={customEnd} onChange={setCustomEnd} size="sm" className="w-40" placeholder="To" />
           </div>
         )}
         <span className="text-xs text-muted-foreground">Balances as of {asOfLabel} · Activity {periodLabel}</span>

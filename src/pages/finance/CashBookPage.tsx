@@ -1,8 +1,9 @@
-import { ArrowDownCircle, CalendarDays } from 'lucide-react';
+import { ArrowDownCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { getCashAccounts } from '../../lib/accounting/accountClassification';
 import { CashBookEngine, CashBookRow } from '../../lib/finance/CashBookEngine';
 import { cn } from '../../lib/utils';
+import { DatePicker } from '../../components/ui/date-picker';
 import { useERPStore } from '../../store/useERPStore';
 
 /**
@@ -43,16 +44,7 @@ export function CashBookPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-muted/20 border border-border/50 rounded-lg px-3 py-2">
-            <CalendarDays className="h-4 w-4 text-muted-foreground" />
-            <input
-              type="date"
-              value={date}
-              onChange={e => setDate(e.target.value)}
-              className="bg-transparent text-sm text-foreground focus:outline-none"
-              title="Select date"
-            />
-          </div>
+          <DatePicker value={date} onChange={setDate} size="sm" className="w-44" placeholder="Select date" />
         </div>
       </div>
 

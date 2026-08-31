@@ -9,6 +9,7 @@ import { SearchableSelect } from "../components/SearchableSelect";
 import { VoucherHistoryTab } from "../components/VoucherHistoryTab";
 import { generateDispatchSlipPDF, generateProcessorBillPDF } from "../lib/documentGenerators";
 import { formatCurrency, formatNumber } from "../lib/utils";
+import { DatePicker } from "../components/ui/date-picker";
 import { ErrorManagement } from '../lib/validation';
 import { ProcessingService } from '../services/ProcessingService';
 import { useERPStore } from "../store/useERPStore";
@@ -916,7 +917,7 @@ Processor
               )}
               <input type="number" required placeholder="PCS to Send" value={sendPcs} onChange={e => setSendPcs(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
               <input type="number" step="0.01" required placeholder={sendStageRateMethod === 'per_kg' ? "Rate Per KG (PKR)" : "Rate Per Piece (PKR)"} value={sendRate} onChange={e => setSendRate(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
-              <input type="date" required value={sendDate} onChange={e => setSendDate(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
+              <DatePicker value={sendDate} onChange={setSendDate} />
               
               {previousPendingSends.length > 0 && (
                 <div className="bg-warning/10 border border-amber-200 rounded-xl p-4 mt-2">
@@ -972,7 +973,7 @@ Processor
                 })}
               </select>
               <input type="number" required placeholder="PCS Received" value={receivePcs} onChange={e => setReceivePcs(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
-              <input type="date" required value={receiveDate} onChange={e => setReceiveDate(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
+              <DatePicker value={receiveDate} onChange={setReceiveDate} />
               <div className="flex gap-3">
                 <button type="submit" className="flex-1 rounded-xl bg-primary p-3 text-primary-foreground font-semibold">Receive Items</button>
               </div>
@@ -992,7 +993,7 @@ Processor
                     required
                   />
                 </div>
-                <input type="date" required value={billDate} onChange={e => setBillDate(e.target.value)} className="w-1/3 rounded-xl border p-3 text-sm" />
+                <DatePicker value={billDate} onChange={setBillDate} className="w-1/3" />
               </div>
               
               {billProcessorId && unbilledReceipts.length === 0 && (

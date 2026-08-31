@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { filterFinancialData } from '../lib/abac';
 import { formatCurrency } from '../lib/utils';
+import { DatePicker } from './ui/date-picker';
 import { useERPStore } from '../store/useERPStore';
 import { SourceModule } from '../types/erp';
 import { CashbookEntryModal } from './CashbookEntryModal';
@@ -62,21 +63,9 @@ export function VoucherHistoryTab({ sourceModule }: VoucherHistoryTabProps) {
           />
         </div>
         <div className="flex items-center gap-2">
-          <input
-            type="date"
-            className="px-3 py-2 rounded-lg border border-border bg-background text-sm"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            title="Date From"
-          />
+          <DatePicker value={dateFrom} onChange={setDateFrom} size="sm" className="w-40" placeholder="From" />
           <span className="text-muted-foreground">to</span>
-          <input
-            type="date"
-            className="px-3 py-2 rounded-lg border border-border bg-background text-sm"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            title="Date To"
-          />
+          <DatePicker value={dateTo} onChange={setDateTo} size="sm" className="w-40" placeholder="To" />
         </div>
         <div className="flex items-center gap-2">
            <button className="p-2 rounded-lg border border-border bg-background hover:bg-muted text-muted-foreground transition-colors" title="Export CSV" aria-label="Export CSV">
