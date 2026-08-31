@@ -4,6 +4,11 @@ import {AlertTriangle, CheckCircle2, Database,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from '../ui/alert-dialog';
 import { clearStorageMirrors } from '../../database/sqlite/SQLiteStorageAdapter';
 
 // ─── Single canonical backup/restore component ──────────────────────────────
@@ -46,7 +51,7 @@ export function BackupRestoreTab() {
   const [lastManifest, setLastManifest] = useState<BackupManifest | null>(null);
 
   // AlertDialog state for destructive confirmations
-  const [_confirmDialog, setConfirmDialog] = useState<{
+  const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
     title: string;
     description: string;
@@ -417,6 +422,28 @@ export function BackupRestoreTab() {
           it bundles the full database with a version manifest so restoring is validated.
         </p>
       </div>
+
+      <AlertDialog open={confirmDialog.open} onOpenChange={(open) => setConfirmDialog((prev) => ({ ...prev, open }))}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmDialog.title}</AlertDialogTitle>
+            <AlertDialogDescription>{confirmDialog.description}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className={confirmDialog.variant === 'destructive' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : undefined}
+              onClick={(e) => {
+                e.preventDefault();
+                setConfirmDialog((prev) => ({ ...prev, open: false }));
+                confirmDialog.onConfirm();
+              }}
+            >
+              Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

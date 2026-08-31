@@ -1,7 +1,9 @@
 import { ArrowDownLeft, ArrowUpRight, CheckCircle2, Eye, FileText, Pencil, Plus, Search, Trash2, XCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
+import { toast } from 'sonner';
 import { AccountingEngine } from '../lib/accounting/AccountingEngine';
-import { cn } from '../lib/utils';
+import { cn, formatCurrency } from '../lib/utils';
 import { useERPStore } from '../store/useERPStore';
 import { Voucher } from '../types/erp';
 import { KpiCard } from './ui/KpiCard';
@@ -26,6 +28,7 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
   const [dateTo, setDateTo] = useState(today);
   const [search, setSearch] = useState('');
   const [accountFilter, setAccountFilter] = useState('all');
+  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; description: string; onConfirm: () => void; variant?: 'default' | 'destructive' }>({ open: false, title: '', description: '', onConfirm: () => {} });
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editVoucherId, setEditVoucherId] = useState<string | undefined>();
   const [viewVoucherId, setViewVoucherId] = useState<string | null>(null);
@@ -80,15 +83,29 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
   }, [vouchers, journalEntries, accounts, matchedTypes, excludedModules, dateFrom, dateTo, search, accountFilter]);
 
   const handleCancel = (v: Voucher) => {
-    if (window.confirm(`Cancel voucher ${v.voucherNo}? It will be excluded from all reports.`)) {
-      AccountingEngine.cancelVoucher(v.id);
-    }
+    setConfirmDialog({
+      open: true,
+      title: "Cancel Voucher",
+      description: `Cancel voucher ${v.voucherNo}? It will be excluded from all reports.`,
+      onConfirm: () => {
+        AccountingEngine.cancelVoucher(v.id);
+        toast.success("Voucher cancelled", { description: v.voucherNo });
+      },
+      variant: 'destructive'
+    });
   };
 
   const handleDelete = (v: Voucher) => {
-    if (window.confirm(`Permanently delete voucher ${v.voucherNo}? This removes it and its accounting effect.`)) {
-      AccountingEngine.deleteVoucher(v.id);
-    }
+    setConfirmDialog({
+      open: true,
+      title: "Delete Voucher",
+      description: `Permanently delete voucher ${v.voucherNo}? This removes it and its accounting effect.`,
+      onConfirm: () => {
+        AccountingEngine.deleteVoucher(v.id);
+        toast.success("Voucher deleted", { description: v.voucherNo });
+      },
+      variant: 'destructive'
+    });
   };
 
   const totals = useMemo(() => {
@@ -177,7 +194,7 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
           />
           <KpiCard
             label="Total Debit"
-            value={`PKR ${totals.debit.toLocaleString()}`}
+            value={formatCurrency(totals.debit)}
             size="sm"
             icon={ArrowDownLeft}
             iconClassName="text-success"
@@ -185,7 +202,7 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
           />
           <KpiCard
             label="Total Credit"
-            value={`PKR ${totals.credit.toLocaleString()}`}
+            value={formatCurrency(totals.credit)}
             size="sm"
             icon={ArrowUpRight}
             iconClassName="text-destructive"
@@ -302,6 +319,26 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
         editVoucherId={editVoucherId}
       />
       {viewVoucherId && <VoucherDetailModal voucherId={viewVoucherId} onClose={() => setViewVoucherId(null)} />}
+
+
+      {/* Confirmation Dialog */}
+      <AlertDialog open={confirmDialog.open} onOpenChange={(o) => setConfirmDialog(d => ({ ...d, open: o }))}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmDialog.title}</AlertDialogTitle>
+            <AlertDialogDescription>{confirmDialog.description}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDialog.onConfirm}
+              className={confirmDialog.variant === 'destructive' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : ''}
+            >
+              Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { CircleDollarSign, Pencil, Plus, UserCog, Wallet, } from "lucide-react";
+import { CircleDollarSign, Pencil, Plus, UserCog, Wallet } from "lucide-react";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -198,7 +198,7 @@ export function Processors() {
       />
 
       <PageModal isOpen={isModalOpen} onClose={closeModal} title={editingProcessor ? 'Edit Processor' : 'Add Processor'}>
-              <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+              <form onSubmit={handleSubmit} className="space-y-4">
               <input type="text" required value={name} onChange={e => setName(e.target.value)} className="w-full rounded-xl border p-3 text-sm" placeholder="Processor Name *" />
               <div>
                 <label className="block text-sm font-medium text-foreground/80 mb-1">Worker Type</label>

@@ -1,5 +1,6 @@
 import { AlertCircle, CheckCircle2, Edit, FileText, History, Trash2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import { AccountingEngine } from '../lib/accounting/AccountingEngine';
 import { formatCurrency } from '../lib/utils';
 import { ErrorManagement } from '../lib/validation';
@@ -8,6 +9,7 @@ import { useERPStore } from '../store/useERPStore';
 export function VoucherDetailModal({ voucherId, onClose }: { voucherId: string, onClose: () => void }) {
   const { vouchers, journalEntries, accounts } = useERPStore();
   const [activeTab, setActiveTab] = useState<'entries' | 'audit'>('entries');
+  const [confirmOpen, setConfirmOpen] = useState(false);
   
   const voucher = vouchers.find(v => v.id === voucherId);
   
@@ -18,12 +20,15 @@ export function VoucherDetailModal({ voucherId, onClose }: { voucherId: string, 
   if (!voucher) return null;
 
   const handleDelete = () => {
-    if (window.confirm("Are you sure you want to delete this voucher? This will reverse its accounting impact.")) {
-      ErrorManagement.safeExecuteSync(() => {
-        AccountingEngine.deleteVoucher(voucher.id);
-        onClose();
-      }, 'Voucher Delete');
-    }
+    setConfirmOpen(true);
+  };
+
+  const executeDelete = () => {
+    setConfirmOpen(false);
+    ErrorManagement.safeExecuteSync(() => {
+      AccountingEngine.deleteVoucher(voucher.id);
+      onClose();
+    }, 'Voucher Delete');
   };
 
   return (
@@ -226,6 +231,24 @@ export function VoucherDetailModal({ voucherId, onClose }: { voucherId: string, 
 
         </div>
       </div>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Voucher?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this voucher? This will reverse its accounting impact.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={executeDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

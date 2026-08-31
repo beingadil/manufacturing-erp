@@ -1,4 +1,4 @@
-import { Layers, PackageSearch, Pencil, Plus, Trash2, Wallet, } from "lucide-react";
+import { Layers, PackageSearch, Pencil, Plus, Trash2, Wallet } from "lucide-react";
 import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from 'sonner';
@@ -333,7 +333,7 @@ export function RawMaterials() {
       />
 
       <PageModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingMaterial ? 'Edit Material' : 'Add Material'}>
-              <form onSubmit={editingMaterial ? handleEdit : handleCreate} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+              <form onSubmit={editingMaterial ? handleEdit : handleCreate} className="space-y-4">
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-foreground">Material Name *</label>
                 <input type="text" required value={name} onChange={e => setName(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors" placeholder="e.g. Circle 6½ Inch" />

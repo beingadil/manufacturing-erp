@@ -53,14 +53,24 @@ export function PageModal({ isOpen, onClose, title, children, maxWidth = 'max-w-
 
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      const isInside = active !== null && contentRef.current.contains(active);
+
+      // Redirect Tab whenever focus is outside the modal OR at the boundary —
+      // a robust trap cannot be escaped by Tab.
+      if (!isInside) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+        return;
+      }
 
       if (e.shiftKey) {
-        if (document.activeElement === first) {
+        if (active === first) {
           e.preventDefault();
           last.focus();
         }
       } else {
-        if (document.activeElement === last) {
+        if (active === last) {
           e.preventDefault();
           first.focus();
         }

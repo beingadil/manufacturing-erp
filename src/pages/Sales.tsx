@@ -1,4 +1,4 @@
-import { Edit, Eye, Plus, Printer, Trash2, } from 'lucide-react';
+import { Edit, Eye, Plus, Printer, Trash2 } from 'lucide-react';
 import React, { useMemo, useState } from "react";
 import { Link } from 'react-router-dom';
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
@@ -180,7 +180,7 @@ export function Sales() {
       )}
 
       <PageModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditSaleId(undefined) }} title={editSaleId ? 'Edit Sale' : 'Add Sale'}>
-              <form onSubmit={handleCreate} className="p-6 space-y-3">
+              <form onSubmit={handleCreate} className="space-y-3">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-foreground/80 mb-1">Customer</label>
