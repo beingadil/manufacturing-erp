@@ -399,8 +399,8 @@ export function JobWork() {
         >
           <Printer className="h-4 w-4" />
         </button>
-        <button className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Eye className="h-4 w-4" /></button>
-        <button onClick={() => handleEditSend(item)} className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Edit className="h-4 w-4" /></button>
+        <button aria-label="View dispatch details" className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Eye className="h-4 w-4" /></button>
+        <button onClick={() => handleEditSend(item)} aria-label="Edit dispatch" className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Edit className="h-4 w-4" /></button>
         <button
           onClick={() => setLossModal({ isOpen: true, sendId: item.id, dispatchNo: item.dispatchNo || 'Unknown', pending: item.pendingPcs })}
           disabled={item.pendingPcs <= 0}
@@ -410,6 +410,7 @@ export function JobWork() {
         <button
           onClick={() => setDeleteModal({isOpen: true, type: 'send', id: item.id, no: item.dispatchNo || 'Unknown'})}
           disabled={item.pcsReceived > 0}
+          aria-label={item.pcsReceived > 0 ? 'Delete linked receipts first' : 'Delete dispatch'}
           title={item.pcsReceived > 0 ? 'Delete linked receipts first' : 'Delete dispatch'}
           className="p-1.5 rounded-md text-destructive transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-destructive/10"
         ><Trash2 className="h-4 w-4" /></button>
@@ -452,11 +453,12 @@ export function JobWork() {
   const receiptColumns: Column<typeof enrichedReceipts[0]>[] = [
     { key: 'actions', label: 'Actions', align: 'right', render: (item) => (
       <div className="flex justify-end gap-2">
-        <button className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Eye className="h-4 w-4" /></button>
-        <button onClick={() => handleEditReceive(item)} className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Edit className="h-4 w-4" /></button>
+        <button aria-label="View receipt details" className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Eye className="h-4 w-4" /></button>
+        <button onClick={() => handleEditReceive(item)} aria-label="Edit receipt" className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Edit className="h-4 w-4" /></button>
         <button
           onClick={() => setDeleteModal({isOpen: true, type: 'receipt', id: item.id, no: item.receiveNo || 'Unknown'})}
           disabled={item.billedStatus === 'Billed'}
+          aria-label={item.billedStatus === 'Billed' ? 'Delete the processor bill first' : 'Delete receipt'}
           title={item.billedStatus === 'Billed' ? 'Delete the processor bill first' : 'Delete receipt'}
           className="p-1.5 rounded-md text-destructive transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-destructive/10"
         ><Trash2 className="h-4 w-4" /></button>
@@ -495,9 +497,9 @@ export function JobWork() {
         >
           <Printer className="h-4 w-4" />
         </button>
-        <button className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Eye className="h-4 w-4" /></button>
-        <button onClick={() => handleEditBill(item)} className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Edit className="h-4 w-4" /></button>
-        <button onClick={() => setDeleteModal({isOpen: true, type: 'bill', id: item.id, no: item.billNo || 'Unknown'})} className="p-1.5 hover:bg-destructive/10 text-destructive rounded-md transition-colors"><Trash2 className="h-4 w-4" /></button>
+        <button aria-label="View processor bill details" className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Eye className="h-4 w-4" /></button>
+        <button onClick={() => handleEditBill(item)} aria-label="Edit processor bill" className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Edit className="h-4 w-4" /></button>
+        <button onClick={() => setDeleteModal({isOpen: true, type: 'bill', id: item.id, no: item.billNo || 'Unknown'})} aria-label="Delete processor bill" className="p-1.5 hover:bg-destructive/10 text-destructive rounded-md transition-colors"><Trash2 className="h-4 w-4" /></button>
       </div>
     ) },
     { key: "formattedDate", label: "Date", sortable: true },
@@ -794,8 +796,8 @@ export function JobWork() {
             columns={[
               { key: 'actions', label: 'Actions', align: 'right', render: (item) => (
                 <div className="flex justify-end gap-2">
-                  <button onClick={() => openEditStage(item)} className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Edit className="h-4 w-4" /></button>
-                  <button onClick={() => setStageToDelete(item.id)} className="p-1.5 hover:bg-destructive/10 text-destructive rounded-md transition-colors" title="Only unused stages can be deleted"><Trash2 className="h-4 w-4" /></button>
+                  <button onClick={() => openEditStage(item)} aria-label="Edit stage" className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Edit className="h-4 w-4" /></button>
+                  <button onClick={() => setStageToDelete(item.id)} aria-label="Delete stage" className="p-1.5 hover:bg-destructive/10 text-destructive rounded-md transition-colors" title="Only unused stages can be deleted"><Trash2 className="h-4 w-4" /></button>
                 </div>
               )},
               { key: 'sequence', label: '#', sortable: true },

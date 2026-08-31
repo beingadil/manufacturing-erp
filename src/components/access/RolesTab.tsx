@@ -209,6 +209,7 @@ export function RolesTab() {
             size="icon"
             onClick={() => { setEditingRole(r); setFormOpen(true); }}
             title="Edit"
+            aria-label={`Edit role ${r.name}`}
           >
             <Pencil className="h-4 w-4" />
           </Button>
@@ -218,6 +219,7 @@ export function RolesTab() {
             onClick={() => { setDeleteRole(r); setDeleteOpen(true); }}
             className="text-destructive hover:text-destructive"
             title="Delete"
+            aria-label={`Delete role ${r.name}`}
             disabled={r.type === 'Default'}
           >
             <Trash2 className="h-4 w-4" />

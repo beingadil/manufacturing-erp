@@ -79,10 +79,10 @@ export function VoucherHistoryTab({ sourceModule }: VoucherHistoryTabProps) {
           />
         </div>
         <div className="flex items-center gap-2">
-           <button className="p-2 rounded-lg border border-border bg-background hover:bg-muted text-muted-foreground transition-colors" title="Export CSV">
+           <button className="p-2 rounded-lg border border-border bg-background hover:bg-muted text-muted-foreground transition-colors" title="Export CSV" aria-label="Export CSV">
              <Download className="h-4 w-4" />
            </button>
-           <button className="p-2 rounded-lg border border-border bg-background hover:bg-muted text-muted-foreground transition-colors" title="Print">
+           <button className="p-2 rounded-lg border border-border bg-background hover:bg-muted text-muted-foreground transition-colors" title="Print" aria-label="Print">
              <Printer className="h-4 w-4" />
            </button>
         </div>
