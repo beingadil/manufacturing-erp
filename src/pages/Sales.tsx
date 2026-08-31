@@ -2,6 +2,7 @@ import { Edit, Eye, Plus, Printer, Trash2 } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from 'react-router-dom';
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
+import { DatePicker } from "../components/ui/date-picker";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
 import { QuickAddCustomer, QuickAddProduct } from "../components/QuickAddModals";
 import { SearchableSelect } from "../components/SearchableSelect";
@@ -188,9 +189,9 @@ export function Sales() {
         <VoucherHistoryTab sourceModule="Sales" />
       )}
 
-      <PageModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditSaleId(undefined) }} title={editSaleId ? 'Edit Sale' : 'Add Sale'}>
+      <PageModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditSaleId(undefined) }} title={editSaleId ? 'Edit Sale' : 'Add Sale'} maxWidth="max-w-3xl">
         <form onSubmit={handleCreate} className="space-y-3">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label htmlFor="sale-customer" className="block text-sm font-medium text-foreground/80 mb-1">Customer</label>
               <SearchableSelect 
@@ -218,18 +219,18 @@ export function Sales() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label htmlFor="sale-pcs" className="block text-sm font-medium text-foreground/80 mb-1">PCS to Sell *</label>
-              <input id="sale-pcs" name="sale-pcs" type="number" required placeholder="Quantity" value={pcsSold} onChange={e => setPcsSold(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" />
+              <input id="sale-pcs" name="sale-pcs" type="number" required placeholder="Quantity" value={pcsSold} onChange={e => setPcsSold(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 h-12" />
             </div>
             <div>
               <label htmlFor="sale-price" className="block text-sm font-medium text-foreground/80 mb-1">Price Per Piece (PKR) *</label>
-              <input id="sale-price" name="sale-price" type="number" step="0.01" required placeholder="Rate" value={pricePerPiece} onChange={e => setPricePerPiece(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" />
+              <input id="sale-price" name="sale-price" type="number" step="0.01" required placeholder="Rate" value={pricePerPiece} onChange={e => setPricePerPiece(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 h-12" />
             </div>
             <div>
               <label htmlFor="sale-date" className="block text-sm font-medium text-foreground/80 mb-1">Date *</label>
-              <input id="sale-date" name="sale-date" type="date" required value={date} onChange={e => setDate(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" />
+              <DatePicker id="sale-date" value={date} onChange={setDate} />
             </div>
           </div>
           <div className="pt-2 flex gap-3">
