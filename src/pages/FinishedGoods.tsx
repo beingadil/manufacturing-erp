@@ -1,4 +1,4 @@
-import { Boxes, Package, Pencil, Plus, Trash2, } from "lucide-react";
+import { Boxes, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import React, { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
@@ -200,7 +200,7 @@ export function FinishedGoods() {
       />
 
       <PageModal isOpen={isModalOpen && !isAddMaterialOpen} onClose={closeModal} title={editingProduct ? 'Edit Product' : 'Add Finished Product'}>
-              <form onSubmit={editingProduct ? handleEdit : handleCreate} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+              <form onSubmit={editingProduct ? handleEdit : handleCreate} className="space-y-4">
               <input type="text" required placeholder="Product Name" value={name} onChange={e => setName(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
               
               <div className="grid grid-cols-2 gap-3">

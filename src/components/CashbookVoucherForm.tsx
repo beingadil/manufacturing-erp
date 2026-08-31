@@ -4,12 +4,13 @@ import { v4 as uuidv4 } from 'uuid';
 import { AccountingEngine } from '../lib/accounting/AccountingEngine';
 import { getBankAccounts, getCashAccounts } from '../lib/accounting/accountClassification';
 import { DocumentNumberingService } from '../lib/business/DocumentNumberingService';
-import { cn } from '../lib/utils';
+import { cn, formatCurrency } from '../lib/utils';
 import { ErrorManagement } from '../lib/validation';
 import { SearchableAccountTree } from '../pages/finance/SearchableAccountTree';
 import { useERPStore } from '../store/useERPStore';
 import type { SourceModule, VoucherType } from '../types/erp';
 import { SearchableSelect } from './SearchableSelect';
+import { toast } from 'sonner';
 
 /**
  * Purpose-specific voucher form (spec §4–8).
@@ -264,13 +265,13 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
 
   const entityOptionsFor = (type: RowType) => {
     if (type === 'supplier') {
-      return suppliers.map(s => ({ id: s.id, label: s.name, secondaryLabel: `Balance: PKR ${(s.balancePayable || 0).toLocaleString()}` }));
+      return suppliers.map(s => ({ id: s.id, label: s.name, secondaryLabel: `Balance: ${formatCurrency(s.balancePayable || 0)}` }));
     }
     if (type === 'customer') {
-      return customers.map(c => ({ id: c.id, label: c.name, secondaryLabel: `Balance: PKR ${(c.balanceReceivable || 0).toLocaleString()}` }));
+      return customers.map(c => ({ id: c.id, label: c.name, secondaryLabel: `Balance: ${formatCurrency(c.balanceReceivable || 0)}` }));
     }
     if (type === 'processor') {
-      return processors.map(p => ({ id: p.id, label: p.name, secondaryLabel: `Balance: PKR ${(p.balancePayable || 0).toLocaleString()}` }));
+      return processors.map(p => ({ id: p.id, label: p.name, secondaryLabel: `Balance: ${formatCurrency(p.balancePayable || 0)}` }));
     }
     return [];
   };
@@ -364,7 +365,7 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
             date, type: meta.voucherType, referenceNo: referenceNo || undefined, sourceModule: sourceModule || 'Manual', narration,
           }, entries as any);
         }
-        alert(`Journal Voucher ${voucherNo} posted!`);
+        toast.success("Journal Voucher posted!", { description: voucherNo });
         if (onSaved) onSaved();
       }, 'Journal Voucher');
       return;
@@ -386,19 +387,19 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
     for (const [sid, amt] of supplierTotals) {
       const sup = suppliers.find(s => s.id === sid);
       if (sup && amt > sup.balancePayable) {
-        alert(`Cannot pay ${sup.name} beyond outstanding balance of PKR ${sup.balancePayable.toLocaleString()}.`);
+        toast.error("Payment exceeds outstanding balance", { description: `${sup.name} (${formatCurrency(sup.balancePayable)})` });
         return;
       }
       const proc = processors.find(p => p.id === sid);
       if (proc && amt > proc.balancePayable) {
-        alert(`Cannot pay ${proc.name} beyond pending amount of PKR ${proc.balancePayable.toLocaleString()}.`);
+        toast.error("Payment exceeds pending amount", { description: `${proc.name} (${formatCurrency(proc.balancePayable)})` });
         return;
       }
     }
     for (const [cid, amt] of customerTotals) {
       const cus = customers.find(c => c.id === cid);
       if (cus && amt > cus.balanceReceivable) {
-        alert(`Cannot receive from ${cus.name} beyond outstanding balance of PKR ${cus.balanceReceivable.toLocaleString()}.`);
+        toast.error('Receipt Exceeds Balance', { description: `Cannot receive from ${cus.name} beyond outstanding balance of ${formatCurrency(cus.balanceReceivable)}.` });
         return;
       }
     }
@@ -410,7 +411,7 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
       if (!isTouched) continue;
       const accId = resolveRowAccount(row);
       if (!accId) {
-        alert('Could not resolve counterparty account. Make sure the selected entity has a linked account.');
+        toast.error('Missing Linked Account', { description: 'Could not resolve counterparty account. Make sure the selected entity has a linked account.' });
         return;
       }
       if (amt <= 0) continue;
@@ -443,7 +444,7 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
       // runs recomputePartyBalances(), which derives every balance from the
       // linked account's COMPLETE ledger (spec §14).
 
-      alert(`${meta.voucherType} ${voucherNo} saved!`);
+      toast.success(`${meta.voucherType} saved!`, { description: voucherNo });
       if (onSaved) onSaved();
     }, meta.voucherType);
   };
@@ -526,7 +527,7 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
                 {isJournal ? 'Journal Totals' : 'Total Voucher Amount'}
               </p>
               <h4 className="text-3xl font-bold mt-2 font-mono">
-                PKR {(isJournal ? totalDebit : total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {formatCurrency(isJournal ? totalDebit : total)}
               </h4>
             </div>
             {isJournal ? (
@@ -538,7 +539,7 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
               ) : (
                 <div className="flex items-center gap-2 text-sm text-white/60 mt-4">
                   <Info className="h-4 w-4" />
-                  Difference: PKR {difference.toLocaleString()}
+                  Difference: {formatCurrency(difference)}
                 </div>
               )
             ) : total > 0 ? (

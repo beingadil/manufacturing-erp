@@ -1,7 +1,8 @@
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, CheckCircle2, Edit, Eye, PackageCheck, Plus, Printer, Trash2, } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, CheckCircle2, Edit, Eye, PackageCheck, Plus, Printer, Trash2 } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from 'react-router-dom';
 import { Column, DataTable } from "../components/DataTable";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../components/ui/alert-dialog";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
 import { QuickAddMaterial, QuickAddProcessor } from "../components/QuickAddModals";
 import { SearchableSelect } from "../components/SearchableSelect";
@@ -567,8 +568,11 @@ export function JobWork() {
     setStageModalOpen(false);
   };
 
+  const [stageToDelete, setStageToDelete] = useState<string | null>(null);
+
   const handleDeleteStage = (id: string) => {
     ProcessingService.deleteStage(id);
+    setStageToDelete(null);
   };
 
   // ── Timeline derivation ────────────────────────────────────────────────────
@@ -791,7 +795,7 @@ export function JobWork() {
               { key: 'actions', label: 'Actions', align: 'right', render: (item) => (
                 <div className="flex justify-end gap-2">
                   <button onClick={() => openEditStage(item)} className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Edit className="h-4 w-4" /></button>
-                  <button onClick={() => handleDeleteStage(item.id)} className="p-1.5 hover:bg-destructive/10 text-destructive rounded-md transition-colors" title="Only unused stages can be deleted"><Trash2 className="h-4 w-4" /></button>
+                  <button onClick={() => setStageToDelete(item.id)} className="p-1.5 hover:bg-destructive/10 text-destructive rounded-md transition-colors" title="Only unused stages can be deleted"><Trash2 className="h-4 w-4" /></button>
                 </div>
               )},
               { key: 'sequence', label: '#', sortable: true },
@@ -1133,7 +1137,26 @@ Processor
               ? 'Are you sure you want to permanently delete this receipt? The received pcs will move back to At Processor (WIP).'
               : 'Are you sure you want to permanently delete this processor bill? Receipts will be marked unbilled and the processor balance reversed.'
         }
-      />
+        />
+      <AlertDialog open={stageToDelete !== null} onOpenChange={(open) => { if (!open) setStageToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Stage?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Permanently delete this processing stage? Existing batch references will keep their stage name.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => { e.preventDefault(); if (stageToDelete) handleDeleteStage(stageToDelete); }}
+            >
+              Delete Stage
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

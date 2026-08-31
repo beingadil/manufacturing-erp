@@ -122,11 +122,20 @@ class BrowserWindowService implements IWindowService {
 
 class BrowserDialogService implements IDialogService {
   async showMessageBox(options: MessageBoxOptions): Promise<number> {
-    const confirmed = window.confirm(`${options.title || ''}\n\n${options.message}\n${options.detail || ''}`);
-    return confirmed ? 0 : 1; // Assuming 0 is the primary "OK/Yes" button
+    return new Promise((resolve) => {
+      toast(options.message, {
+        description: options.detail || undefined,
+        action: {
+          label: options.title || 'Confirm',
+          onClick: () => resolve(0),
+        },
+        cancel: { label: 'Cancel', onClick: () => resolve(1) },
+        duration: 30000,
+      });
+    });
   }
   async showErrorBox(title: string, content: string): Promise<void> {
-    window.alert(`${title}\n\n${content}`);
+    toast.error(title, { description: content });
   }
 }
 
