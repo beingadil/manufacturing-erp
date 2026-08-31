@@ -7,6 +7,7 @@ import { DocumentNumberingService } from '../lib/business/DocumentNumberingServi
 import { cn, formatCurrency } from '../lib/utils';
 import { ErrorManagement } from '../lib/validation';
 import { SearchableAccountTree } from '../pages/finance/SearchableAccountTree';
+import { DatePicker } from './ui/date-picker';
 import { useERPStore } from '../store/useERPStore';
 import type { SourceModule, VoucherType } from '../types/erp';
 import { SearchableSelect } from './SearchableSelect';
@@ -469,13 +470,7 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
           <div className="col-span-12 lg:col-span-8 bg-card border border-border/50 rounded-xl p-5 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">Date</label>
-              <input
-                type="date"
-                required
-                value={date}
-                onChange={e => setDate(e.target.value)}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary"
-              />
+              <DatePicker value={date} onChange={setDate} className="h-11 rounded-lg" />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">Voucher No</label>

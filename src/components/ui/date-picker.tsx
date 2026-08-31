@@ -13,11 +13,13 @@ interface DatePickerProps {
   disabled?: boolean;
   placeholder?: string;
   className?: string;
+  /** Compact variant for filter bars; default is the taller form-field style. */
+  size?: 'sm' | 'default';
 }
 
 /**
  * Enhanced calendar date picker built on react-day-picker + Radix Popover.
- * Replaces the plain <input type="date"> in data-entry forms.
+ * Replaces the plain <input type="date"> in data-entry forms and filters.
  */
 export function DatePicker({
   value,
@@ -26,6 +28,7 @@ export function DatePicker({
   disabled,
   placeholder = 'Select a date',
   className,
+  size = 'default',
 }: DatePickerProps) {
   const selected = value ? new Date(value) : undefined;
 
@@ -38,7 +41,10 @@ export function DatePicker({
           variant="outline"
           disabled={disabled}
           className={cn(
-            "w-full h-12 justify-start rounded-xl border-border px-4 py-3 text-left font-normal text-sm",
+            "w-full justify-start text-left font-normal text-sm",
+            size === 'default'
+              ? "h-12 rounded-xl border-border px-4 py-3"
+              : "h-9 rounded-xl px-3 py-2",
             !selected && "text-muted-foreground",
             className
           )}

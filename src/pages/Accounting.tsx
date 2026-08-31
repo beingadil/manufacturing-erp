@@ -1,9 +1,10 @@
-import { Calculator, CalendarRange, Edit, Folder, FolderOpen, Plus, Printer, Search, Trash2 } from "lucide-react";
+import { Calculator, Edit, Folder, FolderOpen, Plus, Printer, Search, Trash2 } from "lucide-react";
 import { toast } from 'sonner';
 import { useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { AddAccountModal } from "../components/AddAccountModal";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
+import { DatePicker } from "../components/ui/date-picker";
 import { BalanceSheetStatement } from "../components/reports/financial/BalanceSheetStatement";
 import { ProfitLossStatement } from "../components/reports/financial/ProfitLossStatement";
 import { SearchableSelect } from "../components/SearchableSelect";
@@ -105,21 +106,9 @@ function GeneralLedger() {
             <Printer className="h-4 w-4" />
             Print Ledger
           </button>
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={e => setDateFrom(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-border bg-background text-sm"
-            title="Date From"
-          />
+          <DatePicker value={dateFrom} onChange={setDateFrom} size="sm" className="w-40" placeholder="From" />
           <span className="text-muted-foreground text-sm">to</span>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={e => setDateTo(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-border bg-background text-sm"
-            title="Date To"
-          />
+          <DatePicker value={dateTo} onChange={setDateTo} size="sm" className="w-40" placeholder="To" />
           <div className="w-full sm:w-80">
             <SearchableSelect 
               options={accounts.map(a => {
@@ -208,16 +197,7 @@ function BalanceSheet() {
           <p className="text-sm text-muted-foreground">Statement of financial position — click any account to drill into its ledger</p>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div className="flex items-center gap-2 bg-muted/20 border border-border/50 rounded-lg px-3 py-2">
-            <CalendarRange className="h-4 w-4 text-muted-foreground" />
-            <input
-              type="date"
-              value={asOfDate}
-              onChange={e => setAsOfDate(e.target.value)}
-              className="bg-transparent text-sm text-foreground focus:outline-none"
-              title="As of date"
-            />
-          </div>
+          <DatePicker value={asOfDate} onChange={setAsOfDate} size="sm" className="w-44" placeholder="As of date" />
         </div>
       </div>
       <div className="p-6 flex justify-center items-start">
@@ -419,16 +399,7 @@ function TrialBalance() {
           <p className="text-sm text-muted-foreground">Verify the equality of debits and credits</p>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div className="flex items-center gap-2 bg-muted/20 border border-border/50 rounded-lg px-3 py-2">
-            <CalendarRange className="h-4 w-4 text-muted-foreground" />
-            <input
-              type="date"
-              value={asOfDate}
-              onChange={e => setAsOfDate(e.target.value)}
-              className="bg-transparent text-sm text-foreground focus:outline-none"
-              title="As of date"
-            />
-          </div>
+          <DatePicker value={asOfDate} onChange={setAsOfDate} size="sm" className="w-44" placeholder="As of date" />
           <button className="flex items-center gap-2 bg-muted text-foreground px-4 py-2 rounded-lg hover:bg-muted/80 transition-colors text-sm font-medium whitespace-nowrap border border-border/50">
             Export
           </button>
@@ -509,21 +480,9 @@ function ProfitAndLoss() {
           <p className="text-sm text-muted-foreground">Statement of comprehensive income — click any account to drill into its ledger</p>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={e => setDateFrom(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-border bg-background text-sm"
-            title="Date From"
-          />
+          <DatePicker value={dateFrom} onChange={setDateFrom} size="sm" className="w-40" placeholder="From" />
           <span className="text-muted-foreground text-sm">to</span>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={e => setDateTo(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-border bg-background text-sm"
-            title="Date To"
-          />
+          <DatePicker value={dateTo} onChange={setDateTo} size="sm" className="w-40" placeholder="To" />
         </div>
       </div>
       <div className="p-6 flex justify-center items-start">
@@ -598,21 +557,9 @@ function CashFlow() {
           <p className="text-sm text-muted-foreground">Inflows and outflows of cash</p>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={e => setDateFrom(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-border bg-background text-sm"
-            title="Date From"
-          />
+          <DatePicker value={dateFrom} onChange={setDateFrom} size="sm" className="w-40" placeholder="From" />
           <span className="text-muted-foreground text-sm">to</span>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={e => setDateTo(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-border bg-background text-sm"
-            title="Date To"
-          />
+          <DatePicker value={dateTo} onChange={setDateTo} size="sm" className="w-40" placeholder="To" />
         </div>
       </div>
       <div className="p-6 flex justify-center items-start">

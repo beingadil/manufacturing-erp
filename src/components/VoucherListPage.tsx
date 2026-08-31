@@ -7,6 +7,7 @@ import { cn, formatCurrency } from '../lib/utils';
 import { useERPStore } from '../store/useERPStore';
 import { Voucher } from '../types/erp';
 import { KpiCard } from './ui/KpiCard';
+import { DatePicker } from './ui/date-picker';
 import { VoucherDetailModal } from './VoucherDetailModal';
 import { VoucherEditorModal, VoucherPageKind } from './VoucherEditorModal';
 import { ACCENT_BAR, ACCENT_BTN, ACCENT_HEAD, ACCENT_SOFT, KIND_ICON } from './voucherAccents';
@@ -142,21 +143,9 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
       {/* Filters */}
       <div className="p-4 border-b border-border/50 bg-muted/10 flex flex-wrap items-center gap-3 shrink-0">
         <div className="flex items-center gap-2">
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={e => setDateFrom(e.target.value)}
-            className="w-40 px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-            title="Date From"
-          />
+          <DatePicker value={dateFrom} onChange={setDateFrom} size="sm" className="w-40" placeholder="From" />
           <span className="text-muted-foreground text-sm">to</span>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={e => setDateTo(e.target.value)}
-            className="w-40 px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-            title="Date To"
-          />
+          <DatePicker value={dateTo} onChange={setDateTo} size="sm" className="w-40" placeholder="To" />
         </div>
         <div className="relative flex-1 min-w-[200px] max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

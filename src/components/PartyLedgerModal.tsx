@@ -1,6 +1,7 @@
-import { ArrowUpRight, BookOpenText, CalendarRange, Scale, Wallet, X } from 'lucide-react';
+import { ArrowUpRight, BookOpenText, Scale, Wallet, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { DatePicker } from './ui/date-picker';
 import { AccountingEngine } from '../lib/accounting/AccountingEngine';
 import { isDebitNormalAccount } from '../lib/accounting/accountClassification';
 import { cn, formatCurrency } from '../lib/utils';
@@ -113,22 +114,9 @@ export function PartyLedgerModal({ party, onClose }: PartyLedgerModalProps) {
         {/* Filters */}
         <div className="px-6 py-4 flex flex-wrap items-center gap-3 border-b border-border/50 shrink-0">
           <div className="flex items-center gap-2">
-            <CalendarRange className="h-4 w-4 text-muted-foreground" />
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={e => setDateFrom(e.target.value)}
-              className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-              title="Date From"
-            />
+            <DatePicker value={dateFrom} onChange={setDateFrom} size="sm" className="w-40" placeholder="From" />
             <span className="text-muted-foreground text-sm">to</span>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={e => setDateTo(e.target.value)}
-              className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-              title="Date To"
-            />
+            <DatePicker value={dateTo} onChange={setDateTo} size="sm" className="w-40" placeholder="To" />
           </div>
           <div className="ml-auto flex items-center gap-2">
             {account && (

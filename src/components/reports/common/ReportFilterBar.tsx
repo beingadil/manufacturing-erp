@@ -1,5 +1,6 @@
 import { Calendar as CalendarIcon, Search, SlidersHorizontal } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
+import { DatePicker } from '../../ui/date-picker';
 import { ReportExportBar } from './ReportExportBar';
 
 interface ReportFilterBarProps {
@@ -136,9 +137,9 @@ export function ReportFilterBar({
               
               {DATE_RANGE_OPTIONS[selectedRangeIndex].label === 'Custom Date Range' && (
                 <div className="flex items-center gap-2">
-                  <input type="date" aria-label="Custom range start" className="px-3 py-2 bg-muted/50 border border-transparent hover:border-border focus:bg-background rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" value={customStart} onChange={e => setCustomStart(e.target.value)} />
+                  <DatePicker value={customStart} onChange={setCustomStart} size="sm" className="w-36" placeholder="Start" />
                   <span className="text-muted-foreground">to</span>
-                  <input type="date" aria-label="Custom range end" className="px-3 py-2 bg-muted/50 border border-transparent hover:border-border focus:bg-background rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" value={customEnd} onChange={e => setCustomEnd(e.target.value)} />
+                  <DatePicker value={customEnd} onChange={setCustomEnd} size="sm" className="w-36" placeholder="End" />
                 </div>
               )}
             </div>
