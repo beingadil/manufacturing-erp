@@ -200,38 +200,51 @@ export function FinishedGoods() {
       />
 
       <PageModal isOpen={isModalOpen && !isAddMaterialOpen} onClose={closeModal} title={editingProduct ? 'Edit Product' : 'Add Finished Product'}>
-              <form onSubmit={editingProduct ? handleEdit : handleCreate} className="space-y-4">
-              <input type="text" required placeholder="Product Name" value={name} onChange={e => setName(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
-              
-              <div className="grid grid-cols-2 gap-3">
-                <input type="text" placeholder="SKU (Optional)" value={sku} onChange={e => setSku(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
-                <input type="number" step="0.01" required placeholder="Selling Price (PKR)" value={sellingPrice} onChange={e => setSellingPrice(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
-              </div>
+        <form onSubmit={editingProduct ? handleEdit : handleCreate} className="space-y-4">
+          <div className="space-y-1">
+            <label htmlFor="product-name" className="text-sm font-medium text-foreground">Product Name</label>
+            <input id="product-name" name="product-name" type="text" required placeholder="Product Name" value={name} onChange={e => setName(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" />
+          </div>
 
-              <div>
-                <SearchableSelect 
-                  options={materials.map(m => ({ id: m.id, label: m.name }))}
-                  value={materialId}
-                  onChange={setMaterialId}
-                  placeholder="Select Linked Material..."
-                  onAdd={() => setIsAddMaterialOpen(true)}
-                  required
-                />
-              </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label htmlFor="product-sku" className="text-sm font-medium text-foreground">SKU (Optional)</label>
+              <input id="product-sku" name="product-sku" type="text" placeholder="SKU (Optional)" spellCheck={false} autoComplete="off" value={sku} onChange={e => setSku(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" />
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="product-price" className="text-sm font-medium text-foreground">Selling Price (PKR)</label>
+              <input id="product-price" name="product-price" type="number" step="0.01" required placeholder="Selling Price (PKR)" value={sellingPrice} onChange={e => setSellingPrice(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" />
+            </div>
+          </div>
 
-              {linkedMaterial && (
-                <div className="rounded-xl bg-muted/40 border border-border px-4 py-3 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Category (from material)</span>
-                    <span className="font-medium text-foreground">{categories.find(c => c.id === linkedMaterial.categoryId)?.name || '—'}</span>
-                  </div>
-                </div>
-              )}
-              
-              <input type="text" placeholder="Description (Optional)" value={description} onChange={e => setDescription(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
-              <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">{editingProduct ? 'Save Changes' : 'Save Product'}</button>
-            </form>
-            </PageModal>
+          <div>
+            <label className="text-sm font-medium text-foreground">Linked Material</label>
+            <SearchableSelect 
+              options={materials.map(m => ({ id: m.id, label: m.name }))}
+              value={materialId}
+              onChange={setMaterialId}
+              placeholder="Select Linked Material..."
+              onAdd={() => setIsAddMaterialOpen(true)}
+              required
+            />
+          </div>
+
+          {linkedMaterial && (
+            <div className="rounded-xl bg-muted/40 border border-border px-4 py-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Category (from material)</span>
+                <span className="font-medium text-foreground">{categories.find(c => c.id === linkedMaterial.categoryId)?.name || '—'}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <label htmlFor="product-description" className="text-sm font-medium text-foreground">Description (Optional)</label>
+            <input id="product-description" name="product-description" type="text" placeholder="Description (Optional)" value={description} onChange={e => setDescription(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" />
+          </div>
+          <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">{editingProduct ? 'Save Changes' : 'Save Product'}</button>
+        </form>
+      </PageModal>
 
       <QuickAddMaterial 
         isOpen={isAddMaterialOpen} 

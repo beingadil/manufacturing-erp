@@ -189,55 +189,55 @@ export function Sales() {
       )}
 
       <PageModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditSaleId(undefined) }} title={editSaleId ? 'Edit Sale' : 'Add Sale'}>
-              <form onSubmit={handleCreate} className="space-y-3">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-foreground/80 mb-1">Customer</label>
-                  <SearchableSelect 
-                    options={customers.map(c => ({ id: c.id, label: c.name, searchValue: c.phone }))}
-                    value={customerId}
-                    onChange={setCustomerId}
-                    placeholder="Select Customer..."
-                    onAdd={() => setIsAddCustomerOpen(true)}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground/80 mb-1">Product</label>
-                  <SearchableSelect 
-                    options={products.map(p => {
-                      const m = materials.find(mat => mat.id === p.materialId);
-                      return { id: p.id, label: p.name, secondaryLabel: `Available: ${m?.processedStockPcs || 0} PCS` }
-                    })}
-                    value={productId}
-                    onChange={handleProductChange}
-                    placeholder="Select Product..."
-                    onAdd={() => setIsAddProductOpen(true)}
-                    required
-                  />
-                </div>
-              </div>
+        <form onSubmit={handleCreate} className="space-y-3">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="sale-customer" className="block text-sm font-medium text-foreground/80 mb-1">Customer</label>
+              <SearchableSelect 
+                options={customers.map(c => ({ id: c.id, label: c.name, searchValue: c.phone }))}
+                value={customerId}
+                onChange={setCustomerId}
+                placeholder="Select Customer..."
+                onAdd={() => setIsAddCustomerOpen(true)}
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="sale-product" className="block text-sm font-medium text-foreground/80 mb-1">Product</label>
+              <SearchableSelect 
+                options={products.map(p => {
+                  const m = materials.find(mat => mat.id === p.materialId);
+                  return { id: p.id, label: p.name, secondaryLabel: `Available: ${m?.processedStockPcs || 0} PCS` }
+                })}
+                value={productId}
+                onChange={handleProductChange}
+                placeholder="Select Product..."
+                onAdd={() => setIsAddProductOpen(true)}
+                required
+              />
+            </div>
+          </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-foreground/80 mb-1">PCS to Sell *</label>
-                  <input type="number" required placeholder="Quantity" value={pcsSold} onChange={e => setPcsSold(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground/80 mb-1">Price Per Piece (PKR) *</label>
-                  <input type="number" step="0.01" required placeholder="Rate" value={pricePerPiece} onChange={e => setPricePerPiece(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground/80 mb-1">Date *</label>
-                  <input type="date" required value={date} onChange={e => setDate(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" />
-                </div>
-              </div>
-              <div className="pt-2 flex gap-3">
-                <button type="button" onClick={() => { setIsModalOpen(false); setEditSaleId(undefined); }} className="flex-1 rounded-xl border border-border bg-card px-4 py-3 font-semibold text-foreground/80 hover:bg-muted/40 transition-colors">Cancel</button>
-                <button type="submit" className="flex-1 rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-md">{editSaleId ? "Update Sale" : "Confirm Sale"}</button>
-              </div>
-            </form>
-            </PageModal>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label htmlFor="sale-pcs" className="block text-sm font-medium text-foreground/80 mb-1">PCS to Sell *</label>
+              <input id="sale-pcs" name="sale-pcs" type="number" required placeholder="Quantity" value={pcsSold} onChange={e => setPcsSold(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" />
+            </div>
+            <div>
+              <label htmlFor="sale-price" className="block text-sm font-medium text-foreground/80 mb-1">Price Per Piece (PKR) *</label>
+              <input id="sale-price" name="sale-price" type="number" step="0.01" required placeholder="Rate" value={pricePerPiece} onChange={e => setPricePerPiece(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" />
+            </div>
+            <div>
+              <label htmlFor="sale-date" className="block text-sm font-medium text-foreground/80 mb-1">Date *</label>
+              <input id="sale-date" name="sale-date" type="date" required value={date} onChange={e => setDate(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" />
+            </div>
+          </div>
+          <div className="pt-2 flex gap-3">
+            <button type="button" onClick={() => { setIsModalOpen(false); setEditSaleId(undefined); }} className="flex-1 rounded-xl border border-border bg-card px-4 py-3 font-semibold text-foreground/80 hover:bg-muted/40 transition-colors">Cancel</button>
+            <button type="submit" className="flex-1 rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-md">{editSaleId ? "Update Sale" : "Confirm Sale"}</button>
+          </div>
+        </form>
+      </PageModal>
 
       <DeleteConfirmationModal
         isOpen={deleteModal.isOpen}
