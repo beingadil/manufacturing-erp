@@ -2,6 +2,7 @@ import { Edit, Eye, Plus, Printer, Trash2 } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from 'react-router-dom';
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
+import { DatePicker } from "../components/ui/date-picker";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
 import { QuickAddMaterial, QuickAddSupplier } from "../components/QuickAddModals";
 import { SearchableSelect } from "../components/SearchableSelect";
@@ -191,60 +192,60 @@ export function Purchases() {
         <VoucherHistoryTab sourceModule="Purchase" />
       )}
 
-      <PageModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editPurchaseId ? 'Edit Purchase' : 'Add Purchase'}>
-              <form onSubmit={handleCreate} className="space-y-3">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label htmlFor="purchase-supplier" className="text-sm font-semibold">Supplier *</label>
-                  <SearchableSelect 
-                    options={suppliers.map(s => ({ id: s.id, label: s.name, searchValue: s.phone }))}
-                    value={supplierId}
-                    onChange={setSupplierId}
-                    placeholder="Select Supplier..."
-                    onAdd={() => setIsAddSupplierOpen(true)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label htmlFor="purchase-material" className="text-sm font-semibold">Material *</label>
-                  <SearchableSelect 
-                    options={materials.map(m => ({ id: m.id, label: m.name }))}
-                    value={materialId}
-                    onChange={setMaterialId}
-                    placeholder="Select Material..."
-                    onAdd={() => setIsAddMaterialOpen(true)}
-                    required
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <label htmlFor="purchase-date" className="text-sm font-semibold">Date *</label>
-                  <input id="purchase-date" name="purchase-date" type="date" required value={date} onChange={e => setDate(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" />
-                </div>
-                <div className="space-y-2">
-                  <label htmlFor="purchase-weight" className="text-sm font-semibold">Weight *</label>
-                  <input id="purchase-weight" name="purchase-weight" type="number" step="0.01" min="0.01" required value={weight} onChange={e => setWeight(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" placeholder="Total weight" />
-                </div>
-                <div className="space-y-2">
-                  <label htmlFor="purchase-unit" className="text-sm font-semibold">Unit *</label>
-                  <select id="purchase-unit" name="purchase-unit" required value={weightUnit} onChange={e => setWeightUnit(e.target.value as any)} className="w-full rounded-xl border border-border px-4 py-3 bg-card">
-                    <option value="KGs">KGs</option>
-                    <option value="Tons">Tons</option>
-                  </select>
-                </div>
-              </div>
+      <PageModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editPurchaseId ? 'Edit Purchase' : 'Add Purchase'} maxWidth="max-w-3xl">
+        <form onSubmit={handleCreate} className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label htmlFor="purchase-supplier" className="text-sm font-semibold">Supplier *</label>
+              <SearchableSelect 
+                options={suppliers.map(s => ({ id: s.id, label: s.name, searchValue: s.phone }))}
+                value={supplierId}
+                onChange={setSupplierId}
+                placeholder="Select Supplier..."
+                onAdd={() => setIsAddSupplierOpen(true)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="purchase-material" className="text-sm font-semibold">Material *</label>
+              <SearchableSelect 
+                options={materials.map(m => ({ id: m.id, label: m.name }))}
+                value={materialId}
+                onChange={setMaterialId}
+                placeholder="Select Material..."
+                onAdd={() => setIsAddMaterialOpen(true)}
+                required
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <label htmlFor="purchase-date" className="text-sm font-semibold">Date *</label>
+              <DatePicker id="purchase-date" value={date} onChange={setDate} />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="purchase-weight" className="text-sm font-semibold">Weight *</label>
+              <input id="purchase-weight" name="purchase-weight" type="number" step="0.01" min="0.01" required value={weight} onChange={e => setWeight(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 h-12" placeholder="Total weight" />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="purchase-unit" className="text-sm font-semibold">Unit *</label>
+              <select id="purchase-unit" name="purchase-unit" required value={weightUnit} onChange={e => setWeightUnit(e.target.value as any)} className="w-full rounded-xl border border-border px-4 py-3 h-12 bg-card">
+                <option value="KGs">KGs</option>
+                <option value="Tons">Tons</option>
+              </select>
+            </div>
+          </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label htmlFor="purchase-rate" className="text-sm font-semibold">Rate per Unit ({weightUnit}) *</label>
-                  <input id="purchase-rate" name="purchase-rate" type="number" step="0.01" min="0" required value={ratePerUnit} onChange={e => setRatePerUnit(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" placeholder={`Price per ${weightUnit}`} />
-                </div>
-                <div className="space-y-2">
-                  <label htmlFor="purchase-wpp" className="text-sm font-semibold">Weight Per Piece (KGs) *</label>
-                  <input id="purchase-wpp" name="purchase-wpp" type="number" step="any" min="0.000001" required value={weightPerPiece} onChange={e => setWeightPerPiece(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3" placeholder="Weight of one piece (e.g. 0.572)" />
-                </div>
-              </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label htmlFor="purchase-rate" className="text-sm font-semibold">Rate per Unit ({weightUnit}) *</label>
+              <input id="purchase-rate" name="purchase-rate" type="number" step="0.01" min="0" required value={ratePerUnit} onChange={e => setRatePerUnit(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 h-12" placeholder={`Price per ${weightUnit}`} />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="purchase-wpp" className="text-sm font-semibold">Weight Per Piece (KGs) *</label>
+              <input id="purchase-wpp" name="purchase-wpp" type="number" step="any" min="0.000001" required value={weightPerPiece} onChange={e => setWeightPerPiece(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 h-12" placeholder="Weight of one piece (e.g. 0.572)" />
+            </div>
+          </div>
 
               <div className="p-4 rounded-xl bg-muted/40 border border-border flex flex-col gap-2">
                 <div className="flex justify-between items-center">
