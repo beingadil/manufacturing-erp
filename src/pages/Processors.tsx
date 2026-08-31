@@ -198,32 +198,52 @@ export function Processors() {
       />
 
       <PageModal isOpen={isModalOpen} onClose={closeModal} title={editingProcessor ? 'Edit Processor' : 'Add Processor'}>
-              <form onSubmit={handleSubmit} className="space-y-4">
-              <input type="text" required value={name} onChange={e => setName(e.target.value)} className="w-full rounded-xl border p-3 text-sm" placeholder="Processor Name *" />
-              <div>
-                <label className="block text-sm font-medium text-foreground/80 mb-1">Worker Type</label>
-                <select
-                  value={workerStageId}
-                  onChange={e => setWorkerStageId(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-background p-3 text-sm"
-                >
-                  <option value="">General Worker (any stage)</option>
-                  {sortedStages.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}{s.isFinalStage ? ' (Final)' : ''}</option>
-                  ))}
-                </select>
-                <p className="mt-1 text-xs text-muted-foreground">The processing job this worker performs. The Job Work module only offers workers matching the selected stage.</p>
-              </div>
-              <input type="text" value={contactPerson} onChange={e => setContactPerson(e.target.value)} className="w-full rounded-xl border p-3 text-sm" placeholder="Contact Person" />
-              <div className="grid grid-cols-2 gap-3">
-                <input type="text" value={phone} onChange={e => setPhone(e.target.value)} className="w-full rounded-xl border p-3 text-sm" placeholder="Phone" />
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full rounded-xl border p-3 text-sm" placeholder="Email" />
-              </div>
-              <textarea value={address} onChange={e => setAddress(e.target.value)} rows={2} className="w-full rounded-xl border p-3 text-sm" placeholder="Address" />
-              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="w-full rounded-xl border p-3 text-sm" placeholder="Notes" />
-              <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">{editingProcessor ? 'Save Changes' : 'Add Processor'}</button>
-            </form>
-            </PageModal>
+  <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="space-y-1">
+      <label htmlFor="processor-name" className="text-sm font-medium text-foreground">Processor Name</label>
+      <input id="processor-name" name="processor-name" type="text" required value={name} onChange={e => setName(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Processor Name *" />
+    </div>
+    <div>
+      <label htmlFor="processor-worker-stage" className="block text-sm font-medium text-foreground/80 mb-1">Worker Type</label>
+      <select
+        id="processor-worker-stage"
+        name="processor-worker-stage"
+        value={workerStageId}
+        onChange={e => setWorkerStageId(e.target.value)}
+        className="w-full rounded-xl border border-border bg-background p-3 text-sm"
+      >
+        <option value="">General Worker (any stage)</option>
+        {sortedStages.map(s => (
+          <option key={s.id} value={s.id}>{s.name}{s.isFinalStage ? ' (Final)' : ''}</option>
+        ))}
+      </select>
+      <p className="mt-1 text-xs text-muted-foreground">The processing job this worker performs. The Job Work module only offers workers matching the selected stage.</p>
+    </div>
+    <div className="space-y-1">
+      <label htmlFor="processor-contact" className="text-sm font-medium text-foreground">Contact Person</label>
+      <input id="processor-contact" name="processor-contact" type="text" value={contactPerson} onChange={e => setContactPerson(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Contact Person" />
+    </div>
+    <div className="grid grid-cols-2 gap-3">
+      <div className="space-y-1">
+        <label htmlFor="processor-phone" className="text-sm font-medium text-foreground">Phone</label>
+        <input id="processor-phone" name="processor-phone" type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={e => setPhone(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Phone" />
+      </div>
+      <div className="space-y-1">
+        <label htmlFor="processor-email" className="text-sm font-medium text-foreground">Email</label>
+        <input id="processor-email" name="processor-email" type="email" autoComplete="email" spellCheck={false} value={email} onChange={e => setEmail(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Email" />
+      </div>
+    </div>
+    <div className="space-y-1">
+      <label htmlFor="processor-address" className="text-sm font-medium text-foreground">Address</label>
+      <textarea id="processor-address" name="processor-address" value={address} onChange={e => setAddress(e.target.value)} rows={2} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Address" />
+    </div>
+    <div className="space-y-1">
+      <label htmlFor="processor-notes" className="text-sm font-medium text-foreground">Notes</label>
+      <textarea id="processor-notes" name="processor-notes" value={notes} onChange={e => setNotes(e.target.value)} rows={2} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Notes" />
+    </div>
+    <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">{editingProcessor ? 'Save Changes' : 'Add Processor'}</button>
+  </form>
+</PageModal>
 
       {ledgerParty && <PartyLedgerModal party={ledgerParty} onClose={() => setLedgerParty(null)} />}
     </div>

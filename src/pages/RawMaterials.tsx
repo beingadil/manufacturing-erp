@@ -333,37 +333,37 @@ export function RawMaterials() {
       />
 
       <PageModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingMaterial ? 'Edit Material' : 'Add Material'}>
-              <form onSubmit={editingMaterial ? handleEdit : handleCreate} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground">Material Name *</label>
-                <input type="text" required value={name} onChange={e => setName(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors" placeholder="e.g. Circle 6½ Inch" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground">Category *</label>
-                <select required value={categoryId} onChange={e => setCategoryId(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors bg-card">
-                  <option value="" disabled>Select a category</option>
-                  {categories.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground">Description</label>
-                <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors" placeholder="Optional notes" rows={2} />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground">Status</label>
-                <select required value={status} onChange={e => setStatus(e.target.value as 'Active' | 'Inactive')} className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors bg-card">
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                </select>
-              </div>
-              <div className="pt-4 flex gap-3">
-                <button type="button" onClick={closeModal} className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground/80 hover:bg-muted/40 transition-colors">Cancel</button>
-                <button type="submit" className="flex-1 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-md">{editingMaterial ? 'Save Changes' : 'Save Material'}</button>
-              </div>
-            </form>
-            </PageModal>
+        <form onSubmit={editingMaterial ? handleEdit : handleCreate} className="space-y-4">
+          <div className="space-y-2">
+            <label htmlFor="material-name" className="text-sm font-semibold text-foreground">Material Name *</label>
+            <input id="material-name" name="material-name" type="text" required value={name} onChange={e => setName(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors" placeholder="e.g. Circle 6½ Inch" />
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="material-category" className="text-sm font-semibold text-foreground">Category *</label>
+            <select id="material-category" name="material-category" required value={categoryId} onChange={e => setCategoryId(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors bg-card">
+              <option value="" disabled>Select a category</option>
+              {categories.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="material-description" className="text-sm font-semibold text-foreground">Description</label>
+            <textarea id="material-description" name="material-description" value={description} onChange={e => setDescription(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors" placeholder="Optional notes" rows={2} />
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="material-status" className="text-sm font-semibold text-foreground">Status</label>
+            <select id="material-status" name="material-status" required value={status} onChange={e => setStatus(e.target.value as 'Active' | 'Inactive')} className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors bg-card">
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+            </select>
+          </div>
+          <div className="pt-4 flex gap-3">
+            <button type="button" onClick={closeModal} className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground/80 hover:bg-muted/40 transition-colors">Cancel</button>
+            <button type="submit" className="flex-1 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-md">{editingMaterial ? 'Save Changes' : 'Save Material'}</button>
+          </div>
+        </form>
+      </PageModal>
     </div>
   );
 }
