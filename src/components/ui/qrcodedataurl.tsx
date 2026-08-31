@@ -58,10 +58,12 @@ const QRCodeDataUrl: React.FC<QRCodeDataUrlProps> = ({
   className = '',
 }) => {
   const [dataUrl, setDataUrl] = useState<string>('');
+  const [error, setError] = useState<string>('');
 
   useEffect(() => {
     const generateQR = async () => {
       try {
+        setError('');
         const url = await QRCode.toDataURL(text, {
           width,
           color: {
@@ -71,6 +73,8 @@ const QRCodeDataUrl: React.FC<QRCodeDataUrlProps> = ({
         });
         setDataUrl(url);
       } catch (err) {
+        setDataUrl('');
+        setError('QR code could not be generated. Check the value and try again.');
         console.error('Failed to generate QR code:', err);
       }
     };
@@ -87,8 +91,10 @@ const QRCodeDataUrl: React.FC<QRCodeDataUrlProps> = ({
           width={width}
           height={width}
         />
+      ) : error ? (
+        <div role="alert" className="text-sm text-destructive">{error}</div>
       ) : (
-        <div>Generating QR code...</div>
+        <div aria-live="polite">Generating QR code…</div>
       )}
     </div>
   );

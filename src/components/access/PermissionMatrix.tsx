@@ -66,7 +66,7 @@ export function PermissionMatrix({ role, permissions, rolePermissions, isAdmin, 
 
       {loading && (
         <div className="flex items-center gap-2 text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Saving...
+          <Loader2 className="h-4 w-4 animate-spin" /> Saving…
         </div>
       )}
 

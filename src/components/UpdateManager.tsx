@@ -125,7 +125,7 @@ export default function UpdateManager() {
                       text-xs mt-0.5 truncate
                       ${isUpToDate ? 'text-emerald-600/70 dark:text-emerald-300/70' : 'text-gray-500 dark:text-gray-400'}
                     `}>
-                      {status.status === 'checking' && 'Checking for new version...'}
+                      {status.status === 'checking' && 'Checking for new version…'}
                       {status.status === 'available' && `v${status.info?.version || '??'} is ready to download`}
                       {status.status === 'up-to-date' && `v${APP_VERSION} — latest version`}
                       {status.status === 'downloading' && `${status.percent || 0}% complete`}
@@ -186,7 +186,7 @@ export default function UpdateManager() {
 
                 {status.status === 'available' && (
                   <p className="text-xs text-gray-400 dark:text-gray-500 italic">
-                    Downloading in background...
+                    Downloading in background…
                   </p>
                 )}
 
