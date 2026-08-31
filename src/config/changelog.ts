@@ -20,6 +20,28 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.27',
+    date: '2026-08-31',
+    title: 'UI Polish & Unified Date Picker',
+    sections: [
+      {
+        title: 'Date Pickers',
+        items: [
+          'New calendar-based DatePicker (react-day-picker) replaces plain date inputs across all modules',
+          'Consistent picker in Sales, Purchases, Job Work, Accounting, Dashboard, Reports filters and voucher forms',
+        ],
+      },
+      {
+        title: 'Forms & Accessibility',
+        items: [
+          'Wider Sale/Purchase modals (max-w-3xl) with responsive grid columns',
+          'Labeled inputs with autocomplete across Customers, Suppliers, Processors, Finished Goods, Raw Materials',
+          'aria-labels on icon-only buttons across pages',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.26',
     date: '2026-08-30',
     title: 'Accessibility Overhaul',
