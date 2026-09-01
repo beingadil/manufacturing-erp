@@ -1,4 +1,5 @@
 import type { Batch, ProcessingStage } from '../../types/erp';
+import { InventoryCalculationService } from '../business/InventoryCalculationService';
 
 /**
  * Batch-scoped stage progress — the building block for multi-stage display.
@@ -19,6 +20,8 @@ export interface BatchStageProgress {
   completedStages: ProcessingStage[];
   /** The next stage in the chain the batch should move to. */
   nextStage: ProcessingStage | null;
+  /** Pcs never dispatched anywhere — sendable to stage 1 at any time. */
+  rawPcs: number;
   /** Pcs available to send to nextStage (received back from currentStage). */
   availablePcs: number;
   /** Pcs currently out with a processor (in transit at currentStage). */
@@ -56,6 +59,7 @@ export function getBatchStageProgress(
   const availablePcs = batch.stageAvailablePcs || 0;
   const inTransitPcs = batch.atProcessorPcs || 0;
   const finishedPcs = batch.processedPcs || 0;
+  const rawPcs = InventoryCalculationService.batchRawAvailable(batch);
   const isRaw = !currentStage;
   const isFinished = !!currentStage?.isFinalStage && inTransitPcs <= 0;
 
@@ -74,6 +78,7 @@ export function getBatchStageProgress(
     availablePcs,
     inTransitPcs,
     finishedPcs,
+    rawPcs,
     isRaw,
     isFinished,
     progressRatio,
@@ -95,10 +100,18 @@ export function getMaterialBatchProgress(
 }
 
 /**
- * True when a dispatch is a candidate for the given target stage:
- *  - stage 1 / legacy: batch has raw pcs on hand
- *  - intermediate: batch is at the stage just before the target and has pcs
- *    available to send forward (currentStageId matches the source stage).
+ * True when a dispatch is a candidate for the given target stage.
+ *
+ * A batch is MULTI-POSITION: its pcs can sit in several stage buckets at once
+ * (1100 purchased, 1000 at Machine, 100 still raw). currentStageId describes
+ * where the DISPATCHED pcs went — it must never lock the other buckets:
+ *  - target stage 1 / legacy: the batch has raw pcs never sent anywhere
+ *    (remaining − atProcessor − stageAvailable), OR plain remainingPcs for
+ *    legacy batches that predate the stage system;
+ *  - intermediate target: the batch holds pcs AVAILABLE at the source stage
+ *    (stageAvailablePcs > 0) — regardless of currentStageId, because a second
+ *    partial dispatch to a later stage advances currentStageId while earlier
+ *    received pcs still wait at the source.
  */
 export function batchCanSendToStage(
   batch: Batch,
@@ -107,14 +120,13 @@ export function batchCanSendToStage(
 ): boolean {
   const sorted = getSortedStages(stages);
   const target = targetStageId ? sorted.find(s => s.id === targetStageId) : undefined;
-  if (!target) return (batch.remainingPcs || 0) > 0;
-  if (target.sequence <= 1) return (batch.remainingPcs || 0) > 0;
 
-  const source = sorted.find(s => s.sequence === target.sequence - 1);
-  if (source && batch.currentStageId === source.id) return (batch.stageAvailablePcs || 0) > 0;
-  // Legacy batch without a current stage but with available pcs.
-  if (!batch.currentStageId) return (batch.stageAvailablePcs || 0) > 0;
-  return false;
+  const rawPcs = InventoryCalculationService.batchRawAvailable(batch);
+  const legacyRaw = (batch.remainingPcs || 0) > 0
+    && !(batch.atProcessorPcs || 0) && !(batch.stageAvailablePcs || 0);
+
+  if (!target || target.sequence <= 1) return rawPcs > 0 || legacyRaw;
+  return (batch.stageAvailablePcs || 0) > 0;
 }
 
 /**

@@ -157,11 +157,15 @@ export function migrateERPState(state: any): any {
       );
       trail = attributed.batches;
       // Mark the consumed batch(es) as being at the dispatched stage — matches
-      // the live engine so currentStageId is replay-consistent.
+      // the live engine so currentStageId is replay-consistent. A batch with
+      // pcs still never-dispatched (raw remainder) keeps its raw bucket
+      // sendable: advance only when nothing raw is left (multi-position truth).
       const used = new Set(attributed.usedBatchIds);
-      trail = trail.map((b: any) =>
-        used.has(b.id) && s.stageId ? { ...b, currentStageId: s.stageId } : b
-      );
+      trail = trail.map((b: any) => {
+        if (!used.has(b.id) || !s.stageId) return b;
+        const rawLeft = InventoryCalculationService.batchRawAvailable(b);
+        return rawLeft > 0 ? b : { ...b, currentStageId: s.stageId };
+      });
     }
 
     // Recorded losses: WIP −= loss (FIFO, preferring the dispatch's batch).
@@ -218,15 +222,19 @@ export function migrateERPState(state: any): any {
       if (ev.kind === 'send') {
         const s = ev.s;
         if (s.batchId) {
-          trail = trail.map((b: any) =>
-            b.id === s.batchId
-              ? {
-                  ...b,
-                  stageAvailablePcs: Math.max(0, (b.stageAvailablePcs || 0) - (s.pcsSent || 0)),
-                  currentStageId: s.stageId || b.currentStageId,
-                }
-              : b
-          );
+          trail = trail.map((b: any) => {
+            if (b.id !== s.batchId) return b;
+            const newAvail = Math.max(0, (b.stageAvailablePcs || 0) - (s.pcsSent || 0));
+            return {
+              ...b,
+              stageAvailablePcs: newAvail,
+              // Matches the live engine: advance currentStageId only when every
+              // available pc moved on (multi-position truth on partial sends).
+              currentStageId: newAvail <= 0
+                ? (s.stageId || b.currentStageId)
+                : b.currentStageId,
+            };
+          });
         } else {
           const attributed = InventoryCalculationService.attributeStageDispatchFIFO(
             s.materialId,
