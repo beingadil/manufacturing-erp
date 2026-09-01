@@ -8,7 +8,7 @@ import { DrillDownVoucherList } from '../common/DrillDownVoucherList';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
 
 export function SupplierOutstandingReport() {
-  const { accounts } = useERPStore();
+  const accounts = useERPStore(s => s.accounts);
   const [dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });
   const [search, setSearch] = useState('');
   const { pushLevel } = useDrillDown();

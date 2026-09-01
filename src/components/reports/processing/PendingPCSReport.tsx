@@ -25,6 +25,7 @@ export function PendingPCSReport() {
         { key: "dispatchNo", label: "Dispatch No" },
         { key: "processorName", label: "Processor" },
         { key: "materialName", label: "Material" },
+        { key: "stageName", label: "Stage" },
         { key: "sentPcs", label: "Sent PCS", align: "right", render: (item) => formatNumber(item.sentPcs) },
         { key: "pendingPcs", label: "Pending PCS", align: "right", render: (item) => <span className="font-medium text-destructive">{formatNumber(item.pendingPcs)}</span> }
       ]}

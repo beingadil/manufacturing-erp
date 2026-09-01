@@ -132,6 +132,20 @@ export const WIPE_MODULE_LABELS: Record<string, string> = {
   accounting: 'Accounting (Vouchers / Journal / Chart of Accounts)',
 };
 
+/**
+ * Sort stages by sequence and rewire each stage's `nextStageId` to the stage
+ * that follows it in the chain. The chain is derived from `sequence`, never
+ * stored independently, so reordering / adding / deleting a stage keeps the
+ * chain consistent (the live engine and migration both read `nextStageId`).
+ */
+function rewireStageChain(stages: ProcessingStage[]): ProcessingStage[] {
+  const ordered = [...stages].sort((a, b) => a.sequence - b.sequence);
+  return ordered.map((s, i) => {
+    const next = ordered[i + 1];
+    return next ? { ...s, nextStageId: next.id } : { ...s, nextStageId: undefined };
+  });
+}
+
 export const useERPStore = create<ERPState>()(
   persist(
     databaseMiddleware((set, get) => ({
@@ -475,13 +489,17 @@ export const useERPStore = create<ERPState>()(
 
       addProcessingStage: (data) => {
         const id = uuidv4();
-        set((state) => ({ processingStages: [{ ...data, id }, ...state.processingStages] }));
+        set((state) => {
+          const next = [...state.processingStages, { ...data, id }];
+          return { processingStages: rewireStageChain(next) };
+        });
         return id;
       },
 
-      updateProcessingStage: (id, data) => set((state) => ({
-        processingStages: state.processingStages.map(s => s.id === id ? { ...s, ...data } : s)
-      })),
+      updateProcessingStage: (id, data) => set((state) => {
+        const next = state.processingStages.map(s => s.id === id ? { ...s, ...data } : s);
+        return { processingStages: rewireStageChain(next) };
+      }),
 
       deleteProcessingStage: (id) => set((state) => {
         // Guard: a stage with movements cannot be deleted — it is part of the
@@ -489,7 +507,7 @@ export const useERPStore = create<ERPState>()(
         const hasMovements = state.processingSends.some(s => s.stageId === id)
           || state.processingReceipts.some(r => r.stageId === id);
         if (hasMovements) return state;
-        return { processingStages: state.processingStages.filter(s => s.id !== id) };
+        return { processingStages: rewireStageChain(state.processingStages.filter(s => s.id !== id)) };
       }),
 
       addProcessor: (data) => {
@@ -747,29 +765,48 @@ export const useERPStore = create<ERPState>()(
           // Also update atProcessorPcs on the material (these pcs are now at a
           // processor).
           
-          // Guard: reject over-send at the batch level
+          let updatedBatches: Batch[] = state.batches || [];
+          let consumedBatchId = data.batchId;
+
           if (data.batchId) {
-            const batch = (state.batches || []).find(b => b.id === data.batchId);
+            // Guard: reject over-send at the batch level
+            const batch = updatedBatches.find(b => b.id === data.batchId);
             const available = (batch?.stageAvailablePcs || 0);
             if (data.pcsSent <= 0 || data.pcsSent > available) return state;
+            updatedBatches = updatedBatches.map(b => {
+              if (b.id === data.batchId) {
+                return {
+                  ...b,
+                  stageAvailablePcs: Math.max(0, (b.stageAvailablePcs || 0) - data.pcsSent),
+                  currentStageId: data.stageId || b.currentStageId,
+                };
+              }
+              return b;
+            });
+          } else {
+            // No explicit batch ('Auto / Any Batch'): FIFO-attribute the send
+            // across the source stage's available pcs so the batch trail moves
+            // in lockstep — the same pcs can never be sent to a stage twice.
+            const attributed = InventoryCalculationService.attributeStageDispatchFIFO(
+              data.materialId,
+              data.pcsSent,
+              data.stageId,
+              state.processingStages || [],
+              updatedBatches
+            );
+            // Reject unless the ENTIRE quantity was attributed — partial
+            // attribution means there aren't enough pcs available at the source
+            // stage, so the dispatch cannot be recorded without double-sending.
+            if (data.pcsSent <= 0 || attributed.attributedPcs < data.pcsSent) return state;
+            updatedBatches = attributed.batches;
+            consumedBatchId = attributed.usedBatchIds[0] || data.batchId;
           }
-
-          const updatedBatches = (state.batches || []).map(b => {
-            if (b.id === data.batchId) {
-              return {
-                ...b,
-                stageAvailablePcs: Math.max(0, (b.stageAvailablePcs || 0) - data.pcsSent),
-                currentStageId: data.stageId || b.currentStageId,
-              };
-            }
-            return b;
-          });
 
           // PCS remain in WIP (atProcessorPcs unchanged) — same economic pcs, just relocated.
           const movement: InventoryMovement = {
             id: uuidv4(),
             materialId: data.materialId,
-            batchId: data.batchId,
+            batchId: consumedBatchId,
             date: data.date,
             referenceNo: dispatchNo,
             module: "Dispatch",
@@ -778,6 +815,9 @@ export const useERPStore = create<ERPState>()(
             runningBalance: 0,
             remarks: data.remarks
           };
+          // Link the dispatch to the batch it physically drew from so the
+          // receipt handler can attribute the return correctly.
+          newSend.batchId = consumedBatchId;
           return {
             processingSends: [newSend, ...state.processingSends],
             inventoryMovements: [movement, ...(state.inventoryMovements || [])],
@@ -1035,14 +1075,20 @@ export const useERPStore = create<ERPState>()(
         // layer can never double-pay a stage.
         if (receiptsToBill.some(r => r.billedStatus === 'Billed')) return state;
 
-        const totalAmount = receiptsToBill.reduce((sum, r) => sum + r.billAmount, 0);
+        // Line-level billing (spec §10): when the bill carries explicit
+        // per-receipt amounts (rate finalized at bill time), the total is the
+        // sum of those overrides. Otherwise it defaults to each receipt's
+        // computed billAmount (dispatch rate) — unchanged legacy behaviour.
+        const { lineAmounts, ...billData } = data;
+        const totalAmount = receiptsToBill.reduce((sum, r) => sum + (lineAmounts?.[r.id] ?? r.billAmount), 0);
 
         const billId = uuidv4();
         const newBill: ProcessorBill = {
-          ...data,
+          ...billData,
           id: billId,
           billNo,
-          totalAmount
+          totalAmount,
+          ...(lineAmounts ? { lineAmounts } : {}),
         };
 
         const updatedReceipts = state.processingReceipts.map(r => {

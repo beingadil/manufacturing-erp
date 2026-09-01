@@ -141,6 +141,77 @@ export class InventoryCalculationService {
   }
 
   /**
+   * Move pcs from one stage's "available" bucket (stageAvailablePcs) to the
+   * target stage, FIFO (oldest batch first) across the batches that currently
+   * hold available pcs at the SOURCE stage (the stage before the target in the
+   * chain). Used when an INTERMEDIATE dispatch is created without an explicit
+   * batch ('Auto / Any Batch' path) so the batch trail always moves in lockstep
+   * with the available-pcs counter — the same economic pcs are never sent to a
+   * stage twice.
+   *
+   * Returns the updated batches plus the batchIds consumed (for receipt linkage).
+   */
+  static attributeStageDispatchFIFO(
+    materialId: string,
+    pcsSent: number,
+    targetStageId: string | undefined,
+    stages: ProcessingStage[],
+    batches: Batch[],
+    preferredBatchId?: string
+  ): { batches: Batch[]; usedBatchIds: string[]; attributedPcs: number } {
+    let remaining = pcsSent;
+    const usedBatchIds: string[] = [];
+
+    // Determine the source stage (the stage immediately before the target).
+    const sorted = [...stages].sort((a, b) => a.sequence - b.sequence);
+    const target = targetStageId ? sorted.find(s => s.id === targetStageId) : undefined;
+    const sourceStage = target ? sorted.find(s => s.sequence === target.sequence - 1) : undefined;
+
+    // Candidate batches: same material, active, with pcs available to send
+    // forward. Prefer batches at the SOURCE stage; fall back to any batch with
+    // availability (legacy data without currentStageId) so nothing is stranded.
+    let candidates = batches
+      .filter(b => b.materialId === materialId && b.status === 'Active' && (b.stageAvailablePcs || 0) > 0)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (sourceStage) {
+      const atSource = candidates.filter(b => b.currentStageId === sourceStage.id);
+      if (atSource.length > 0) candidates = atSource;
+      else {
+        const legacy = candidates.filter(b => !b.currentStageId);
+        if (legacy.length > 0) candidates = legacy;
+      }
+    }
+
+    const ordered = preferredBatchId
+      ? [batches.find(b => b.id === preferredBatchId), ...candidates.filter(b => b.id !== preferredBatchId)].filter(Boolean)
+      : candidates;
+
+    const takeByBatch = new Map<string, number>();
+    for (const b of ordered) {
+      if (remaining <= 0) break;
+      const take = Math.min(b?.stageAvailablePcs || 0, remaining);
+      if (take <= 0) continue;
+      takeByBatch.set(b!.id, take);
+      usedBatchIds.push(b!.id);
+      remaining -= take;
+    }
+
+    return {
+      batches: batches.map(b => {
+        const take = takeByBatch.get(b.id) || 0;
+        if (take <= 0) return b;
+        return {
+          ...b,
+          stageAvailablePcs: Math.max(0, (b.stageAvailablePcs || 0) - take),
+          currentStageId: targetStageId || b.currentStageId,
+        };
+      }),
+      usedBatchIds,
+      attributedPcs: pcsSent - remaining,
+    };
+  }
+
+  /**
    * Move pcs from the WIP stage to the finished stage across batches, FIFO
    * (oldest batch with WIP first). Mirrors attributeDispatchFIFO so a receipt
    * returns pcs to the same batches they were dispatched from, keeping the
@@ -197,6 +268,26 @@ export class InventoryCalculationService {
       const take = consumedByBatch.get(b.id) || 0;
       return take > 0 ? { ...b, processedPcs: (b.processedPcs || 0) - take } : b;
     });
+  }
+
+  /**
+   * Compute a receipt's bill amount using the same per-stage formula the live
+   * engine uses: per_piece = qty × rate; per_kg = qty × weightPerPiece(kg) × rate.
+   * Shared by receipt creation AND receipt edits so editing a receipt never
+   * leaves a stale billAmount behind.
+   */
+  static computeReceiptBillAmount(
+    pcsReceived: number,
+    rateMethod: 'per_piece' | 'per_kg' | undefined,
+    send: { ratePerPiece?: number } | undefined,
+    batch: { weightPerPiece?: number } | undefined,
+    stage?: ProcessingStage
+  ): number {
+    const method = rateMethod ?? stage?.rateMethod ?? 'per_piece';
+    const rate = send?.ratePerPiece || 0;
+    return method === 'per_kg'
+      ? pcsReceived * (batch?.weightPerPiece || 0) * rate
+      : pcsReceived * rate;
   }
 
   /**

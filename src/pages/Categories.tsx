@@ -35,7 +35,7 @@ export default function Categories() {
 
   const handleDeleteClick = (category: MaterialCategory) => {
     const associatedMaterials = materials.filter(m => m.categoryId === category.id);
-    const impactDetails = [];
+    const impactDetails: string[] = [];
     if (associatedMaterials.length > 0) {
       impactDetails.push(`${associatedMaterials.length} materials are currently assigned to this category.`);
     }

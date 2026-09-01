@@ -5,7 +5,11 @@ export class ProcessingReportService {
 
   static getDispatchRegisterData() {
     const state = useERPStore.getState();
-    const { processingSends, processors, materials } = state;
+    const { processingSends, processors, materials, processingStages } = state;
+    const stageName = (stageId?: string) => {
+      if (!stageId) return 'Initial Processor';
+      return processingStages.find(s => s.id === stageId)?.name || 'Initial Processor';
+    };
     return processingSends.map((s: any) => {
 const processor = processors.find(p => p.id === s.processorId);
 const material = materials.find(m => m.id === s.materialId);
@@ -13,7 +17,8 @@ return {
   ...s,
   formattedDate: format(new Date(s.date), 'MMM d, yyyy'),
   processorName: processor?.name || 'Unknown',
-  materialName: material?.name || 'Unknown'
+  materialName: material?.name || 'Unknown',
+  stageName: stageName(s.stageId),
 };
 })
   }
@@ -21,7 +26,11 @@ return {
 
   static getPendingPCSReportData(search: any) {
     const state = useERPStore.getState();
-    const { processingSends, processingReceipts, processors, materials } = state;
+    const { processingSends, processingReceipts, processors, materials, processingStages } = state;
+    const stageName = (stageId?: string) => {
+      if (!stageId) return 'Initial Processor';
+      return processingStages.find(s => s.id === stageId)?.name || 'Initial Processor';
+    };
     let pendingDispatches = processingSends.filter(s => s.status !== 'Closed');
 
 const mapped = pendingDispatches.map(s => {
@@ -37,6 +46,7 @@ const mapped = pendingDispatches.map(s => {
     date: s.date,
     processorName,
     materialName,
+    stageName: stageName(s.stageId),
     sentPcs: s.pcsSent,
     receivedPcs: totalReceived,
     pendingPcs,
@@ -44,7 +54,7 @@ const mapped = pendingDispatches.map(s => {
   };
 }).filter(p => p.pendingPcs > 0);
 
-return mapped.filter(p => !search || p.processorName.toLowerCase().includes(search.toLowerCase()) || p.dispatchNo.toLowerCase().includes(search.toLowerCase()));
+return mapped.filter(p => !search || p.processorName.toLowerCase().includes(search.toLowerCase()) || p.dispatchNo.toLowerCase().includes(search.toLowerCase()) || p.stageName.toLowerCase().includes(search.toLowerCase()));
   }
 
 
@@ -206,7 +216,11 @@ return Array.from(processorMap.values()).map(p => ({
 
   static getProcessingReceiveReportData(dateRange: any, search: any) {
     const state = useERPStore.getState();
-    const { processingReceipts, processingSends, processors, materials } = state;
+    const { processingReceipts, processingSends, processors, materials, processingStages } = state;
+    const stageName = (stageId?: string) => {
+      if (!stageId) return 'Initial Processor';
+      return processingStages.find(s => s.id === stageId)?.name || 'Initial Processor';
+    };
     return processingReceipts.filter(p => {
   if (dateRange.start && dateRange.end) {
     const d = new Date(p.date);
@@ -225,20 +239,26 @@ return Array.from(processorMap.values()).map(p => ({
     dispatchNo: dispatch?.dispatchNo || 'Unknown',
     processorName: processor?.name || 'Unknown',
     materialName: material?.name || 'Unknown',
+    stageName: stageName(p.stageId ?? dispatch?.stageId),
   };
 }).filter(p => {
   if (!search) return true;
   const q = search.toLowerCase();
   return p.receiveNo.toLowerCase().includes(q) || 
          p.processorName.toLowerCase().includes(q) || 
-         p.materialName.toLowerCase().includes(q);
+         p.materialName.toLowerCase().includes(q) ||
+         p.stageName.toLowerCase().includes(q);
 });
   }
 
 
   static getProcessorBillingReportData(dateRange: any, search: any) {
     const state = useERPStore.getState();
-    const { processingReceipts, processors } = state;
+    const { processingReceipts, processors, processingStages } = state;
+    const stageName = (stageId?: string) => {
+      if (!stageId) return 'Initial Processor';
+      return processingStages.find(s => s.id === stageId)?.name || 'Initial Processor';
+    };
     let filtered = processingReceipts.filter(p => {
   if (dateRange.start && dateRange.end) {
     const d = new Date(p.date);
@@ -254,9 +274,10 @@ return filtered.map(r => {
     const processorName = processors.find(p => p.id === r.processorId)?.name || 'Unknown';
     return {
         ...r,
-        processorName
+        processorName,
+        stageName: stageName(r.stageId),
     };
-}).filter(p => !search || p.processorName.toLowerCase().includes(search.toLowerCase()) || p.receiveNo.toLowerCase().includes(search.toLowerCase()));
+}).filter(p => !search || p.processorName.toLowerCase().includes(search.toLowerCase()) || p.receiveNo.toLowerCase().includes(search.toLowerCase()) || p.stageName.toLowerCase().includes(search.toLowerCase()));
   }
 
 
@@ -347,13 +368,18 @@ return Array.from(processorMap.values()).map(p => ({
 
   static getReceiveRegisterData() {
     const state = useERPStore.getState();
-    const { processingReceipts, processors } = state;
+    const { processingReceipts, processors, processingStages } = state;
+    const stageName = (stageId?: string) => {
+      if (!stageId) return 'Initial Processor';
+      return processingStages.find(s => s.id === stageId)?.name || 'Initial Processor';
+    };
     return processingReceipts.map((r: any) => {
 const processor = processors.find(p => p.id === r.processorId);
 return {
   ...r,
   formattedDate: format(new Date(r.date), 'MMM d, yyyy'),
-  processorName: processor?.name || 'Unknown'
+  processorName: processor?.name || 'Unknown',
+  stageName: stageName(r.stageId),
 };
 })
   }

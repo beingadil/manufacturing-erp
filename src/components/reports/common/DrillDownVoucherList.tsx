@@ -13,7 +13,8 @@ interface DrillDownVoucherListProps {
 }
 
 export function DrillDownVoucherList({ accountId, startDate, endDate }: DrillDownVoucherListProps) {
-  const { vouchers, journalEntries } = useERPStore();
+  const vouchers = useERPStore(s => s.vouchers);
+  const journalEntries = useERPStore(s => s.journalEntries);
   const [search, setSearch] = useState('');
   const [localDateRange, setLocalDateRange] = useState({ start: startDate || '', end: endDate || '' });
 

@@ -193,7 +193,7 @@ function DataTableInner<T extends Record<string, any>>({
         </div>
       </div>
       
-      <div className="overflow-auto max-h-[65vh]">
+      <div className="overflow-x-auto">
         <table className="w-full text-sm text-left whitespace-nowrap">
           <thead className="sticky top-0 z-10 text-xs text-muted-foreground bg-muted/70 backdrop-blur-sm border-b border-border/50">
             <tr>

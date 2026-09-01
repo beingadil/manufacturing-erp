@@ -11,7 +11,7 @@ import { ReportFilterBar } from '../common/ReportFilterBar';
 import { ReportKPICard } from '../common/ReportKPICard';
 
 export function CashbookReport() {
-  const { accounts } = useERPStore();
+  const accounts = useERPStore(s => s.accounts);
   const [dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });
   const [search, setSearch] = useState('');
 

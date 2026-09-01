@@ -1,4 +1,4 @@
-import { Calendar as CalendarIcon, Search, SlidersHorizontal } from 'lucide-react';
+import { Calendar as CalendarIcon, Search, SlidersHorizontal, X } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { DatePicker } from '../../ui/date-picker';
 import { ReportExportBar } from './ReportExportBar';
@@ -113,8 +113,48 @@ export function ReportFilterBar({
     }
   }, [selectedRangeIndex, customStart, customEnd]);
 
+  // Active filter chips: non-default date range or an active search.
+  const activeRangeLabel = DATE_RANGE_OPTIONS[selectedRangeIndex].label;
+  const isCustom = activeRangeLabel === 'Custom Date Range';
+  const rangeActive = showDateRange && (isCustom ? !!(customStart && customEnd) : selectedRangeIndex !== 4);
+  const chipLabel = isCustom && customStart && customEnd
+    ? `${customStart} to ${customEnd}`
+    : activeRangeLabel;
+  const searchActive = search.trim().length > 0;
+
+  const clearRange = () => {
+    setSelectedRangeIndex(4);
+    setCustomStart('');
+    setCustomEnd('');
+  };
+
   return (
     <div className="flex flex-col gap-4 p-4 bg-card border border-border/50 rounded-xl shadow-sm mb-6">
+      {(rangeActive || searchActive) && (
+        <div className="flex flex-wrap items-center gap-2" aria-live="polite">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Active filters</span>
+          {rangeActive && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 text-primary px-2.5 py-1 text-xs font-medium">
+              {chipLabel}
+              <button onClick={clearRange} aria-label="Clear date range filter" className="rounded-full hover:bg-primary/20 p-0.5">
+                <X className="h-3 w-3" aria-hidden="true" />
+              </button>
+            </span>
+          )}
+          {searchActive && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 text-primary px-2.5 py-1 text-xs font-medium max-w-[240px]">
+              <span className="truncate">Search: {search.trim()}</span>
+              <button
+                onClick={() => { setSearch(''); onSearch?.(''); }}
+                aria-label="Clear search filter"
+                className="rounded-full hover:bg-primary/20 p-0.5"
+              >
+                <X className="h-3 w-3" aria-hidden="true" />
+              </button>
+            </span>
+          )}
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         
         {/* Left side: Search & Date Range */}

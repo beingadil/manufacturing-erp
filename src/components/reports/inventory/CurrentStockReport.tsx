@@ -7,7 +7,7 @@ import { Column } from '../../DataTable';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
 
 export function CurrentStockReport() {
-  const { materials } = useERPStore();
+  const materials = useERPStore(s => s.materials);
 
   const totalRawMaterial = materials.reduce((sum, m) => sum + m.stockPcs, 0);
   const totalWIP = materials.reduce((sum, m) => sum + m.processedStockPcs, 0);

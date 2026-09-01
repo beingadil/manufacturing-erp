@@ -494,6 +494,53 @@ export const createCRUDActions = (
         r.id === id ? { ...r, ...data } : r
       );
 
+      // Recompute the edited receipt's billAmount with the same per-stage
+      // formula the engine uses (per_piece = qty × rate; per_kg = qty ×
+      // weightPerPiece × rate), so an edit never leaves a stale bill amount.
+      const receipt = updatedReceipts.find(r => r.id === id)!;
+      const send = state.processingSends.find(s => s.id === receipt.sendId);
+      const stage = (state.processingStages || []).find(s => s.id === (receipt.stageId ?? send?.stageId));
+      const batch = send?.batchId ? state.batches.find(b => b.id === send.batchId) : undefined;
+      const rateMethod = receipt.rateMethod ?? stage?.rateMethod ?? 'per_piece';
+      const billAmount = InventoryCalculationService.computeReceiptBillAmount(
+        receipt.pcsReceived,
+        rateMethod,
+        send,
+        batch,
+        stage
+      );
+      const finalReceipts = updatedReceipts.map(r =>
+        r.id === id ? { ...r, billAmount, rateMethod, billingUnit: r.billingUnit ?? stage?.billingUnit } : r
+      );
+
+      // If the edited receipt is Billed, cascade the new amount into its bill
+      // and that bill's voucher so the ledger and processor balance never drift.
+      let updatedBills = state.processorBills;
+      let updatedVouchers = state.vouchers;
+      let updatedJournalEntries = state.journalEntries;
+      const linkedBills = state.processorBills.filter(b => b.receiptIds.includes(id));
+      if (receipt.billedStatus === 'Billed' && linkedBills.length > 0) {
+        updatedBills = state.processorBills.map(bill => {
+          if (!bill.receiptIds.includes(id)) return bill;
+          const newTotal = bill.receiptIds.reduce((sum, rid) => {
+            const r = finalReceipts.find(x => x.id === rid);
+            return sum + (r?.billAmount || 0);
+          }, 0);
+          const voucher = state.vouchers.find(v => v.sourceId === bill.id && v.sourceModule === 'Processing');
+          if (voucher) {
+            updatedVouchers = state.vouchers.map(v =>
+              v.id === voucher.id ? { ...v, totalDebit: newTotal, totalCredit: newTotal } : v
+            );
+            updatedJournalEntries = state.journalEntries.map(je =>
+              je.voucherId === voucher.id
+                ? { ...je, debit: je.debit > 0 ? newTotal : 0, credit: je.credit > 0 ? newTotal : 0 }
+                : je
+            );
+          }
+          return { ...bill, totalAmount: newTotal };
+        });
+      }
+
       const updatedSends = state.processingSends.map(s => {
         if (s.id === oldReceipt.sendId) {
           const newReceived = s.pcsReceived + (data.pcsReceived - oldReceipt.pcsReceived);
@@ -511,7 +558,7 @@ export const createCRUDActions = (
         oldReceipt.materialId,
         state,
         updatedSends,
-        updatedReceipts,
+        finalReceipts,
         state.sales || [],
         state.products || []
       );
@@ -519,12 +566,16 @@ export const createCRUDActions = (
 
       return {
         ...state,
-        processingReceipts: updatedReceipts,
+        processingReceipts: finalReceipts,
         processingSends: updatedSends,
         materials: updatedMaterials,
-        batches: updatedBatches
+        batches: updatedBatches,
+        processorBills: updatedBills,
+        vouchers: updatedVouchers,
+        journalEntries: updatedJournalEntries
       };
     });
+    afterMutation?.();
   },
 
 
@@ -568,10 +619,26 @@ export const createCRUDActions = (
       const oldBill = state.processorBills.find(b => b.id === id);
       if (!oldBill) return state;
 
-      const newTotalAmount = data.totalAmount;
+      // Recompute the total from the (possibly overridden) per-line amounts.
+      // When the edit carries lineAmounts, total = Σ overrides; otherwise the
+      // caller-provided totalAmount is used (legacy behaviour).
+      let newTotalAmount = data.totalAmount;
+      if (data.lineAmounts) {
+        newTotalAmount = oldBill.receiptIds.reduce((sum, rid) => sum + (data.lineAmounts[rid] ?? 0), 0);
+      } else if (newTotalAmount === undefined) {
+        // Fall back to the existing total when neither totalAmount nor
+        // lineAmounts is supplied (metadata-only edit).
+        newTotalAmount = oldBill.totalAmount;
+      }
 
+      const { lineAmounts, ...rest } = data;
       const updatedBills = state.processorBills.map(b =>
-        b.id === id ? { ...b, ...data } : b
+        b.id === id ? {
+          ...b,
+          ...rest,
+          totalAmount: newTotalAmount,
+          ...(lineAmounts ? { lineAmounts } : {}),
+        } : b
       );
 
       // NOTE: the processor's balancePayable is derived from the linked
