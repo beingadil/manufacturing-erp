@@ -20,6 +20,38 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.28',
+    date: '2026-09-01',
+    title: 'Processing Engine Overhaul & Report Center Redesign',
+    sections: [
+      {
+        title: 'Processing Engine',
+        items: [
+          'Stage-locked worker selection: a Machine dispatch only offers Machine workers (form + store guard)',
+          'Multi-position batches: leftover raw pcs stay sendable to stage 1 after any partial dispatch (the 1100/1000 lock is fixed)',
+          'Partial intermediate dispatches no longer mislabel the batch — received-back pcs are never locked out of their next leg',
+          'Stage Timeline: batch picker at the top, chain progress %, Raw/WIP/Finished buckets, legacy receipt attribution',
+        ],
+      },
+      {
+        title: 'Voucher History',
+        items: [
+          'Export CSV and Print now actually work (were dead buttons), with dated filenames and toast feedback',
+          'Edit-voucher button always visible; Deleted status badge styling fixed',
+        ],
+      },
+      {
+        title: 'Report Center',
+        items: [
+          'Premium top header: Category › Report dropdown cascade replaces the sidebar (no horizontal scrolling)',
+          'Per-report descriptions, icons and search synonyms across all 52 reports; search matches descriptions too',
+          'Favorites and Recent as header dropdown menus; active filter chips on report toolbars',
+          'Narrow Zustand selectors in report components (no more whole-store re-renders)',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.27',
     date: '2026-08-31',
     title: 'UI Polish & Unified Date Picker',
