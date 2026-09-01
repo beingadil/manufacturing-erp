@@ -2,12 +2,14 @@ import { ChevronRight, Download, FileText, Pencil, Printer, Search } from 'lucid
 import { useMemo, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { filterFinancialData } from '../lib/abac';
-import { formatCurrency } from '../lib/utils';
+import { exportToCSV } from '../lib/exportUtils';
+import { formatDate, formatCurrency } from '../lib/utils';
 import { DatePicker } from './ui/date-picker';
 import { useERPStore } from '../store/useERPStore';
 import { SourceModule } from '../types/erp';
 import { CashbookEntryModal } from './CashbookEntryModal';
 import { VoucherDetailModal } from './VoucherDetailModal';
+import { toast } from 'sonner';
 
 interface VoucherHistoryTabProps {
   sourceModule: SourceModule;
@@ -48,6 +50,53 @@ export function VoucherHistoryTab({ sourceModule }: VoucherHistoryTabProps) {
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()); // Descending by date
   }, [vouchers, sourceModule, dateFrom, dateTo, searchTerm]);
 
+  const handleExportCSV = () => {
+    if (filteredVouchers.length === 0) {
+      toast.info('Nothing to export', { description: 'No vouchers match the current filters.' });
+      return;
+    }
+    exportToCSV({
+      filename: `${sourceModule}_Vouchers_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.csv`,
+      data: filteredVouchers,
+      columns: [
+        { header: 'Date', dataKey: 'date' },
+        { header: 'Voucher No', dataKey: 'voucherNo' },
+        { header: 'Type', dataKey: 'type' },
+        { header: 'Reference', dataKey: 'referenceNo' },
+        { header: 'Debit', dataKey: 'totalDebit' },
+        { header: 'Credit', dataKey: 'totalCredit' },
+        { header: 'Status', dataKey: 'status' },
+      ],
+    });
+    toast.success(`${filteredVouchers.length} vouchers exported to CSV`);
+  };
+
+  const handlePrint = () => {
+    if (filteredVouchers.length === 0) {
+      toast.info('Nothing to print', { description: 'No vouchers match the current filters.' });
+      return;
+    }
+    const title = `${sourceModule} Voucher History`;
+    const rows = filteredVouchers
+      .map(v => `<tr><td>${formatDate(v.date)}</td><td>${v.voucherNo}</td><td>${v.type}</td><td>${v.referenceNo || '-'}</td><td style="text-align:right">${formatCurrency(v.totalDebit)}</td><td style="text-align:right">${formatCurrency(v.totalCredit)}</td><td>${v.status}</td></tr>`)
+      .join('');
+    const w = window.open('', '_blank', 'width=1000,height=700');
+    if (!w) { toast.error('Print failed', { description: 'The print window was blocked.' }); return; }
+    w.document.write(`<html><head><title>${title}</title><style>
+      body{font-family:system-ui,sans-serif;padding:24px;color:#0f172a}
+      h1{font-size:18px;margin:0 0 4px}p{font-size:12px;color:#64748b;margin:0 0 16px}
+      table{width:100%;border-collapse:collapse;font-size:12px}
+      th,td{border:1px solid #cbd5e1;padding:6px 10px;text-align:left}
+      th{background:#f1f5f9;font-weight:600;text-transform:uppercase;font-size:10px}
+    </style></head><body><h1>${title}</h1>
+    <p>${filteredVouchers.length} vouchers${dateFrom || dateTo ? ` · ${dateFrom || '…'} to ${dateTo || '…'}` : ''}</p>
+    <table><thead><tr><th>Date</th><th>Voucher No</th><th>Type</th><th>Reference</th><th>Debit</th><th>Credit</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>
+    </body></html>`);
+    w.document.close();
+    w.focus();
+    w.print();
+  };
+
   return (
     <div className="space-y-4">
       {/* Filters Toolbar */}
@@ -68,10 +117,10 @@ export function VoucherHistoryTab({ sourceModule }: VoucherHistoryTabProps) {
           <DatePicker value={dateTo} onChange={setDateTo} size="sm" className="w-40" placeholder="To" />
         </div>
         <div className="flex items-center gap-2">
-           <button className="p-2 rounded-lg border border-border bg-background hover:bg-muted text-muted-foreground transition-colors" title="Export CSV" aria-label="Export CSV">
+           <button onClick={handleExportCSV} className="p-2 rounded-lg border border-border bg-background hover:bg-muted text-muted-foreground transition-colors" title="Export CSV" aria-label="Export CSV">
              <Download className="h-4 w-4" />
            </button>
-           <button className="p-2 rounded-lg border border-border bg-background hover:bg-muted text-muted-foreground transition-colors" title="Print" aria-label="Print">
+           <button onClick={handlePrint} className="p-2 rounded-lg border border-border bg-background hover:bg-muted text-muted-foreground transition-colors" title="Print" aria-label="Print">
              <Printer className="h-4 w-4" />
            </button>
         </div>
@@ -112,8 +161,8 @@ export function VoucherHistoryTab({ sourceModule }: VoucherHistoryTabProps) {
                     <td className="px-4 py-3 text-right font-medium">{formatCurrency(v.totalCredit)}</td>
                     <td className="px-4 py-3 text-center">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                        v.status === 'Posted' ? 'bg-success/10 text-success' :
-                        v.status === 'Deleted' ? 'bg-destructive/100/10 text-destructive ' :
+                      v.status === 'Posted' ? 'bg-success/10 text-success' :
+                        v.status === 'Deleted' ? 'bg-destructive/10 text-destructive' :
                         'bg-warning/10 text-warning'
                       }`}>
                         {v.status}
@@ -121,9 +170,10 @@ export function VoucherHistoryTab({ sourceModule }: VoucherHistoryTabProps) {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
-                        <button 
+                        <button
                           onClick={() => setEditingVoucherId(v.id)}
-                          className="p-1 text-muted-foreground/50 hover:text-primary transition-colors opacity-0 group-hover:opacity-100"
+                          aria-label={`Edit voucher ${v.voucherNo}`}
+                          className="p-1 text-muted-foreground/60 hover:text-primary transition-colors"
                           title="Edit voucher"
                         >
                           <Pencil className="h-4 w-4" />
