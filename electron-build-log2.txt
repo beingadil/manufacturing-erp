@@ -1,0 +1,14 @@
+  • electron-builder  version=25.1.8 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • @electron/rebuild already used by electron-builder, please consider to remove excess dependency from devDependencies
+
+To ensure your native dependencies are always matched electron version, simply add script `"postinstall": "electron-builder install-app-deps" to your `package.json`
+  • executing @electron/rebuild  electronVersion=43.1.1 arch=x64 buildFromSource=false appDir=./
+  • installing native dependencies  arch=x64
+  • preparing       moduleName=better-sqlite3 arch=x64
+  • finished        moduleName=better-sqlite3 arch=x64
+  • completed installing native dependencies
+  • packaging       platform=win32 arch=x64 electron=43.1.1 appOutDir=dist-win-unpacked\win-unpacked
+  • updating asar integrity executable resource  executablePath=dist-win-unpacked\win-unpacked\Manufacturing ERP.exe
+  • signing with signtool.exe  path=dist-win-unpacked\win-unpacked\Manufacturing ERP.exe
+  • no signing info identified, signing is skipped  signHook=false cscInfo=null

@@ -138,6 +138,8 @@ export function migrateERPState(state: any): any {
       remainingPcs: b.initialPcs > 0 ? b.initialPcs : b.remainingPcs,
       atProcessorPcs: 0,
       processedPcs: 0,
+      stageAvailablePcs: 0,
+      currentStageId: undefined,
     }));
 
     // Dispatches: stage-1 / legacy draws raw → WIP. Intermediate-stage
@@ -147,12 +149,19 @@ export function migrateERPState(state: any): any {
       .sort((a: any, b: any) => (a.date || '').localeCompare(b.date || ''));
     for (const s of orderedSends) {
       if (!InventoryCalculationService.sendConsumesRaw(s.stageId, processingStages)) continue;
-      trail = InventoryCalculationService.attributeDispatchFIFO(
+      const attributed = InventoryCalculationService.attributeDispatchFIFO(
         s.materialId,
         s.pcsSent,
         trail as any,
         s.batchId || undefined
-      ).batches;
+      );
+      trail = attributed.batches;
+      // Mark the consumed batch(es) as being at the dispatched stage — matches
+      // the live engine so currentStageId is replay-consistent.
+      const used = new Set(attributed.usedBatchIds);
+      trail = trail.map((b: any) =>
+        used.has(b.id) && s.stageId ? { ...b, currentStageId: s.stageId } : b
+      );
     }
 
     // Recorded losses: WIP −= loss (FIFO, preferring the dispatch's batch).
@@ -184,44 +193,63 @@ export function migrateERPState(state: any): any {
       );
     }
 
-    // Non-final stage receipts: received pcs become available at the next stage
+    // Intermediate sends and non-final receipts are replayed together in
+    // chronological order so stageAvailablePcs / currentStageId stay exactly
+    // replay-consistent with the live engine (the same economic pcs relocated):
+    //   - an intermediate send consumes stageAvailablePcs (explicit batch or
+    //     FIFO across the source stage) and advances currentStageId to the
+    //     target stage;
+    //   - a non-final receipt adds to stageAvailablePcs WITHOUT advancing
+    //     currentStageId (the batch stays at the stage it was dispatched to —
+    //     the send handler advances it when the pcs actually move on).
+    const stageEvents = [
+      ...orderedSends
+        .filter((s: any) => !InventoryCalculationService.sendConsumesRaw(s.stageId, processingStages))
+        .map((s: any) => ({ kind: 'send' as const, date: s.date || '', s })),
+      ...orderedReceipts
+        .filter((r: any) => {
+          const send = sends.find((x: any) => x.id === r.sendId);
+          return !InventoryCalculationService.receiptProducesFinished(r.stageId ?? send?.stageId, processingStages);
+        })
+        .map((r: any) => ({ kind: 'receipt' as const, date: r.date || '', r })),
+    ].sort((a: any, b: any) => a.date.localeCompare(b.date));
 
-    // in the chain (stageAvailablePcs += received, currentStageId -> next stage).
-
-    const stagesSorted = [...processingStages].sort((a: any, b: any) => a.sequence - b.sequence);
-
-    for (const r of orderedReceipts) {
-
-      const send = sends.find((x: any) => x.id === r.sendId);
-
-      const stageId = r.stageId ?? send?.stageId;
-
-      if (InventoryCalculationService.receiptProducesFinished(stageId, processingStages)) continue;
-
-      const currentStage = stagesSorted.find((s: any) => s.id === stageId);
-
-      const nextStageId = currentStage?.nextStageId;
-
-      trail = trail.map((b: any) => {
-
-        if (send?.batchId && b.id === send.batchId) {
-
-          return {
-
-            ...b,
-
-            currentStageId: nextStageId || undefined,
-
-            stageAvailablePcs: (b.stageAvailablePcs || 0) + (r.pcsReceived || 0),
-
-          };
-
+    for (const ev of stageEvents) {
+      if (ev.kind === 'send') {
+        const s = ev.s;
+        if (s.batchId) {
+          trail = trail.map((b: any) =>
+            b.id === s.batchId
+              ? {
+                  ...b,
+                  stageAvailablePcs: Math.max(0, (b.stageAvailablePcs || 0) - (s.pcsSent || 0)),
+                  currentStageId: s.stageId || b.currentStageId,
+                }
+              : b
+          );
+        } else {
+          const attributed = InventoryCalculationService.attributeStageDispatchFIFO(
+            s.materialId,
+            s.pcsSent || 0,
+            s.stageId,
+            processingStages,
+            trail as any
+          );
+          trail = attributed.batches;
         }
-
-        return b;
-
-      });
-
+      } else {
+        const r = ev.r;
+        const send = sends.find((x: any) => x.id === r.sendId);
+        if (send?.batchId) {
+          trail = trail.map((b: any) =>
+            b.id === send.batchId
+              ? { ...b, stageAvailablePcs: (b.stageAvailablePcs || 0) + (r.pcsReceived || 0) }
+              : b
+          );
+        }
+        // Legacy no-batch non-final receipts leave stageAvailablePcs untouched
+        // (mirrors the live engine: no batch → no bucket to accumulate on).
+      }
     }
 
 

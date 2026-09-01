@@ -24,6 +24,7 @@ export function ProcessingReceiveReport() {
     { key: "dispatchNo", label: "Dispatch No", sortable: true },
     { key: "processorName", label: "Processor", sortable: true },
     { key: "materialName", label: "Material", sortable: true },
+    { key: "stageName", label: "Stage", sortable: true },
     { key: "pcsReceived", label: "PCS Received", align: "right", render: (item) => formatNumber(item.pcsReceived) }
   ];
 
@@ -33,6 +34,7 @@ export function ProcessingReceiveReport() {
     { header: 'Dispatch No', dataKey: 'dispatchNo' },
     { header: 'Processor', dataKey: 'processorName' },
     { header: 'Material', dataKey: 'materialName' },
+    { header: 'Stage', dataKey: 'stageName' },
     { header: 'PCS Received', dataKey: 'pcsReceived' }
   ];
 

@@ -1,6 +1,7 @@
 import { useERPStore } from '../../store/useERPStore';
 import type { Account } from '../../types/erp';
 import { AccountingEngine } from '../accounting/AccountingEngine';
+import { InventoryCalculationService } from '../business/InventoryCalculationService';
 import { ReportEngine } from './ReportEngine';
 
 export class FinancialReportService {
@@ -334,7 +335,7 @@ return withPercentage.sort((a,b) => b.balance - a.balance);
    */
   static getBalanceSheetData(asOfDate?: string) {
     const state = useERPStore.getState();
-    const { accounts, accountSubtypes, journalEntries, vouchers } = state;
+    const { accounts, accountSubtypes, journalEntries, vouchers, materials, batches } = state;
     const balances = AccountingEngine.getAccountBalances(accounts, journalEntries, vouchers, asOfDate || undefined);
 
     // Current-period profit from posted vouchers up to the as-of date.
@@ -404,6 +405,48 @@ return withPercentage.sort((a,b) => b.balance - a.balance);
       buildGroup('Fixed Assets', 'Assets', ['Fixed Assets', 'Accumulated Depreciation']),
       buildGroup('Other Assets', 'Assets', null, knownAssetSubtypes),
     ];
+
+    // ── Inventory: physical-stock split (Raw / Work-in-Progress / Finished) ──
+    // The ledger holds the FULL purchase value in Raw Material Inventory (a
+    // reclassification journal is NOT posted per dispatch/receipt, by design —
+    // this keeps the logic engine and ledger untouched). To still show where
+    // stock physically sits, the Inventory group is split into three derived
+    // rows from the authoritative batch trail (Σ per-material stage values at
+    // actual purchase cost). The group TOTAL is forced to equal the posted
+    // ledger inventory balance, so the statement stays balanced and the ledger
+    // remains the single source of truth for the accounting total.
+    const inventoryGroup = assetGroups.find(g => g.label === 'Inventory');
+    if (inventoryGroup) {
+      const ledgerInvTotal = inventoryGroup.total;
+      let rawVal = 0, wipVal = 0, finishedVal = 0;
+      for (const m of materials) {
+        const v = InventoryCalculationService.getMaterialStageValues(m.id, batches || []);
+        rawVal += v.raw.value;
+        wipVal += v.atProcessor.value;
+        finishedVal += v.finished.value;
+      }
+      const derivedTotal = rawVal + wipVal + finishedVal;
+      const variance = ledgerInvTotal - derivedTotal;
+      // Map rows to the real inventory control accounts so drill-down still works.
+      const invAccounts = accounts.filter(a => subtypeName(a) === 'Inventory');
+      const rowFor = (kw: string, fallbackName: string, balance: number) => {
+        const a = invAccounts.find(x => x.name.toLowerCase().includes(kw));
+        return { id: a?.id || '', code: a?.code || '', name: a?.name || fallbackName, balance };
+      };
+      inventoryGroup.rows = [
+        rowFor('raw material', 'Raw Material Inventory', rawVal),
+        rowFor('work in progress', 'Work in Progress Inventory', wipVal),
+        rowFor('finished goods', 'Finished Goods Inventory', finishedVal),
+      ];
+      // Absorb any ledger-vs-trail variance (e.g. legacy/no-batch stock) into a
+      // reconciling line so the group total always equals the ledger total.
+      if (Math.abs(variance) > 0.01) {
+        inventoryGroup.rows.push({ id: '', code: '', name: 'Inventory Variance', balance: variance });
+      }
+      inventoryGroup.rows = inventoryGroup.rows.filter(r => Math.abs(r.balance) > 0.01);
+      inventoryGroup.total = ledgerInvTotal;
+    }
+
     const liabilityGroups = [
       buildGroup('Accounts Payable', 'Liabilities', ['Accounts Payable']),
       buildGroup('Loans & Borrowings', 'Liabilities', ['Short-term Loans', 'Long-term Loans']),

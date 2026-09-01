@@ -1,15 +1,11 @@
-import { Calculator, ChevronDown, ChevronRight, ChevronUp,DollarSign, Factory, FileBarChart2, 
-  PackageSearch, 
-  Search, 
-  ShoppingCart, X 
+import { Calculator, ChevronDown, ChevronRight, ChevronUp, Clock, DollarSign, Factory, FileBarChart2,
+  PackageSearch, Search, ShoppingCart, Star, X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { FinancialReports } from '../components/reports/financial/FinancialReports';
-import { InventoryReports } from '../components/reports/inventory/InventoryReports';
-import { ProcessingReports } from '../components/reports/processing/ProcessingReports';
-import { PurchaseReports } from '../components/reports/purchase/PurchaseReports';
-import { SalesReports } from '../components/reports/sales/SalesReports';
+import { getReportDefinition, reportDefinitions } from '../components/reports/registry/reportDefinitions';
+import { useReportFavorites } from '../components/reports/registry/useReportFavorites';
+import { ReportShell } from '../components/reports/shell';
 import { DrillDownProvider } from '../contexts/DrillDownContext';
 import { cn } from "../lib/utils";
 
@@ -118,6 +114,13 @@ export function Reports() {
   const [activeReport, setActiveReport] = useState(() => searchParams.get('rep') || 'purchase-register');
   const [searchTerm, setSearchTerm] = useState('');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const { favorites, recents, toggleFavorite, isFavorite, pushRecent } = useReportFavorites();
+
+  // Record the active report as recently viewed.
+  useEffect(() => {
+    if (getReportDefinition(activeReport)) pushRecent(activeReport);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeReport]);
 
   // Keep the active report/category synced to the URL (?cat=&rep=) so refresh,
   // back/forward and deep links preserve position.
@@ -133,8 +136,7 @@ export function Reports() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCategory, activeReport]);
 
-  const currentCategory = REPORT_CATEGORIES.find(c => c.id === activeCategory);
-  const currentReportName = currentCategory?.reports.find(r => r.id === activeReport)?.label || '';
+  const currentDefinition = getReportDefinition(activeReport);
 
   const searchActive = searchTerm.trim().length > 0;
 
@@ -143,9 +145,17 @@ export function Reports() {
     if (!term) return [];
     const results: SearchResult[] = [];
     REPORT_CATEGORIES.forEach((cat) => {
-      cat.reports
-        .filter(r => r.label.toLowerCase().includes(term))
-        .forEach(r => results.push({ id: r.id, label: r.label, categoryId: cat.id, categoryLabel: cat.label }));
+      cat.reports.forEach((r) => {
+        const def = reportDefinitions[r.id];
+        const haystack = [
+          r.label.toLowerCase(),
+          def?.description?.toLowerCase() || '',
+          ...(def?.tags || []).map((t) => t.toLowerCase()),
+        ];
+        if (haystack.some((h) => h.includes(term))) {
+          results.push({ id: r.id, label: r.label, categoryId: cat.id, categoryLabel: cat.label });
+        }
+      });
     });
     return results;
   }, [searchTerm]);
@@ -165,23 +175,16 @@ export function Reports() {
   };
 
   const renderContent = () => {
-    switch (activeCategory) {
-      case 'purchase': return <PurchaseReports activeReport={activeReport} />;
-      case 'sales': return <SalesReports activeReport={activeReport} />;
-      case 'processing': return <ProcessingReports activeReport={activeReport} />;
-      case 'inventory': return <InventoryReports activeReport={activeReport} />;
-      case 'financial': return <FinancialReports activeReport={activeReport} />;
-      default: return <div>Report not found</div>;
-    }
+    if (!currentDefinition) return <div>Report not found</div>;
+    const ReportComponent = currentDefinition.component;
+    return <ReportShell definition={currentDefinition}><ReportComponent /></ReportShell>;
   };
-
-  const CategoryIcon = currentCategory?.icon ?? FileBarChart2;
 
   return (
     <DrillDownProvider>
       <div className="flex h-[calc(100vh-64px)] -m-4 sm:-m-6 lg:-m-8 relative">
       {/* Sidebar */}
-      <div className="w-72 border-r border-border bg-card overflow-y-auto hidden md:block shrink-0">
+      <div className="w-64 lg:w-72 border-r border-border bg-card overflow-y-auto hidden md:block shrink-0">
         <div className="p-4 border-b border-border/50 sticky top-0 bg-card z-10">
           <div className="flex items-center justify-between">
             <div>
@@ -243,7 +246,9 @@ export function Reports() {
                       {result.label}
                       <ChevronRight className="h-3.5 w-3.5 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
                     </span>
-                    <span className="block text-[10px] text-muted-foreground/80 mt-0.5">{result.categoryLabel}</span>
+                    <span className="block text-[10px] text-muted-foreground/80 mt-0.5">
+                      {reportDefinitions[result.id]?.description || result.categoryLabel}
+                    </span>
                   </button>
                 ))
               )}
@@ -251,6 +256,72 @@ export function Reports() {
           ) : (
             /* ---- Category groups ---- */
             <div className="space-y-2">
+              {/* Favorites */}
+              {favorites.length > 0 && (
+                <div className="rounded-xl border border-border/50 bg-muted/20 p-2">
+                  <div className="px-1 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <Star className="h-3 w-3 fill-amber-400 text-amber-400" aria-hidden="true" />
+                    Favorites
+                  </div>
+                  <div className="space-y-0.5">
+                    {favorites.map((id) => {
+                      const def = reportDefinitions[id];
+                      if (!def) return null;
+                      const isActive = activeReport === id;
+                      return (
+                        <div key={id} className="flex items-center group">
+                          <button
+                            onClick={() => selectReport(def.category, id)}
+                            className={cn(
+                              "flex-1 text-left px-2 py-1.5 text-sm rounded-lg transition-colors truncate",
+                              isActive ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                            )}
+                          >
+                            {def.title}
+                          </button>
+                          <button
+                            onClick={() => toggleFavorite(id)}
+                            aria-label={`Remove ${def.title} from favorites`}
+                            className="p-1 rounded-md text-muted-foreground/50 hover:text-foreground hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Recent */}
+              {recents.length > 0 && (
+                <div className="rounded-xl border border-border/50 bg-muted/20 p-2">
+                  <div className="px-1 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <Clock className="h-3 w-3" aria-hidden="true" />
+                    Recent
+                  </div>
+                  <div className="space-y-0.5">
+                    {recents.map((id) => {
+                      const def = reportDefinitions[id];
+                      if (!def) return null;
+                      const isActive = activeReport === id;
+                      return (
+                        <button
+                          key={id}
+                          onClick={() => selectReport(def.category, id)}
+                          className={cn(
+                            "w-full text-left px-2 py-1.5 text-sm rounded-lg transition-colors truncate",
+                            isActive ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                          )}
+                        >
+                          {def.title}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {REPORT_CATEGORIES.map((category) => {
                 const isCollapsed = collapsed[category.id];
                 return (
@@ -279,19 +350,34 @@ export function Reports() {
                       <div className="space-y-0.5 ml-3 border-l border-border/50 pl-2 mt-0.5 pb-1">
                         {category.reports.map((report) => {
                           const isActive = activeCategory === category.id && activeReport === report.id;
+                          const fav = isFavorite(report.id);
                           return (
-                            <button
-                              key={report.id}
-                              onClick={() => selectReport(category.id, report.id)}
-                              className={cn(
-                                "w-full text-left px-3 py-1.5 text-sm rounded-lg transition-colors border-l-2",
-                                isActive
-                                  ? "bg-primary/10 text-primary font-medium border-primary"
-                                  : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
-                              )}
-                            >
-                              {report.label}
-                            </button>
+                            <div key={report.id} className="flex items-center group">
+                              <button
+                                onClick={() => selectReport(category.id, report.id)}
+                                className={cn(
+                                  "flex-1 text-left px-3 py-1.5 text-sm rounded-lg transition-colors",
+                                  isActive
+                                    ? "bg-primary/10 text-primary font-medium"
+                                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                                )}
+                              >
+                                {report.label}
+                              </button>
+                              <button
+                                onClick={() => toggleFavorite(report.id)}
+                                aria-label={fav ? `Unfavorite ${report.label}` : `Favorite ${report.label}`}
+                                aria-pressed={fav}
+                                className={cn(
+                                  "p-1 rounded-md transition-all shrink-0",
+                                  fav
+                                    ? "text-amber-400 opacity-100"
+                                    : "text-muted-foreground/40 hover:text-amber-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                                )}
+                              >
+                                <Star className={cn("h-3.5 w-3.5", fav && "fill-amber-400")} aria-hidden="true" />
+                              </button>
+                            </div>
                           );
                         })}
                       </div>
@@ -380,30 +466,8 @@ export function Reports() {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden bg-background pt-28 md:pt-0">
-        <div className="p-4 sm:p-6 lg:p-8 flex-1 overflow-y-auto">
-          {/* Breadcrumb & Header */}
-          <div className="mb-6">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-              <span>Reports</span>
-              <ChevronRight className="h-3.5 w-3.5" />
-              <span>{currentCategory?.label}</span>
-              <ChevronRight className="h-3.5 w-3.5" />
-              <span className="font-medium text-foreground">{currentReportName}</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-sm">
-                <CategoryIcon className="h-5 w-5" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight text-foreground">{currentReportName}</h1>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {currentCategory?.label} · {currentCategory?.reports.length} reports in this category
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Report Content Component */}
+        <div className="p-4 sm:p-6 lg:p-8 flex-1">
+                    {/* Report Content Component */}
           {renderContent()}
         </div>
       </div>

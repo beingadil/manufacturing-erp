@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AccountingEngine } from '../lib/accounting/AccountingEngine';
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
+import { FinancialReportService } from '../lib/reporting/FinancialReportService';
 import { buildDefaultStages } from '../lib/processing/processingStageSeed';
 import type { ProcessingStage } from '../types/erp';
 import { migrateERPState } from './erpMigration';
@@ -390,5 +391,146 @@ describe('multi-stage processing engine', () => {
     expect(material().stockPcs).toBe(1900);
     expect(material().atProcessorPcs).toBe(0);
     expect(inventoryValue()).toBe(300000); // NEVER 300,000 × 5
+  });
+
+  // ── TEST N — Intermediate dispatch WITHOUT a batch (Auto path) ────────────
+  it('TEST N: no-batch intermediate dispatch FIFO-attributes stageAvailablePcs so pcs are never re-sendable', () => {
+    purchase();
+    const initSend = sendToStage('Initial Processor', 'Initial Processor', 2000, 5, '2026-08-02');
+    receiveFromStage(initSend, 'Initial Processor', 'Initial Processor', 2000, '2026-08-03');
+    const s = st();
+    const batch = s.batches[0];
+    expect(batch.stageAvailablePcs).toBe(2000); // available at Initial → Machine
+
+    // Send 500 to Machine WITHOUT choosing a batch (Auto / Any Batch path).
+    s.addProcessingSend({
+      processorId: processorByName('Machine Man'),
+      materialId: s.materials[0].id,
+      date: '2026-08-04',
+      pcsSent: 500,
+      ratePerPiece: 32,
+      stageId: stageByName('Machine').id,
+    } as any);
+
+    const after = st();
+    // The dispatch was attributed to the batch (FIFO) — availability dropped.
+    expect(after.batches[0].stageAvailablePcs).toBe(1500);
+    expect(after.batches[0].currentStageId).toBe(stageByName('Machine').id);
+    // The dispatch is linked to the batch so its receipt attributes correctly.
+    expect(after.processingSends[0].batchId).toBe(batch.id);
+    // Total inventory value is untouched (WIP → WIP).
+    expect(inventoryValue()).toBe(300000);
+  });
+
+  it('TEST N2: over-send beyond stage availability is rejected even without a batch', () => {
+    purchase();
+    const initSend = sendToStage('Initial Processor', 'Initial Processor', 2000, 5, '2026-08-02');
+    receiveFromStage(initSend, 'Initial Processor', 'Initial Processor', 2000, '2026-08-03');
+    const before = st().processingSends.length;
+    st().addProcessingSend({
+      processorId: processorByName('Machine Man'),
+      materialId: st().materials[0].id,
+      date: '2026-08-04',
+      pcsSent: 2500, // more than the 2000 available
+      ratePerPiece: 32,
+      stageId: stageByName('Machine').id,
+    } as any);
+    expect(st().processingSends.length).toBe(before); // rejected
+    expect(st().batches[0].stageAvailablePcs).toBe(2000);
+  });
+
+  // ── TEST O — Bill line-level rate override (finalize at bill time) ───────
+  it('TEST O: a bill can override the per-receipt amount; total and voucher follow', () => {
+    purchase();
+    const initSend = sendToStage('Initial Processor', 'Initial Processor', 64, 5, '2026-08-02');
+    receiveFromStage(initSend, 'Initial Processor', 'Initial Processor', 64, '2026-08-03');
+    const machineSend = sendToStage('Machine', 'Machine Man', 64, 32, '2026-08-04');
+    receiveFromStage(machineSend, 'Machine', 'Machine Man', 64, '2026-08-05');
+
+    const receipt = st().processingReceipts[0];
+    expect(receipt.billAmount).toBe(1024); // default at dispatch rate
+
+    // Bill with an explicit line override — the negotiated rate was higher.
+    st().addProcessorBill({
+      processorId: processorByName('Machine Man'),
+      date: '2026-08-06',
+      receiptIds: [receipt.id],
+      stageId: stageByName('Machine').id,
+      rateMethod: 'per_kg',
+      billingUnit: 'Per KG',
+      lineAmounts: { [receipt.id]: 1500 },
+    } as any);
+
+    const after = st();
+    expect(after.processorBills[0].totalAmount).toBe(1500);
+    expect(after.processorBills[0].lineAmounts?.[receipt.id]).toBe(1500);
+    // The voucher follows the overridden total (DR Processing Expense / CR AP).
+    const voucher = after.vouchers.find(v => v.sourceId === after.processorBills[0].id && v.sourceModule === 'Processing');
+    expect(voucher?.totalDebit).toBe(1500);
+    expect(voucher?.totalCredit).toBe(1500);
+    expect(after.processors.find(p => p.name === 'Machine Man')!.balancePayable).toBe(1500);
+    expect(inventoryValue()).toBe(300000); // billing never changes inventory
+  });
+
+  // ── TEST P — Replay consistency: migration keeps currentStageId at the last
+  //             dispatched stage (matching the live engine), never advancing it
+  //             on a non-final receipt. ─────────────────────────────────────
+  it('TEST P: restart replay keeps currentStageId at the dispatched stage, consistent with the live engine', () => {
+    purchase();
+    const initSend = sendToStage('Initial Processor', 'Initial Processor', 2000, 5, '2026-08-02');
+    receiveFromStage(initSend, 'Initial Processor', 'Initial Processor', 2000, '2026-08-03');
+
+    const liveBatch = st().batches[0];
+    // Live engine: batch stays at Initial after the receipt; 2000 available for Machine.
+    expect(liveBatch.currentStageId).toBe(stageByName('Initial Processor').id);
+    expect(liveBatch.stageAvailablePcs).toBe(2000);
+
+    const before = st();
+    const snapshot = JSON.parse(JSON.stringify({
+      batches: before.batches,
+      processingStages: before.processingStages,
+      processingSends: before.processingSends,
+      processingReceipts: before.processingReceipts,
+      sales: before.sales,
+      products: before.products,
+    }));
+    const migrated = migrateERPState(snapshot as any);
+    const replayedBatch = migrated.batches.find((b: any) => b.id === liveBatch.id);
+    // Migration replay agrees with the live engine — no stage advancement.
+    expect(replayedBatch.currentStageId).toBe(stageByName('Initial Processor').id);
+    expect(replayedBatch.stageAvailablePcs).toBe(2000);
+    expect(replayedBatch.atProcessorPcs).toBe(2000);
+    expect(replayedBatch.processedPcs).toBe(0);
+  });
+
+  // ── TEST Q — Balance Sheet reflects physical stock location (report-layer) ─
+  it('TEST Q: Balance Sheet Inventory splits into Raw / WIP / Finished from the batch trail, total stays equal to ledger', () => {
+    purchase(); // 2000 pcs raw, PKR 300,000 all in Raw Material Inventory ledger
+    // Move 800 pcs through the FULL chain to Finished Goods (final = Spot Machine).
+    const s1 = sendToStage('Initial Processor', 'Initial Processor', 800, 5, '2026-08-02');
+    receiveFromStage(s1, 'Initial Processor', 'Initial Processor', 800, '2026-08-03');
+    const s2 = sendToStage('Machine', 'Machine Man', 800, 32, '2026-08-04');
+    receiveFromStage(s2, 'Machine', 'Machine Man', 800, '2026-08-05');
+    const s3 = sendToStage('Acid', 'Acid Man', 800, 40, '2026-08-06');
+    receiveFromStage(s3, 'Acid', 'Acid Man', 800, '2026-08-07');
+    const s4 = sendToStage('Polish', 'Polisher', 800, 50, '2026-08-08');
+    receiveFromStage(s4, 'Polish', 'Polisher', 800, '2026-08-09');
+    const s5 = sendToStage('Spot Machine', 'Spot Machine Man', 800, 60, '2026-08-10');
+    receiveFromStage(s5, 'Spot Machine', 'Spot Machine Man', 800, '2026-08-11');
+
+    const bs = FinancialReportService.getBalanceSheetData();
+    const invGroup = bs.assetGroups.find(g => g.label === 'Inventory')!;
+    const getRow = (kw: string) => invGroup.rows.find(r => r.name.toLowerCase().includes(kw))?.balance || 0;
+
+    // 1200 pcs raw @ 150 = 180,000; 0 WIP; 800 finished @ 150 = 120,000.
+    expect(getRow('raw material')).toBeCloseTo(180000, 0);
+    expect(getRow('work in progress')).toBeCloseTo(0, 0);
+    expect(getRow('finished goods')).toBeCloseTo(120000, 0);
+
+    // Group total equals the ledger's posted inventory balance (300,000) — the
+    // statement stays balanced and the ledger remains the accounting truth.
+    expect(invGroup.total).toBeCloseTo(300000, 0);
+    expect(bs.balanced).toBe(true);
+    expect(inventoryValue()).toBe(300000); // physical stock never double-counted
   });
 });

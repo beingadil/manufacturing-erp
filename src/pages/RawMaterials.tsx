@@ -6,11 +6,11 @@ import { InlineEditInput } from '../components/common/InlineEditInput';
 import { SafeDeleteDialog } from '../components/common/SafeDeleteDialog';
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
 import { KpiCard } from '../components/ui/KpiCard';
+import { PageModal } from "../components/ui/PageModal";
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
 import { cn, formatCurrency, formatNumber } from "../lib/utils";
 import { MaterialService } from '../services/MaterialService';
 import { useERPStore } from "../store/useERPStore";
-import { PageModal } from "../components/ui/PageModal";
 
 export function RawMaterials() {
   const { materials, categories, purchases, processingSends, processingReceipts, batches } = useERPStore();
@@ -26,7 +26,7 @@ export function RawMaterials() {
   }>({ isOpen: false, id: '', name: '', impactDetails: [], isReferenced: false });
 
   const handleDeleteClick = (material: any) => {
-    const impactDetails = [];
+    const impactDetails: string[] = [];
     let isReferenced = false;
 
     // Check references

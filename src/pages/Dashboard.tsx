@@ -4,9 +4,9 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { PositionSummary } from '../components/reports/financial/BalanceSheetStatement';
+import { DatePicker } from "../components/ui/date-picker";
 import { KpiCard } from "../components/ui/KpiCard";
 import { useAuth } from "../contexts/AuthContext";
-import { DatePicker } from "../components/ui/date-picker";
 import { filterFinancialData } from "../lib/abac";
 import { getSystemAccountBySubtype } from '../lib/accounting/accountClassification';
 import { DashboardSummaryService } from '../lib/dashboard/DashboardSummaryService';
@@ -70,7 +70,7 @@ export function Dashboard() {
 
   // Generate last 7 days sales data
   const last7DaysSales = useMemo(() => {
-    const data = [];
+    const data: Array<{ name: string; sales: number }> = [];
     for (let i = 6; i >= 0; i--) {
       const d = subDays(new Date(), i);
       const dateStr = format(d, 'yyyy-MM-dd');

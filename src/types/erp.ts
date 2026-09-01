@@ -208,6 +208,10 @@ export interface ProcessorBill {
   rateMethod?: "per_piece" | "per_kg";
   /** Billing unit label (e.g. "Per PCS" or "Per KG"). */
   billingUnit?: string;
+  /** Optional per-receipt billed amount override (receiptId → amount). When
+   *  absent, each line bills at the receipt's computed billAmount — the
+   *  dispatch rate is the default and can be finalized at bill time. */
+  lineAmounts?: Record<string, number>;
 }
 
 export interface Product {

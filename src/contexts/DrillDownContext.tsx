@@ -67,7 +67,7 @@ export function DrillDownProvider({ children }: { children: React.ReactNode }) {
           </div>
           
           {/* Active Level Content */}
-          <div className="flex-1 overflow-auto bg-muted/10 relative">
+          <div className="flex-1 bg-muted/10 relative overflow-x-auto">
             <div className="absolute inset-0 p-6">
               {levels[levels.length - 1].component}
             </div>

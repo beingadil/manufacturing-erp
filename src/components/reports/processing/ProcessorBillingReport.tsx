@@ -27,6 +27,7 @@ export function ProcessorBillingReport() {
         { key: "date", label: "Date", render: (item) => format(new Date(item.date), 'dd-MMM-yyyy') },
         { key: "receiveNo", label: "Receipt No" },
         { key: "processorName", label: "Processor" },
+        { key: "stageName", label: "Stage" },
         { key: "pcsReceived", label: "PCS", align: "right", render: (item) => formatNumber(item.pcsReceived) },
         { key: "billAmount", label: "Bill Amount", align: "right", render: (item) => formatCurrency(item.billAmount) }
       ]}
