@@ -1,9 +1,0 @@
-src/pages/Categories.tsx(40,26): error TS2345: Argument of type 'string' is not assignable to parameter of type 'never'.
-src/pages/Dashboard.tsx(78,17): error TS2345: Argument of type '{ name: string; sales: any; }' is not assignable to parameter of type 'never'.
-src/pages/MonitorScreen.tsx(99,17): error TS2345: Argument of type '{ date: string; revenue: number; purchase: number; profit: number; }' is not assignable to parameter of type 'never'.
-src/pages/RawMaterials.tsx(38,47): error TS2345: Argument of type 'string' is not assignable to parameter of type 'never'.
-src/pages/RawMaterials.tsx(39,43): error TS2345: Argument of type 'string' is not assignable to parameter of type 'never'.
-src/pages/RawMaterials.tsx(40,46): error TS2345: Argument of type 'string' is not assignable to parameter of type 'never'.
-src/pages/RawMaterials.tsx(41,44): error TS2345: Argument of type 'string' is not assignable to parameter of type 'never'.
-src/pages/RawMaterials.tsx(45,26): error TS2345: Argument of type '"Because of these references, the material cannot be deleted to preserve data integrity. It will be deactivated instead."' is not assignable to parameter of type 'never'.
-src/pages/RawMaterials.tsx(49,26): error TS2345: Argument of type 'string' is not assignable to parameter of type 'never'.
