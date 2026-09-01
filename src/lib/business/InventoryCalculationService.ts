@@ -200,10 +200,16 @@ export class InventoryCalculationService {
       batches: batches.map(b => {
         const take = takeByBatch.get(b.id) || 0;
         if (take <= 0) return b;
+        const newAvail = Math.max(0, (b.stageAvailablePcs || 0) - take);
         return {
           ...b,
-          stageAvailablePcs: Math.max(0, (b.stageAvailablePcs || 0) - take),
-          currentStageId: targetStageId || b.currentStageId,
+          stageAvailablePcs: newAvail,
+          // Advance currentStageId only when every available pc moved on —
+          // a partial dispatch must not mislabel pcs still waiting at the
+          // source stage (multi-position truth).
+          currentStageId: newAvail <= 0
+            ? (targetStageId || b.currentStageId)
+            : b.currentStageId,
         };
       }),
       usedBatchIds,
@@ -243,6 +249,17 @@ export class InventoryCalculationService {
       if (take <= 0) return b;
       return { ...b, atProcessorPcs: Math.max(0, (b.atProcessorPcs || 0) - take), processedPcs: (b.processedPcs || 0) + take };
     });
+  }
+
+  /**
+   * Raw pcs of a batch never dispatched anywhere. remainingPcs IS the raw
+   * bucket: the dispatch FIFO decrements it as pcs leave for a processor,
+   * while atProcessorPcs/stageAvailablePcs track the WIP system and
+   * processedPcs the finished bucket. These pcs can be sent to STAGE 1 at any
+   * time, regardless of where the batch's other pcs sit in the chain.
+   */
+  static batchRawAvailable(batch: Batch): number {
+    return Math.max(0, (batch.remainingPcs || 0) - (batch.processedPcs || 0));
   }
 
   /**

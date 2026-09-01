@@ -4,6 +4,7 @@ import { SearchableSelect } from '../SearchableSelect';
 import { DatePicker } from '../ui/date-picker';
 import { QuickAddMaterial, QuickAddProcessor } from '../QuickAddModals';
 import { ProcessingService } from '../../services/ProcessingService';
+import { InventoryCalculationService } from '../../lib/business/InventoryCalculationService';
 import { useERPStore } from '../../store/useERPStore';
 import { getMaterialBatchProgress, getSortedStages, batchCanSendToStage } from '../../lib/processing/stageProgress';
 import { formatNumber } from '../../lib/utils';
@@ -47,22 +48,36 @@ export function SendToProcessorForm({
   const sortedStages = useMemo(() => getSortedStages(processingStages || []), [processingStages]);
   const selectedMaterial = materials.find(m => m.id === materialId);
 
-  // Material-level next stage (auto) — used when no explicit batch is chosen.
+  // Auto stage resolution: the material's pcs sit at MULTIPLE stages at once
+  // (1100 purchased → 1000 at Machine, 100 still raw). AUTO therefore picks
+  // the EARLIEST stage with pcs waiting — raw goes to stage 1 first; only
+  // when nothing is raw does it move on to the earliest stage with received
+  // pcs available. The user can always override by picking a batch (locks to
+  // that batch's next leg) or a stage explicitly.
   const materialProgress = useMemo(() => {
     if (!materialId || sortedStages.length === 0) return null;
     const batchesOfMaterial = (batches || []).filter(b => b.materialId === materialId);
-    let maxSeq = 0;
+    const rawTotal = batchesOfMaterial.reduce(
+      (sum, b) => sum + InventoryCalculationService.batchRawAvailable(b), 0
+    );
+    if (rawTotal > 0 || selectedMaterial && (selectedMaterial.stockPcs || 0) > 0) {
+      return { nextStage: sortedStages[0], isRaw: true };
+    }
+    const stageTotals = new Map<string, number>();
     for (const b of batchesOfMaterial) {
-      if (b.currentStageId) {
-        const st = sortedStages.find(s => s.id === b.currentStageId);
-        if (st && st.sequence > maxSeq) maxSeq = st.sequence;
+      const avail = b.stageAvailablePcs || 0;
+      if (avail > 0 && b.currentStageId) {
+        stageTotals.set(b.currentStageId, (stageTotals.get(b.currentStageId) || 0) + avail);
       }
     }
-    return {
-      nextStage: maxSeq === 0 ? sortedStages[0] : sortedStages.find(s => s.sequence === maxSeq + 1) || null,
-      isRaw: maxSeq === 0,
-    };
-  }, [materialId, batches, sortedStages]);
+    for (const stage of sortedStages) {
+      if ((stageTotals.get(stage.id) || 0) > 0) {
+        const next = sortedStages.find(s => s.sequence === stage.sequence + 1);
+        if (next) return { nextStage: next, isRaw: false };
+      }
+    }
+    return { nextStage: sortedStages[0], isRaw: true };
+  }, [materialId, batches, sortedStages, selectedMaterial]);
 
   // Per-batch progress for the selected material (the multi-stage view).
   const batchProgress = useMemo(
@@ -91,24 +106,48 @@ export function SendToProcessorForm({
   }, [materialId, batches, effectiveStageId, sortedStages]);
 
   // Total pcs available for this material at the effective stage.
+  // Multi-position aware: stage 1 draws raw pcs (never-dispatched remainder);
+  // intermediate stages draw every batch holding available pcs at the source
+  // stage, regardless of currentStageId (partial re-dispatches advance
+  // currentStageId without consuming other batches' availability).
   const totalAvailable = useMemo(() => {
-    if (!effectiveStage) return selectedMaterial?.stockPcs || 0;
-    if (effectiveStage.sequence <= 1) return selectedMaterial?.stockPcs || 0;
-    return batchProgress
-      .filter(p => p.currentStage && effectiveStage.sequence - 1 === (p.currentStage.sequence))
-      .reduce((sum, p) => sum + p.availablePcs, 0);
-  }, [effectiveStage, selectedMaterial, batchProgress]);
+    if (!effectiveStage || effectiveStage.sequence <= 1) return selectedMaterial?.stockPcs || 0;
+    return batchProgress.reduce((sum, p) => {
+      const sourceSeq = effectiveStage.sequence - 1;
+      const sourceStage = sortedStages.find(s => s.sequence === sourceSeq);
+      const avail = sourceStage && p.currentStage?.id === sourceStage.id
+        ? p.availablePcs
+        : 0;
+      return sum + avail;
+    }, 0);
+  }, [effectiveStage, selectedMaterial, batchProgress, sortedStages]);
 
   const previousPendingSends = useMemo(() => {
     if (!processorId) return [];
     return processingSends.filter(s => s.processorId === processorId && (s.status === 'Pending' || s.status === 'Partial'));
   }, [processingSends, processorId]);
 
+  // Stage-matched processors: a worker assigned to a stage can only work that
+  // stage; general workers (no stage) can work any. Choosing 'Machine' must
+  // never offer the Acid man.
+  const eligibleProcessors = useMemo(() => {
+    if (!effectiveStageId) return processors;
+    return processors.filter(p => !p.stageId || p.stageId === effectiveStageId);
+  }, [processors, effectiveStageId]);
+  const stageMismatch = useMemo(
+    () => !!(processorId && !eligibleProcessors.some(p => p.id === processorId)),
+    [processorId, eligibleProcessors]
+  );
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     if (!processorId || !materialId || !pcs || !rate || !date) {
       setError('Processor, material, quantity, rate and date are required.');
+      return;
+    }
+    if (stageMismatch) {
+      setError(`This processor does not work the ${effectiveStage?.name || 'selected'} stage.`);
       return;
     }
     const qty = parseInt(pcs, 10);
@@ -122,10 +161,15 @@ export function SendToProcessorForm({
     }
     if (batchId) {
       const b = sendableBatches.find(x => x.id === batchId);
-      const avail = b ? (b.stageAvailablePcs || 0) > 0 ? b.stageAvailablePcs : b.remainingPcs : 0;
-      if (b && qty > (avail || 0)) {
-        setError(`Only ${formatNumber(avail || 0)} PCS available in batch ${b.batchNo}.`);
-        return;
+      if (b) {
+        const isStageOne = !effectiveStage || effectiveStage.sequence <= 1;
+        const avail = isStageOne
+          ? InventoryCalculationService.batchRawAvailable(b)
+          : (b.stageAvailablePcs || 0);
+        if (qty > (avail || 0)) {
+          setError(`Only ${formatNumber(avail || 0)} PCS available in batch ${b.batchNo}.`);
+          return;
+        }
       }
     }
 
@@ -173,9 +217,11 @@ export function SendToProcessorForm({
         )}
 
         <div>
-          <label className="block text-sm font-medium text-foreground/80 mb-1">Processor</label>
+          <label className="block text-sm font-medium text-foreground/80 mb-1">
+            Processor {effectiveStage && <span className="text-muted-foreground font-normal">· workers for {effectiveStage.name}</span>}
+          </label>
           <SearchableSelect
-            options={processors.map(p => ({
+            options={eligibleProcessors.map(p => ({
               id: p.id,
               label: p.name,
               secondaryLabel: p.stageId
@@ -183,12 +229,17 @@ export function SendToProcessorForm({
                 : (p.phone ? `General · ${p.phone}` : 'General Worker'),
               searchValue: p.phone,
             }))}
-            value={processorId}
-            onChange={setProcessorId}
+            value={stageMismatch ? '' : processorId}
+            onChange={(val) => { setProcessorId(val); setError(null); }}
             placeholder="Select Processor..."
             onAdd={() => setAddProcessorOpen(true)}
             required
           />
+          {stageMismatch && (
+            <p className="text-xs text-destructive mt-1">
+              The selected processor does not work the {effectiveStage?.name} stage — pick a {effectiveStage?.name} worker or a general worker.
+            </p>
+          )}
         </div>
 
         <div>
@@ -223,8 +274,9 @@ export function SendToProcessorForm({
                     {prog.isRaw && <span className="ml-1.5 text-[10px] text-muted-foreground">Raw</span>}
                     {prog.isFinished && <span className="ml-1.5 text-[10px] text-emerald-600">Finished</span>}
                   </span>
-                  <span className="text-[10px] text-muted-foreground">
-                    {prog.availablePcs > 0 && `Avail ${formatNumber(prog.availablePcs)} PCS`}
+                  <span className="text-[10px] text-muted-foreground text-right">
+                    {prog.rawPcs > 0 && `Raw ${formatNumber(prog.rawPcs)} PCS`}
+                    {prog.availablePcs > 0 && `${prog.rawPcs > 0 ? ' · ' : ''}Avail ${formatNumber(prog.availablePcs)} PCS`}
                     {prog.inTransitPcs > 0 && ` · WIP ${formatNumber(prog.inTransitPcs)}`}
                   </span>
                 </div>
@@ -251,7 +303,10 @@ export function SendToProcessorForm({
             <option value="">Auto (oldest batch first)</option>
             {sendableBatches.map(b => {
               const prog = batchProgress.find(p => p.batch.id === b.id);
-              const avail = prog && prog.availablePcs > 0 ? prog.availablePcs : b.remainingPcs;
+              const isStageOne = !effectiveStage || effectiveStage.sequence <= 1;
+              const avail = isStageOne
+                ? (prog?.rawPcs ?? InventoryCalculationService.batchRawAvailable(b))
+                : (prog?.availablePcs || b.stageAvailablePcs || 0);
               return <option key={b.id} value={b.id}>{b.batchNo} (Available: {formatNumber(avail)} PCS{prog?.nextStage ? ` → ${prog.nextStage.name}` : ''})</option>;
             })}
           </select>

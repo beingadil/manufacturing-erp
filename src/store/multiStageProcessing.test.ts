@@ -415,11 +415,29 @@ describe('multi-stage processing engine', () => {
     const after = st();
     // The dispatch was attributed to the batch (FIFO) — availability dropped.
     expect(after.batches[0].stageAvailablePcs).toBe(1500);
-    expect(after.batches[0].currentStageId).toBe(stageByName('Machine').id);
+    // Multi-position truth: 1500 pcs still wait at Initial, so the batch is
+    // NOT relabeled to Machine — a partial dispatch must not mislabel the pcs
+    // still available at the source stage (they remain sendable to Machine).
+    expect(after.batches[0].currentStageId).toBe(stageByName('Initial Processor').id);
     // The dispatch is linked to the batch so its receipt attributes correctly.
     expect(after.processingSends[0].batchId).toBe(batch.id);
     // Total inventory value is untouched (WIP → WIP).
     expect(inventoryValue()).toBe(300000);
+
+    // The remaining 1500 pcs are still sendable to Machine (no lock-out)…
+    st().addProcessingSend({
+      processorId: processorByName('Machine Man'),
+      materialId: st().materials[0].id,
+      date: '2026-08-05',
+      pcsSent: 1500,
+      ratePerPiece: 32,
+      stageId: stageByName('Machine').id,
+    } as any);
+    const drained = st();
+    expect(drained.batches[0].stageAvailablePcs).toBe(0);
+    // …and once fully drained the batch advances to the dispatched stage.
+    expect(drained.batches[0].currentStageId).toBe(stageByName('Machine').id);
+    expect(drained.processingSends).toHaveLength(3); // init + 500 + 1500
   });
 
   it('TEST N2: over-send beyond stage availability is rejected even without a batch', () => {
@@ -532,5 +550,86 @@ describe('multi-stage processing engine', () => {
     expect(invGroup.total).toBeCloseTo(300000, 0);
     expect(bs.balanced).toBe(true);
     expect(inventoryValue()).toBe(300000); // physical stock never double-counted
+  });
+
+  // ── TEST R — The partial raw dispatch lock ("1100 sent 1000") ──────────────
+  it('TEST R: leftover raw pcs stay sendable to stage 1 after a partial raw dispatch, and close/bill of the first job does not lock them', () => {
+    purchase(); // 2000 pcs (standing in for 1100)
+    // Dispatch 1000 of 2000 raw to the Initial Processor, then receive + bill
+    // the whole job — the real-world flow that used to lock the leftover.
+    const send1 = sendToStage('Initial Processor', 'Initial Processor', 1000, 5, '2026-08-02');
+    receiveFromStage(send1, 'Initial Processor', 'Initial Processor', 1000, '2026-08-03');
+    const receipt = st().processingReceipts[0];
+    st().addProcessorBill({ processorId: receipt.processorId, date: '2026-08-12', receiptIds: [receipt.id] } as any);
+
+    const b = st().batches[0];
+    // Batch holds 1000 raw and 1000 WIP simultaneously (multi-position): the
+    // dispatch FIFO consumed 1000 from remainingPcs (the raw bucket), the
+    // receipt made those 1000 available for the NEXT stage.
+    // simultaneously (multi-position). atProcessorPcs is the WIP marker; the
+    // receipt made those 1000 available for the NEXT stage.
+    expect(b.atProcessorPcs).toBe(1000);
+    expect(b.stageAvailablePcs).toBe(1000);
+    expect(b.remainingPcs).toBe(1000); // the raw bucket
+    // …and the raw remainder is still derivable.
+    expect(InventoryCalculationService.batchRawAvailable(b)).toBe(1000);
+
+    // The leftover 1000 raw pcs CAN be sent to the Initial Processor again —
+    // no lock from the first completed, billed job.
+    st().addProcessingSend({
+      processorId: processorByName('Initial Processor'),
+      materialId: st().materials[0].id,
+      batchId: b.id,
+      date: '2026-08-13',
+      pcsSent: 1000,
+      ratePerPiece: 5,
+      stageId: stageByName('Initial Processor').id,
+    } as any);
+    const after = st();
+    expect(after.processingSends).toHaveLength(2);
+    expect(InventoryCalculationService.batchRawAvailable(after.batches[0])).toBe(0);
+    // With nothing raw left, the batch advances to the dispatched stage.
+    expect(after.batches[0].currentStageId).toBe(stageByName('Initial Processor').id);
+    expect(after.batches[0].atProcessorPcs).toBe(2000);
+    // Raw stage value left the books, WIP carries it — total untouched.
+    expect(inventoryValue()).toBe(300000);
+  });
+
+  // ── TEST S — Worker-stage guard ────────────────────────────────────────────
+  it('TEST S: a stage-assigned worker cannot be dispatched to a different stage (Acid man rejects a Machine dispatch)', () => {
+    purchase();
+    // Assign the Acid Man to the Acid stage.
+    const acidWorker = st().processors.find(p => p.name === 'Acid Man')!;
+    st().updateProcessor(acidWorker.id, { stageId: stageByName('Acid').id } as any);
+
+    // Move raw → Initial → received back, so pcs are available at the Initial
+    // stage for an intermediate (Machine/Acid) dispatch.
+    const init = sendToStage('Initial Processor', 'Initial Processor', 200, 5, '2026-08-02');
+    receiveFromStage(init, 'Initial Processor', 'Initial Processor', 200, '2026-08-03');
+
+    const before = st().processingSends.length;
+    // Wrong stage: the Acid worker cannot take a MACHINE dispatch.
+    st().addProcessingSend({
+      processorId: acidWorker.id,
+      materialId: st().materials[0].id,
+      date: '2026-08-04',
+      pcsSent: 200,
+      ratePerPiece: 40,
+      stageId: stageByName('Machine').id,
+    } as any);
+    expect(st().processingSends.length).toBe(before); // rejected by the store
+    expect(st().batches[0].stageAvailablePcs).toBe(200); // untouched
+
+    // General worker (no stage assignment) CAN take the Machine dispatch.
+    st().addProcessingSend({
+      processorId: processorByName('Machine Man'),
+      materialId: st().materials[0].id,
+      date: '2026-08-04',
+      pcsSent: 100,
+      ratePerPiece: 32,
+      stageId: stageByName('Machine').id,
+    } as any);
+    expect(st().processingSends.length).toBe(before + 1);
+    expect(st().batches[0].stageAvailablePcs).toBe(100);
   });
 });

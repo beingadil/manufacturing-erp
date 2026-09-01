@@ -741,9 +741,15 @@ export const useERPStore = create<ERPState>()(
       },
 
       addProcessingSend: (data, adjustSendIds) => set((state) => {
+        // ── Stage-worker guard: a processor assigned to a stage can only work
+        // that stage (general workers can work any). 'Machine' can never
+        // receive an 'Acid' dispatch.
+        const worker = state.processors.find(p => p.id === data.processorId);
+        if (worker?.stageId && data.stageId && worker.stageId !== data.stageId) return state;
+
         const dispatchNo = DocumentNumberingService.nextDocumentNumber(state.processingSends, 'dispatchNo', 'DSP', data.date);
         const newSendId = uuidv4();
-        
+
         const newSend: ProcessingSend = {
           ...data,
           id: newSendId,
@@ -775,10 +781,16 @@ export const useERPStore = create<ERPState>()(
             if (data.pcsSent <= 0 || data.pcsSent > available) return state;
             updatedBatches = updatedBatches.map(b => {
               if (b.id === data.batchId) {
+                const newAvail = Math.max(0, (b.stageAvailablePcs || 0) - data.pcsSent);
                 return {
                   ...b,
-                  stageAvailablePcs: Math.max(0, (b.stageAvailablePcs || 0) - data.pcsSent),
-                  currentStageId: data.stageId || b.currentStageId,
+                  stageAvailablePcs: newAvail,
+                  // Advance currentStageId only when EVERY available pc has
+                  // moved on — a partial dispatch must not mislabel the pcs
+                  // still waiting at the source stage (multi-position truth).
+                  currentStageId: newAvail <= 0
+                    ? (data.stageId || b.currentStageId)
+                    : b.currentStageId,
                 };
               }
               return b;
@@ -867,12 +879,15 @@ export const useERPStore = create<ERPState>()(
         );
         const consumedBatchId = attributed.usedBatchIds[0] || data.batchId;
         // Mark the consumed batch as being at the target stage so the receipt
-        // handler and Send form can track stage progression correctly.
-        const updatedBatches = attributed.batches.map(b =>
-          b.id === consumedBatchId
-            ? { ...b, currentStageId: data.stageId || b.currentStageId }
-            : b
-        );
+        // handler and Send form can track stage progression correctly — but a
+        // batch with pcs still never-dispatched (raw remainder) keeps its raw
+        // bucket sendable: advance currentStageId only when nothing raw is
+        // left in the batch (multi-position truth, partial raw dispatches).
+        const updatedBatches = attributed.batches.map(b => {
+          if (b.id !== consumedBatchId) return b;
+          const rawLeft = InventoryCalculationService.batchRawAvailable(b);
+          return rawLeft > 0 ? b : { ...b, currentStageId: data.stageId || b.currentStageId };
+        });
 
         const movement: InventoryMovement = {
           id: uuidv4(),
