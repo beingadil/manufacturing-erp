@@ -95,3 +95,5 @@ history/*.json
 # Skills dirs
 /.skills
 /tasks
+
+typecheck-reports.txt
