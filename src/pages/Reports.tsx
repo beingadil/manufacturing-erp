@@ -1,4 +1,4 @@
-import { Calculator, ChevronRight, Clock, DollarSign, Factory, FileBarChart2,
+import { Calculator, Check, ChevronDown, ChevronRight, Clock, DollarSign, Factory, FileBarChart2,
   PackageSearch, Search, ShoppingCart, Star, X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from 'react';
@@ -6,6 +6,10 @@ import { useSearchParams } from 'react-router-dom';
 import { getReportDefinition, reportDefinitions } from '../components/reports/registry/reportDefinitions';
 import { useReportFavorites } from '../components/reports/registry/useReportFavorites';
 import { ReportShell } from '../components/reports/shell';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from '../components/ui/dropdown-menu';
 import { DrillDownProvider } from '../contexts/DrillDownContext';
 import { cn } from "../lib/utils";
 
@@ -13,7 +17,6 @@ const REPORT_CATEGORIES = [
   {
     id: 'purchase',
     label: 'Purchase Reports',
-    shortLabel: 'Purchase',
     icon: ShoppingCart,
     reports: [
       { id: 'purchase-register', label: 'Purchase Register' },
@@ -32,7 +35,6 @@ const REPORT_CATEGORIES = [
   {
     id: 'sales',
     label: 'Sales Reports',
-    shortLabel: 'Sales',
     icon: DollarSign,
     reports: [
       { id: 'sales-register', label: 'Sales Register' },
@@ -49,7 +51,6 @@ const REPORT_CATEGORIES = [
   {
     id: 'processing',
     label: 'Processing Reports',
-    shortLabel: 'Processing',
     icon: Factory,
     reports: [
       { id: 'processing-dispatch', label: 'Dispatch Register' },
@@ -66,7 +67,6 @@ const REPORT_CATEGORIES = [
   {
     id: 'inventory',
     label: 'Inventory Reports',
-    shortLabel: 'Inventory',
     icon: PackageSearch,
     reports: [
       { id: 'current-stock', label: 'Current Stock' },
@@ -86,7 +86,6 @@ const REPORT_CATEGORIES = [
   {
     id: 'financial',
     label: 'Financial Reports',
-    shortLabel: 'Financial',
     icon: Calculator,
     reports: [
       { id: 'general-ledger', label: 'General Ledger' },
@@ -113,6 +112,8 @@ interface SearchResult {
   categoryLabel: string;
 }
 
+const menuBtnCls = "flex items-center gap-2 h-9 px-3 rounded-xl border border-border bg-card text-sm font-medium text-foreground hover:bg-muted transition-colors";
+
 export function Reports() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeCategory, setActiveCategory] = useState(() => searchParams.get('cat') || 'purchase');
@@ -123,6 +124,7 @@ export function Reports() {
 
   const currentCategory = REPORT_CATEGORIES.find(c => c.id === activeCategory) || REPORT_CATEGORIES[0];
   const currentDefinition = getReportDefinition(activeReport);
+  const currentReportLabel = currentCategory.reports.find(r => r.id === activeReport)?.label || 'Select report';
 
   // Record the active report as recently viewed.
   useEffect(() => {
@@ -173,9 +175,8 @@ export function Reports() {
 
   const selectCategory = (catId: string) => {
     setActiveCategory(catId);
-    // Land on the category's first report.
     const cat = REPORT_CATEGORIES.find(c => c.id === catId);
-    if (cat && cat.reports.length > 0) {
+    if (cat && cat.reports.length > 0 && cat.id !== activeCategory) {
       setActiveReport(cat.reports[0].id);
     }
   };
@@ -233,71 +234,156 @@ export function Reports() {
   return (
     <DrillDownProvider>
       <div className="-m-4 sm:-m-6 lg:-m-8 min-h-[calc(100vh-64px)] bg-background">
-        {/* ── Sticky header: title, search, favorites/recent ── */}
+        {/* ── Sticky header ── */}
         <div className="sticky top-16 z-30 bg-background/95 backdrop-blur border-b border-border">
-          <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center gap-3 pt-4 pb-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <FileBarChart2 className="h-5 w-5" aria-hidden="true" />
-              </div>
-              <div className="min-w-0">
-                <h1 className="text-xl font-bold tracking-tight text-foreground">Report Center</h1>
-                <p className="text-xs text-muted-foreground hidden sm:block">{TOTAL_REPORTS} reports · 5 categories</p>
+          <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+
+              {/* Left: title + category/report cascade */}
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <FileBarChart2 className="h-5 w-5" aria-hidden="true" />
+                </div>
+                <div className="hidden lg:block min-w-0">
+                  <h1 className="text-xl font-bold tracking-tight text-foreground leading-tight">Report Center</h1>
+                  <p className="text-xs text-muted-foreground">{TOTAL_REPORTS} reports · 5 categories</p>
+                </div>
               </div>
 
-              <div className="ml-auto flex items-center gap-2">
-                {/* Recent (compact) */}
+              <div className="flex items-center gap-2 flex-wrap sm:ml-4">
+                {/* Category dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className={menuBtnCls} aria-label="Select category">
+                      <currentCategory.icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                      <span className="max-w-[140px] truncate">{currentCategory.label.replace(' Reports', '')}</span>
+                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-56">
+                    {REPORT_CATEGORIES.map((category) => (
+                      <DropdownMenuItem
+                        key={category.id}
+                        onClick={() => selectCategory(category.id)}
+                        className="gap-2"
+                      >
+                        <category.icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                        <span className="flex-1">{category.label}</span>
+                        <span className="text-[10px] font-semibold text-muted-foreground bg-muted rounded-full px-1.5 py-0.5">
+                          {category.reports.length}
+                        </span>
+                        {activeCategory === category.id && <Check className="h-3.5 w-3.5 text-primary" aria-hidden="true" />}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                <ChevronRight className="h-4 w-4 text-muted-foreground/50 hidden sm:block" aria-hidden="true" />
+
+                {/* Report dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className={menuBtnCls} aria-label="Select report">
+                      <span className="max-w-[200px] truncate">{currentReportLabel}</span>
+                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-80">
+                    {currentCategory.reports.map((report) => {
+                      const isActive = activeReport === report.id;
+                      const fav = isFavorite(report.id);
+                      const def = reportDefinitions[report.id];
+                      return (
+                        <DropdownMenuItem
+                          key={report.id}
+                          onClick={() => selectReport(currentCategory.id, report.id)}
+                          className={cn("gap-2 items-start py-2", isActive && "bg-primary/10")}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <span className={cn("text-sm font-medium flex items-center gap-1.5", isActive && "text-primary")}>
+                              <span className="truncate">{report.label}</span>
+                              {fav && <Star className="h-3 w-3 fill-amber-400 text-amber-400 shrink-0" aria-hidden="true" />}
+                            </span>
+                            {def?.description && (
+                              <span className="block text-[10px] text-muted-foreground/80 mt-0.5 truncate">{def.description}</span>
+                            )}
+                          </div>
+                          {isActive && <Check className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" aria-hidden="true" />}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Tip: use the search box to jump to any of the {TOTAL_REPORTS} reports
+                    </DropdownMenuLabel>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              {/* Right: recents, favorites, search */}
+              <div className="flex items-center gap-2 sm:ml-auto">
                 {recents.length > 0 && (
-                  <div className="hidden md:flex items-center gap-1.5 rounded-full bg-muted/50 border border-border/60 px-3 py-1.5">
-                    <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
-                    <div className="flex items-center gap-1 overflow-hidden">
-                      {recents.slice(0, 3).map((id) => {
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        className="hidden md:flex items-center gap-1.5 h-9 px-3 rounded-xl border border-border bg-card text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                        aria-label="Recent reports"
+                      >
+                        <Clock className="h-4 w-4" aria-hidden="true" />
+                        <span className="text-xs font-medium">Recent</span>
+                        <ChevronDown className="h-3 w-3" aria-hidden="true" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-64">
+                      {recents.map((id) => {
                         const def = reportDefinitions[id];
                         if (!def) return null;
                         return (
-                          <button
-                            key={id}
-                            onClick={() => selectReport(def.category, id)}
-                            className={cn(
-                              "text-xs rounded-full px-2 py-0.5 transition-colors whitespace-nowrap",
-                              activeReport === id ? "bg-primary/15 text-primary font-medium" : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                            )}
-                          >
-                            {def.title}
-                          </button>
+                          <DropdownMenuItem key={id} onClick={() => selectReport(def.category, id)} className="gap-2">
+                            <span className={cn("text-sm truncate", activeReport === id && "text-primary font-medium")}>{def.title}</span>
+                            <span className="ml-auto text-[10px] text-muted-foreground/70">{def.categoryLabel.replace(' Reports', '')}</span>
+                          </DropdownMenuItem>
                         );
                       })}
-                    </div>
-                  </div>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
 
-                {/* Favorites (compact) */}
                 {favorites.length > 0 && (
-                  <div className="hidden md:flex items-center gap-1.5 rounded-full bg-muted/50 border border-border/60 px-3 py-1.5">
-                    <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400 shrink-0" aria-hidden="true" />
-                    <div className="flex items-center gap-1 overflow-hidden">
-                      {favorites.slice(0, 3).map((id) => {
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        className="hidden md:flex items-center gap-1.5 h-9 px-3 rounded-xl border border-border bg-card text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                        aria-label="Favorite reports"
+                      >
+                        <Star className="h-4 w-4 fill-amber-400 text-amber-400" aria-hidden="true" />
+                        <span className="text-xs font-medium">{favorites.length}</span>
+                        <ChevronDown className="h-3 w-3" aria-hidden="true" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-64">
+                      {favorites.map((id) => {
                         const def = reportDefinitions[id];
                         if (!def) return null;
                         return (
-                          <button
-                            key={id}
-                            onClick={() => selectReport(def.category, id)}
-                            className={cn(
-                              "text-xs rounded-full px-2 py-0.5 transition-colors whitespace-nowrap",
-                              activeReport === id ? "bg-primary/15 text-primary font-medium" : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                            )}
-                          >
-                            {def.title}
-                          </button>
+                          <DropdownMenuItem key={id} onClick={() => selectReport(def.category, id)} className="gap-2">
+                            <span className="text-sm truncate flex-1">{def.title}</span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleFavorite(id); }}
+                              aria-label={`Remove ${def.title} from favorites`}
+                              className="p-0.5 rounded-md text-muted-foreground/50 hover:text-foreground"
+                            >
+                              <X className="h-3 w-3" aria-hidden="true" />
+                            </button>
+                          </DropdownMenuItem>
                         );
                       })}
-                    </div>
-                  </div>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
 
                 {/* Search */}
-                <div className="relative w-full sm:w-72 md:w-80">
+                <div className="relative w-full sm:w-72">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/70" aria-hidden="true" />
                   <input
                     type="text"
@@ -320,77 +406,6 @@ export function Reports() {
                   )}
                   {searchFocused && SearchResultsPanel}
                 </div>
-              </div>
-            </div>
-
-            {/* ── Category tabs ── */}
-            <div className="flex items-center gap-1 overflow-x-auto" role="tablist" aria-label="Report categories">
-              {REPORT_CATEGORIES.map((category) => {
-                const isActive = activeCategory === category.id;
-                return (
-                  <button
-                    key={category.id}
-                    role="tab"
-                    aria-selected={isActive}
-                    onClick={() => selectCategory(category.id)}
-                    className={cn(
-                      "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap",
-                      isActive
-                        ? "border-primary text-primary"
-                        : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-                    )}
-                  >
-                    <category.icon className={cn("h-4 w-4", isActive ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
-                    {category.shortLabel}
-                    <span className={cn(
-                      "inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
-                      isActive ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
-                    )}>
-                      {category.reports.length}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* ── Report pills for the active category ── */}
-          <div className="bg-card/60 border-t border-border/50">
-            <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="flex items-center gap-2 overflow-x-auto py-2" aria-label={`${currentCategory.label} reports`}>
-                {currentCategory.reports.map((report) => {
-                  const isActive = activeReport === report.id;
-                  const fav = isFavorite(report.id);
-                  return (
-                    <div key={report.id} className="flex items-center shrink-0 group">
-                      <button
-                        onClick={() => selectReport(currentCategory.id, report.id)}
-                        aria-current={isActive ? 'page' : undefined}
-                        className={cn(
-                          "text-xs sm:text-sm px-3 py-1.5 rounded-full border transition-colors whitespace-nowrap",
-                          isActive
-                            ? "bg-primary text-primary-foreground border-primary font-medium shadow-sm"
-                            : "bg-card text-muted-foreground border-border hover:border-primary/40 hover:text-foreground"
-                        )}
-                      >
-                        {report.label}
-                      </button>
-                      <button
-                        onClick={() => toggleFavorite(report.id)}
-                        aria-label={fav ? `Unfavorite ${report.label}` : `Favorite ${report.label}`}
-                        aria-pressed={fav}
-                        className={cn(
-                          "ml-0.5 p-1 rounded-full transition-all shrink-0",
-                          fav
-                            ? "text-amber-400 opacity-100"
-                            : "text-muted-foreground/40 hover:text-amber-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-                        )}
-                      >
-                        <Star className={cn("h-3 w-3", fav && "fill-amber-400")} aria-hidden="true" />
-                      </button>
-                    </div>
-                  );
-                })}
               </div>
             </div>
           </div>
