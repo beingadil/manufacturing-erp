@@ -1,4 +1,4 @@
-import { Calculator, ChevronDown, ChevronRight, ChevronUp, Clock, DollarSign, Factory, FileBarChart2,
+import { Calculator, ChevronDown, ChevronRight, Clock, DollarSign, Factory, FileBarChart2,
   PackageSearch, Search, ShoppingCart, Star, X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from 'react';
@@ -113,7 +113,10 @@ export function Reports() {
   const [activeCategory, setActiveCategory] = useState(() => searchParams.get('cat') || 'purchase');
   const [activeReport, setActiveReport] = useState(() => searchParams.get('rep') || 'purchase-register');
   const [searchTerm, setSearchTerm] = useState('');
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  // Track which categories the USER has explicitly opened/closed. Categories
+  // start collapsed; the active category stays expanded unless explicitly
+  // closed by the user.
+  const [userToggled, setUserToggled] = useState<Record<string, boolean>>({});
   const { favorites, recents, toggleFavorite, isFavorite, pushRecent } = useReportFavorites();
 
   // Record the active report as recently viewed.
@@ -163,6 +166,10 @@ export function Reports() {
   const selectReport = (catId: string, repId: string) => {
     setActiveCategory(catId);
     setActiveReport(repId);
+    // Jumping to a category should reveal its reports (undo an explicit close).
+    if (userToggled[catId] === false) {
+      setUserToggled((prev) => ({ ...prev, [catId]: true }));
+    }
   };
 
   const selectSearchResult = (result: SearchResult) => {
@@ -170,8 +177,16 @@ export function Reports() {
     setSearchTerm('');
   };
 
-  const toggleCollapsed = (catId: string) => {
-    setCollapsed(prev => ({ ...prev, [catId]: !prev[catId] }));
+  // A category is expanded only when the user explicitly opened it, or when
+  // it is the active category and the user has not explicitly closed it.
+  const isCategoryOpen = (categoryId: string) =>
+    categoryId === activeCategory ? userToggled[categoryId] !== false : userToggled[categoryId] === true;
+
+  const toggleCategory = (categoryId: string) => {
+    setUserToggled((prev) => ({
+      ...prev,
+      [categoryId]: !(prev[categoryId] === true || (categoryId === activeCategory && prev[categoryId] !== false)),
+    }));
   };
 
   const renderContent = () => {
@@ -323,30 +338,39 @@ export function Reports() {
               )}
 
               {REPORT_CATEGORIES.map((category) => {
-                const isCollapsed = collapsed[category.id];
+                const isOpen = isCategoryOpen(category.id);
+                const isCategoryActive = activeCategory === category.id;
                 return (
-                  <div key={category.id} className="rounded-xl border border-transparent hover:border-border/60 transition-colors">
+                  <div key={category.id} className={cn(
+                    "rounded-xl border transition-colors",
+                    isCategoryActive ? "border-primary/30 bg-primary/5" : "border-transparent hover:border-border/60"
+                  )}>
                     <button
-                      onClick={() => toggleCollapsed(category.id)}
+                      onClick={() => toggleCategory(category.id)}
+                      aria-expanded={isOpen}
                       className="w-full flex items-center justify-between gap-2 px-2 py-2 rounded-lg hover:bg-muted/40 transition-colors"
-                      title={isCollapsed ? 'Expand' : 'Collapse'}
                     >
-                      <span className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        <category.icon className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className={cn(
+                        "flex items-center gap-2 text-xs font-semibold uppercase tracking-wider",
+                        isCategoryActive ? "text-primary" : "text-muted-foreground"
+                      )}>
+                        <category.icon className={cn("h-3.5 w-3.5", isCategoryActive ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
                         {category.label}
                       </span>
                       <span className="flex items-center gap-1.5">
-                        <span className="inline-flex items-center rounded-full bg-primary/10 text-primary px-1.5 py-0.5 text-[10px] font-semibold">
+                        <span className={cn(
+                          "inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+                          isCategoryActive ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
+                        )}>
                           {category.reports.length}
                         </span>
-                        {isCollapsed ? (
-                          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/70" />
-                        ) : (
-                          <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/70" />
-                        )}
+                        <ChevronDown className={cn(
+                          "h-3.5 w-3.5 text-muted-foreground/70 transition-transform duration-200",
+                          isOpen && "rotate-180"
+                        )} aria-hidden="true" />
                       </span>
                     </button>
-                    {!isCollapsed && (
+                    {isOpen && (
                       <div className="space-y-0.5 ml-3 border-l border-border/50 pl-2 mt-0.5 pb-1">
                         {category.reports.map((report) => {
                           const isActive = activeCategory === category.id && activeReport === report.id;
