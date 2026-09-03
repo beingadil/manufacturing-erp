@@ -1,6 +1,7 @@
-import { Calendar as CalendarIcon, Search, SlidersHorizontal, X } from 'lucide-react';
+import { Calendar as CalendarIcon, SlidersHorizontal, X } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { DatePicker } from '../../ui/date-picker';
+import { SearchInput } from '../../ui/SearchInput';
 import { ReportExportBar } from './ReportExportBar';
 
 interface ReportFilterBarProps {
@@ -186,20 +187,16 @@ export function ReportFilterBar({
           )}
 
           {onSearch && (
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-              <input
-                type="text"
-                placeholder="Search report data…"
-                aria-label="Search report data"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  onSearch(e.target.value);
-                }}
-                className="w-full pl-9 pr-4 py-2 bg-muted/50 border border-transparent hover:border-border focus:bg-background rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-[border-color,box-shadow,background-color]"
-              />
-            </div>
+            <SearchInput
+              value={search}
+              onChange={(v) => {
+                setSearch(v);
+                onSearch(v);
+              }}
+              placeholder="Search report data…"
+              ariaLabel="Search report data"
+              className="w-full sm:w-64"
+            />
           )}
           
           {customFilters}

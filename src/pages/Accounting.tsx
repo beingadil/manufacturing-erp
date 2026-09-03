@@ -1,13 +1,14 @@
-import { Calculator, Edit, Folder, FolderOpen, Plus, Printer, Search, Trash2 } from "lucide-react";
-import { toast } from 'sonner';
+import { Calculator, Edit, Folder, FolderOpen, Plus, Printer, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
+import { toast } from 'sonner';
 import { AddAccountModal } from "../components/AddAccountModal";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
-import { DatePicker } from "../components/ui/date-picker";
 import { BalanceSheetStatement } from "../components/reports/financial/BalanceSheetStatement";
 import { ProfitLossStatement } from "../components/reports/financial/ProfitLossStatement";
 import { SearchableSelect } from "../components/SearchableSelect";
+import { DatePicker } from "../components/ui/date-picker";
+import { SearchInput } from "../components/ui/SearchInput";
 import { AccountingEngine } from "../lib/accounting/AccountingEngine";
 import { getCashBankAccounts } from "../lib/accounting/accountClassification";
 import { generateLedgerStatementPDF } from "../lib/documentGenerators";
@@ -286,16 +287,12 @@ function ChartOfAccounts() {
           <p className="text-sm text-muted-foreground">Manage your master accounts</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          <div className="relative flex-1 min-w-[200px] max-w-[250px] mr-2">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Search..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-muted/40 border border-border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-colors"
-            />
-          </div>
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Search accounts..."
+            className="flex-1 min-w-[200px] max-w-[250px] mr-2"
+          />
           <button onClick={() => handleQuickAdd("Assets", "Bank")} className="bg-secondary/50 text-secondary-foreground hover:bg-secondary px-3 py-2 rounded-lg text-xs font-medium transition-colors">
             + Bank
           </button>

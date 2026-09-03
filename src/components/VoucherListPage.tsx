@@ -1,13 +1,14 @@
-import { ArrowDownLeft, ArrowUpRight, CheckCircle2, Eye, FileText, Pencil, Plus, Search, Trash2, XCircle } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, CheckCircle2, Eye, FileText, Pencil, Plus, Trash2, XCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import { toast } from 'sonner';
 import { AccountingEngine } from '../lib/accounting/AccountingEngine';
 import { cn, formatCurrency } from '../lib/utils';
 import { useERPStore } from '../store/useERPStore';
 import { Voucher } from '../types/erp';
-import { KpiCard } from './ui/KpiCard';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import { DatePicker } from './ui/date-picker';
+import { KpiCard } from './ui/KpiCard';
+import { SearchInput } from './ui/SearchInput';
 import { VoucherDetailModal } from './VoucherDetailModal';
 import { VoucherEditorModal, VoucherPageKind } from './VoucherEditorModal';
 import { ACCENT_BAR, ACCENT_BTN, ACCENT_HEAD, ACCENT_SOFT, KIND_ICON } from './voucherAccents';
@@ -147,16 +148,12 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
           <span className="text-muted-foreground text-sm">to</span>
           <DatePicker value={dateTo} onChange={setDateTo} size="sm" className="w-40" placeholder="To" />
         </div>
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search voucher, narration, party..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search voucher, narration, party..."
+          className="flex-1 min-w-[200px] max-w-xs"
+        />
         <select
           value={accountFilter}
           onChange={e => setAccountFilter(e.target.value)}

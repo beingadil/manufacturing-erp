@@ -1,10 +1,10 @@
-import { Loader2, Search } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Column, DataTable } from '@/components/DataTable';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { useAccessStore } from '@/store/useAccessStore';
 import { LoginHistory } from '@/types/access';
+import { SearchInput } from '../ui/SearchInput';
 
 export function LoginHistoryTab() {
   const storeHistory = useAccessStore((state) => state.loginHistory);
@@ -69,15 +69,12 @@ export function LoginHistoryTab() {
       </div>
 
       <div className="flex flex-col md:flex-row gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by user..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search by user..."
+          className="flex-1 max-w-md"
+        />
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
