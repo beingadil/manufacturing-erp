@@ -1,5 +1,6 @@
 
 import { AlertTriangle, Trash2, } from 'lucide-react';
+import { createPortal } from 'react-dom';
 
 interface DeleteConfirmationModalProps {
   isOpen: boolean;
@@ -20,8 +21,13 @@ export function DeleteConfirmationModal({
 }: DeleteConfirmationModalProps) {
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
+  // Portaled to document.body: the overlay always spans the full viewport,
+  // above the fixed header (z-40), regardless of where this modal is mounted.
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur p-4"
+      style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 100 }}
+    >
       <div className="bg-card rounded-2xl shadow-xl w-full max-w-md border border-destructive/20 overflow-hidden animate-in zoom-in-95 duration-200">
         <div className="p-6 bg-destructive/100/10 flex flex-col items-center text-center">
           <div className="h-16 w-16 bg-destructive/20 dark:bg-destructive/30 rounded-full flex items-center justify-center mb-4">
@@ -58,6 +64,7 @@ export function DeleteConfirmationModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

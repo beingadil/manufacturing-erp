@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import React, { useState } from "react";
+import { createPortal } from "react-dom";
 import { useERPStore } from "../store/useERPStore";
 
 interface BaseModalProps {
@@ -27,8 +28,13 @@ export function QuickAddCustomer({ isOpen, onClose, onSuccess }: BaseModalProps)
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+  // Portaled to document.body so the overlay always covers the full viewport
+  // (above the fixed z-40 header) no matter which page/component mounts it.
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur p-4"
+      style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 70 }}
+    >
       <div className="bg-card rounded-2xl shadow-xl w-full max-w-sm">
         <div className="px-6 py-4 border-b flex justify-between">
           <h3 className="text-lg font-bold">Quick Add Customer</h3>
@@ -46,7 +52,8 @@ export function QuickAddCustomer({ isOpen, onClose, onSuccess }: BaseModalProps)
           <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">Save Customer</button>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -65,8 +72,13 @@ export function QuickAddSupplier({ isOpen, onClose, onSuccess }: BaseModalProps)
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+  // Portaled to document.body so the overlay always covers the full viewport
+  // (above the fixed z-40 header) no matter which page/component mounts it.
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur p-4"
+      style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 70 }}
+    >
       <div className="bg-card rounded-2xl shadow-xl w-full max-w-sm">
         <div className="px-6 py-4 border-b flex justify-between">
           <h3 className="text-lg font-bold">Quick Add Supplier</h3>
@@ -84,7 +96,8 @@ export function QuickAddSupplier({ isOpen, onClose, onSuccess }: BaseModalProps)
           <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">Save Supplier</button>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -106,8 +119,13 @@ export function QuickAddProcessor({ isOpen, onClose, onSuccess }: BaseModalProps
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+  // Portaled to document.body so the overlay always covers the full viewport
+  // (above the fixed z-40 header) no matter which page/component mounts it.
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur p-4"
+      style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 70 }}
+    >
       <div className="bg-card rounded-2xl shadow-xl w-full max-w-sm">
         <div className="px-6 py-4 border-b flex justify-between">
           <h3 className="text-lg font-bold">Quick Add Processor</h3>
@@ -134,7 +152,8 @@ export function QuickAddProcessor({ isOpen, onClose, onSuccess }: BaseModalProps
           <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">Save Processor</button>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -154,8 +173,13 @@ export function QuickAddProduct({ isOpen, onClose, onSuccess }: BaseModalProps) 
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+  // Portaled to document.body so the overlay always covers the full viewport
+  // (above the fixed z-40 header) no matter which page/component mounts it.
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur p-4"
+      style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 70 }}
+    >
       <div className="bg-card rounded-2xl shadow-xl w-full max-w-sm">
         <div className="px-6 py-4 border-b flex justify-between">
           <h3 className="text-lg font-bold">Quick Add Product</h3>
@@ -180,7 +204,8 @@ export function QuickAddProduct({ isOpen, onClose, onSuccess }: BaseModalProps) 
           <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">Save Product</button>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -199,8 +224,13 @@ export function QuickAddMaterial({ isOpen, onClose, onSuccess }: BaseModalProps)
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+  // Portaled to document.body so the overlay always covers the full viewport
+  // (above the fixed z-40 header) no matter which page/component mounts it.
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur p-4"
+      style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 70 }}
+    >
       <div className="bg-card rounded-2xl shadow-xl w-full max-w-sm">
         <div className="px-6 py-4 border-b flex justify-between">
           <h3 className="text-lg font-bold">Quick Add Material</h3>
@@ -221,7 +251,8 @@ export function QuickAddMaterial({ isOpen, onClose, onSuccess }: BaseModalProps)
           <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">Save Material</button>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
