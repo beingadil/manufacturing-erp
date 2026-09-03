@@ -11,6 +11,7 @@ import { DatePicker } from "../components/ui/date-picker";
 import { SearchInput } from "../components/ui/SearchInput";
 import { AccountingEngine } from "../lib/accounting/AccountingEngine";
 import { getCashBankAccounts } from "../lib/accounting/accountClassification";
+import { accountMatchesSearch, filterAccountsWithAncestors } from "../lib/accounting/accountHierarchy";
 import { generateLedgerStatementPDF } from "../lib/documentGenerators";
 import { FinancialReportService } from "../lib/reporting/FinancialReportService";
 import { cn, formatCurrency } from "../lib/utils";
@@ -232,13 +233,15 @@ function ChartOfAccounts() {
 
   const types: AccountType[] = ["Assets", "Liabilities", "Equity", "Revenue", "Cost of Goods Sold", "Expenses", "Other Income", "Other Expenses"];
 
-  const filteredAccounts = accounts.filter(a => 
-    a.name.toLowerCase().includes(search.toLowerCase()) || 
-    a.code.toLowerCase().includes(search.toLowerCase())
-  );
+  // Direct name/code matches (drives the count badge), and the render set:
+  // matches PLUS their ancestor chain, so a nested party account never
+  // disappears when its parent control account doesn't match the term
+  // (see lib/accounting/accountHierarchy.ts — regression-tested).
+  const matchedAccounts = accounts.filter(a => accountMatchesSearch(a, search));
+  const visibleAccounts = filterAccountsWithAncestors(accounts, search);
 
   const renderAccount = (account: Account, level: number = 0) => {
-    const children = filteredAccounts.filter(a => a.parentId === account.id);
+    const children = visibleAccounts.filter(a => a.parentId === account.id);
     return (
       <div key={account.id} className="w-full">
         <div className={cn("px-6 py-3 flex items-center justify-between hover:bg-muted/30 transition-colors group", level > 0 && "border-l-2 border-border/50")} style={{ paddingLeft: `${level * 1.5 + 1.5}rem` }}>
@@ -316,7 +319,7 @@ function ChartOfAccounts() {
         <div className="space-y-6">
           {types.map(type => {
             const subtypesOfType = accountSubtypes.filter(st => st.type === type);
-            const typeAccounts = filteredAccounts.filter(a => a.type === type && !a.parentId); // Only top-level
+            const typeAccounts = visibleAccounts.filter(a => a.type === type && !a.parentId); // Only top-level
             
             if (typeAccounts.length === 0 && search !== "") return null;
             if (typeAccounts.length === 0 && search === "") return null; // Optionally hide empty types
@@ -327,7 +330,7 @@ function ChartOfAccounts() {
                   <FolderOpen className="h-5 w-5 text-primary" />
                   <h3 className="font-semibold text-foreground">{type}</h3>
                   <span className="text-xs bg-background border border-border text-muted-foreground px-2 py-0.5 rounded-full ml-auto">
-                    {filteredAccounts.filter(a => a.type === type).length} accounts
+                    {matchedAccounts.filter(a => a.type === type).length} accounts
                   </span>
                 </div>
                 
