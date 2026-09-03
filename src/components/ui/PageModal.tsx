@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 interface PageModalProps {
   isOpen: boolean;
@@ -92,13 +93,17 @@ export function PageModal({ isOpen, onClose, title, children, maxWidth = 'max-w-
 
   if (!isOpen) return null;
 
-  return (
+  // Portaled to document.body so no ancestor (transform/filter/containing block)
+  // can clip the overlay or break `position: fixed` — it always covers the full
+  // viewport, above the fixed header (z-40).
+  return createPortal(
     <div
       ref={overlayRef}
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur p-4"
+      style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 60 }}
       onClick={(e) => {
         if (e.target === overlayRef.current) onClose();
       }}
@@ -123,6 +128,7 @@ export function PageModal({ isOpen, onClose, title, children, maxWidth = 'max-w-
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
