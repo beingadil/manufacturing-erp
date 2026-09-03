@@ -1,13 +1,13 @@
-import { Loader2, Lock, Pencil, Plus, Search, Trash2, } from 'lucide-react';
+import { Loader2, Lock, Pencil, Plus, Trash2, } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Column, DataTable } from '@/components/DataTable';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { hashPassword, useAccessStore } from '@/store/useAccessStore';
 import { Role, UserRow } from '@/types/access';
+import { SearchInput } from '../ui/SearchInput';
 import { ConfirmDialog } from './ConfirmDialog';
 import { PasswordDialog, PasswordFormValues } from './PasswordDialog';
 import { UserFormDialog, UserFormValues } from './UserFormDialog';
@@ -266,15 +266,12 @@ export function UsersTab() {
     <div className="flex flex-col h-full">
       <div className="p-4 border-b border-border flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
         <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
-          <div className="relative w-full md:w-64">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search users..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Search users..."
+            className="w-full md:w-64"
+          />
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}

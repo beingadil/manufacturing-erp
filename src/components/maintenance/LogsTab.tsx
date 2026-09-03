@@ -1,11 +1,11 @@
 import { format } from 'date-fns';
-import { Download, Filter, Search, Terminal } from 'lucide-react';
+import { Download, Filter, Terminal } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useLogStore } from '@/store/useLogStore';
+import { SearchInput } from '../ui/SearchInput';
 
 export function LogsTab() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -43,15 +43,12 @@ export function LogsTab() {
       </CardHeader>
       <CardContent className="flex-1 flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input 
-              placeholder="Search logs..." 
-              className="pl-9"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
+          <SearchInput
+            value={searchTerm}
+            onChange={setSearchTerm}
+            placeholder="Search logs..."
+            className="flex-1"
+          />
           <Select value={filterLevel} onValueChange={setFilterLevel}>
             <SelectTrigger className="w-[150px]">
               <Filter className="h-4 w-4 mr-2" />

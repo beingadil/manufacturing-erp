@@ -1,15 +1,16 @@
-import { ChevronRight, Download, FileText, Pencil, Printer, Search } from 'lucide-react';
+import { ChevronRight, Download, FileText, Pencil, Printer } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 import { filterFinancialData } from '../lib/abac';
 import { exportToCSV } from '../lib/exportUtils';
-import { formatDate, formatCurrency } from '../lib/utils';
-import { DatePicker } from './ui/date-picker';
+import { formatCurrency, formatDate } from '../lib/utils';
 import { useERPStore } from '../store/useERPStore';
 import { SourceModule } from '../types/erp';
 import { CashbookEntryModal } from './CashbookEntryModal';
+import { DatePicker } from './ui/date-picker';
+import { SearchInput } from './ui/SearchInput';
 import { VoucherDetailModal } from './VoucherDetailModal';
-import { toast } from 'sonner';
 
 interface VoucherHistoryTabProps {
   sourceModule: SourceModule;
@@ -101,16 +102,12 @@ export function VoucherHistoryTab({ sourceModule }: VoucherHistoryTabProps) {
     <div className="space-y-4">
       {/* Filters Toolbar */}
       <div className="flex flex-col sm:flex-row gap-4 p-4 bg-card border border-border/50 rounded-xl shadow-sm">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search by Voucher No, Ref No, or Narration..."
-            className="w-full pl-9 pr-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all text-sm"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
+        <SearchInput
+          value={searchTerm}
+          onChange={setSearchTerm}
+          placeholder="Search by Voucher No, Ref No, or Narration..."
+          className="flex-1"
+        />
         <div className="flex items-center gap-2">
           <DatePicker value={dateFrom} onChange={setDateFrom} size="sm" className="w-40" placeholder="From" />
           <span className="text-muted-foreground">to</span>
