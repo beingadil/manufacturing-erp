@@ -9,9 +9,10 @@ import { createCRUDActions } from './crudActions';
  *  1. Deleting a dispatch/receipt fully reverses stock AND the batch trail —
  *     including legacy no-batch dispatches and FIFO-across-multiple-batches —
  *     so the same pcs are never counted twice and nothing is silently wiped.
- *  2. Dependency order is enforced (bill → receipt → send): a send with
- *     receipts, a billed receipt, or a receipt whose goods were already sold
- *     cannot be deleted (guarded no-ops matching the UI-disabled buttons).
+ *  2. Deleting a dispatch CASCADES: its receipts are removed with it and any
+ *     processor bills covering them are reversed (vouchers deleted) in one
+ *     atomic step. Only a receipt whose goods were already sold blocks the
+ *     cascade (the remaining production could not cover the sales).
  */
 
 function makeBatch(overrides: any = {}) {
@@ -117,7 +118,7 @@ describe('deleteProcessingSend', () => {
     expect(s.processingSends).toHaveLength(1);
   });
 
-  it('refuses to delete a send that already has receipts', () => {
+  it('cascades: deleting a send removes its receipts and reverses stock', () => {
     const { actions, getState } = setup({
       materials: [{ id: 'm1', stockPcs: 0, atProcessorPcs: 400, processedStockPcs: 3600 }],
       batches: [makeBatch({ remainingPcs: 0, atProcessorPcs: 0, processedPcs: 4000 })],
@@ -137,9 +138,80 @@ describe('deleteProcessingSend', () => {
     });
 
     actions.deleteProcessingSend('send1');
-    // Guarded no-op — state unchanged
+    const s = getState();
+    // Send AND its receipt removed; stock fully returned to raw
+    expect(s.processingSends).toHaveLength(0);
+    expect(s.processingReceipts).toHaveLength(0);
+    expect(s.materials[0].stockPcs).toBe(4000);
+    expect(s.materials[0].atProcessorPcs).toBe(0);
+    expect(s.materials[0].processedStockPcs).toBe(0);
+    expect(s.batches[0].remainingPcs).toBe(4000);
+    expect(s.batches[0].processedPcs).toBe(0);
+  });
+
+  it('cascades: a billed send removes its bill and reverses the voucher', () => {
+    const { actions, getState } = setup({
+      materials: [{ id: 'm1', stockPcs: 0, atProcessorPcs: 0, processedStockPcs: 3600 }],
+      batches: [makeBatch({ remainingPcs: 0, atProcessorPcs: 0, processedPcs: 4000 })],
+      processingSends: [
+        {
+          id: 'send1', dispatchNo: 'DSP-1', materialId: 'm1', processorId: 'pr1',
+          batchId: 'b1', pcsSent: 4000, pcsReceived: 4000, ratePerPiece: 5,
+          status: 'Closed', date: '2026-01-05'
+        }
+      ],
+      processingReceipts: [
+        { id: 'rec1', receiveNo: 'REC-1', sendId: 'send1', materialId: 'm1', pcsReceived: 4000, date: '2026-01-06', billedStatus: 'Billed', billAmount: 20000 }
+      ],
+      processorBills: [
+        { id: 'bill1', billNo: 'PB-1', processorId: 'pr1', receiptIds: ['rec1'], totalAmount: 20000, date: '2026-01-07' }
+      ],
+      vouchers: [
+        { id: 'v1', voucherNo: 'JV-1', sourceId: 'bill1', sourceModule: 'Processing', type: 'Journal Voucher', date: '2026-01-07', totalDebit: 20000, totalCredit: 20000 }
+      ],
+      journalEntries: [
+        { voucherId: 'v1', accountId: 'exp1', debit: 20000, credit: 0 },
+        { voucherId: 'v1', accountId: 'ap1', debit: 0, credit: 20000 }
+      ],
+      sales: [], products: [], inventoryMovements: [], purchases: [],
+      suppliers: [], customers: [], processors: [], accounts: [], accountSubtypes: []
+    });
+
+    actions.deleteProcessingSend('send1');
+    const s = getState();
+    expect(s.processingSends).toHaveLength(0);
+    expect(s.processingReceipts).toHaveLength(0);
+    expect(s.processorBills).toHaveLength(0);
+    expect(s.vouchers).toHaveLength(0);
+    expect(s.journalEntries).toHaveLength(0);
+    expect(s.materials[0].stockPcs).toBe(4000);
+  });
+
+  it('refuses cascade when the receipt\'s finished goods were already sold', () => {
+    const { actions, getState } = setup({
+      materials: [{ id: 'm1', stockPcs: 0, atProcessorPcs: 0, processedStockPcs: 400 }],
+      batches: [makeBatch({ remainingPcs: 0, atProcessorPcs: 0, processedPcs: 4000 })],
+      processingSends: [
+        {
+          id: 'send1', dispatchNo: 'DSP-1', materialId: 'm1', processorId: 'pr1',
+          batchId: 'b1', pcsSent: 4000, pcsReceived: 4000, ratePerPiece: 5,
+          status: 'Closed', date: '2026-01-05'
+        }
+      ],
+      processingReceipts: [
+        { id: 'rec1', receiveNo: 'REC-1', sendId: 'send1', materialId: 'm1', pcsReceived: 4000, date: '2026-01-06', billedStatus: 'Unbilled' }
+      ],
+      products: [{ id: 'prod1', materialId: 'm1' }],
+      sales: [{ id: 'sale1', productId: 'prod1', pcsSold: 400 }],
+      inventoryMovements: [], purchases: [],
+      suppliers: [], customers: [], processors: [], accounts: [], accountSubtypes: [],
+      vouchers: [], journalEntries: []
+    });
+
+    actions.deleteProcessingSend('send1');
+    // Guarded — the sold pcs cannot be covered by remaining production
     expect(getState().processingSends).toHaveLength(1);
-    expect(getState().materials[0].stockPcs).toBe(0);
+    expect(getState().processingReceipts).toHaveLength(1);
   });
 });
 

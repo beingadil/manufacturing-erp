@@ -1,3 +1,5 @@
+import { v4 as uuidv4 } from 'uuid';
+import { DocumentNumberingService } from '../lib/business/DocumentNumberingService';
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
 import { buildDefaultStages } from '../lib/processing/processingStageSeed';
 import type { Account, AccountSubtype, ProcessingStage, Voucher, VoucherType } from '../types/erp';
@@ -74,6 +76,45 @@ export function migrateERPState(state: any): any {
     return parentId ? { ...acc, parentId } : acc;
   });
 
+  // 2b. Backfill party accounts — parties saved before account auto-creation
+  //     existed have no linked account, so they never appear in the Chart of
+  //     Accounts. Create an AR/AP-nested account per party missing one, and
+  //     stamp accountId back onto the party record. Idempotent: runs every
+  //     startup; parties with an existing linked account are skipped, and
+  //     re-running never duplicates accounts or codes.
+  const linkedAccounts = migratedAccounts.filter(a => a.linkedEntityId);
+  const hasLinkedAccount = (party: any): boolean =>
+    !!party.id && (linkedAccounts.some(a => a.linkedEntityId === party.id)
+      || (!!party.accountId && migratedAccounts.some(a => a.id === party.accountId)));
+  const typeCount = (type: string) => migratedAccounts.filter(a => a.type === type).length;
+
+  const ensurePartyAccount = (party: any, type: 'Assets' | 'Liabilities', subtypeName: string, controlId: string | undefined): any => {
+    if (hasLinkedAccount(party)) return party;
+    const subtype = subtypes.find(s => s.name === subtypeName);
+    const account: Account = {
+      id: uuidv4(),
+      code: DocumentNumberingService.generateAccountCode(type, typeCount(type)),
+      name: party.name || party.code || 'Party',
+      subtypeId: subtype?.id || '',
+      type,
+      openingBalance: 0,
+      openingBalanceType: type === 'Assets' ? 'Debit' : 'Credit',
+      status: 'Active',
+      isSystem: false,
+      linkedEntityId: party.id,
+      parentId: controlId
+    };
+    migratedAccounts.push(account);
+    return { ...party, accountId: account.id };
+  };
+
+  const rawCustomers = Array.isArray(state.customers) ? state.customers : [];
+  const rawSuppliers = Array.isArray(state.suppliers) ? state.suppliers : [];
+  const rawProcessors = Array.isArray(state.processors) ? state.processors : [];
+  const migratedCustomers = rawCustomers.map((c: any) => ensurePartyAccount(c, 'Assets', 'Accounts Receivable', arControlId));
+  const migratedSuppliers = rawSuppliers.map((s: any) => ensurePartyAccount(s, 'Liabilities', 'Accounts Payable', apControlId));
+  const migratedProcessors = rawProcessors.map((p: any) => ensurePartyAccount(p, 'Liabilities', 'Accounts Payable', apControlId));
+
   // 4. Seed the processing stage master when empty (spec §4): the default
   //    chain Initial Processor → Machine → Acid → Polish → Spot Machine (final). Idempotent —
   //    no-ops once stages exist, so user-configured stages are never overwritten.
@@ -140,6 +181,7 @@ export function migrateERPState(state: any): any {
       processedPcs: 0,
       stageAvailablePcs: 0,
       currentStageId: undefined,
+      availableFromStageId: undefined,
     }));
 
     // Dispatches: stage-1 / legacy draws raw → WIP. Intermediate-stage
@@ -233,6 +275,8 @@ export function migrateERPState(state: any): any {
               currentStageId: newAvail <= 0
                 ? (s.stageId || b.currentStageId)
                 : b.currentStageId,
+              // Clear available-from tracking when fully consumed
+              availableFromStageId: newAvail <= 0 ? undefined : b.availableFromStageId,
             };
           });
         } else {
@@ -251,7 +295,7 @@ export function migrateERPState(state: any): any {
         if (send?.batchId) {
           trail = trail.map((b: any) =>
             b.id === send.batchId
-              ? { ...b, stageAvailablePcs: (b.stageAvailablePcs || 0) + (r.pcsReceived || 0) }
+              ? { ...b, stageAvailablePcs: (b.stageAvailablePcs || 0) + (r.pcsReceived || 0), availableFromStageId: r.stageId ?? send?.stageId }
               : b
           );
         }
@@ -287,5 +331,8 @@ export function migrateERPState(state: any): any {
     vouchers,
     batches: migratedBatches,
     processingStages,
+    customers: migratedCustomers,
+    suppliers: migratedSuppliers,
+    processors: migratedProcessors,
   };
 }

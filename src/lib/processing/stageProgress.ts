@@ -48,20 +48,33 @@ export function getBatchStageProgress(
     ? sorted.find(s => s.id === batch.currentStageId) || null
     : null;
 
-  const completedStages = currentStage
-    ? sorted.filter(s => s.sequence < currentStage.sequence)
+  // A batch is MULTI-POSITION: dispatched pcs sit at currentStageId while pcs
+  // that CAME BACK from a processor sit at availableFromStageId waiting for
+  // the next leg. When pcs are waiting, the ACTIVE position for routing is the
+  // source stage — the next leg is the stage AFTER it (3700 received from
+  // Shape Processor must go to Machine, never back to Shape, even while some
+  // raw pcs remain and currentStageId has not advanced past the source).
+  const sourceStage = batch.availableFromStageId
+    ? sorted.find(s => s.id === batch.availableFromStageId) || null
+    : null;
+  const activeStage = (batch.stageAvailablePcs || 0) > 0 && sourceStage
+    ? sourceStage
+    : currentStage;
+
+  const completedStages = activeStage
+    ? sorted.filter(s => s.sequence < activeStage.sequence)
     : [];
 
-  const nextStage = currentStage
-    ? sorted.find(s => s.sequence === currentStage.sequence + 1) || null
+  const nextStage = activeStage
+    ? sorted.find(s => s.sequence === activeStage.sequence + 1) || null
     : sorted[0] || null;
 
   const availablePcs = batch.stageAvailablePcs || 0;
   const inTransitPcs = batch.atProcessorPcs || 0;
   const finishedPcs = batch.processedPcs || 0;
   const rawPcs = InventoryCalculationService.batchRawAvailable(batch);
-  const isRaw = !currentStage;
-  const isFinished = !!currentStage?.isFinalStage && inTransitPcs <= 0;
+  const isRaw = !activeStage;
+  const isFinished = !!currentStage?.isFinalStage && inTransitPcs <= 0 && availablePcs <= 0;
 
   const lastRelevantSeq = isFinished
     ? (currentStage?.sequence || 0)

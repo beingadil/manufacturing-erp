@@ -327,9 +327,14 @@ export const createCRUDActions = (
 
   /**
    * Delete a dispatch (send) and fully reverse its stock + batch-trail effect.
-   * Safety rules (dependency order: bill → receipt → send):
-   *  - A send that already has receipts cannot be deleted — receipts must be
-   *    deleted first (guarded no-op, plus the UI disables the button).
+   * Cascades: receipts of this dispatch are removed with it, and any processor
+   * bills covering them are reversed (vouchers and journal entries deleted) in
+   * one atomic step — the user does not have to delete bill → receipt → send
+   * manually. Safety rules:
+   *  - A receipt whose finished goods were already sold cannot be deleted —
+   *    the remaining production could not cover the sales (guarded no-op).
+   *  - Bills shared with OTHER sends keep their remaining receipts, with a
+   *    recomputed total and voucher amount.
    *  - Sends that were merged into this dispatch ('Adjusted') are restored to
    *    Pending so their pcs stay in the trail.
    * The batch trail is rebuilt from the remaining history (same FIFO replay the
@@ -341,16 +346,27 @@ export const createCRUDActions = (
       const send = state.processingSends.find(s => s.id === id);
       if (!send) return state;
 
-      // Guard: receipts exist against this dispatch — delete them first.
-      const hasReceipts = state.processingReceipts.some(r => r.sendId === id);
-      if (hasReceipts || send.pcsReceived > 0) return state;
+      // ── Cascade receipts ────────────────────────────────────────────────
+      const receiptsToDelete = (state.processingReceipts || []).filter(r => r.sendId === id);
+      const receiptIds = new Set(receiptsToDelete.map(r => r.id));
+
+      // Safety: a receipt whose finished goods were already sold cannot be
+      // deleted — the remaining production could not cover the sales, so the
+      // material counters and batch trail would diverge. Abort the cascade.
+      if (receiptsToDelete.length > 0) {
+        const remainingReceiptsAll = (state.processingReceipts || []).filter(r => r.sendId !== id);
+        const remainingProduction = remainingReceiptsAll
+          .filter(r => r.materialId === send.materialId)
+          .reduce((sum, r) => sum + r.pcsReceived, 0);
+        const productIds = new Set(state.products.filter(p => p.materialId === send.materialId).map(p => p.id));
+        const soldPcs = state.sales
+          .filter(sale => productIds.has(sale.productId))
+          .reduce((sum, sale) => sum + sale.pcsSold, 0);
+        if (remainingProduction < soldPcs) return state;
+      }
 
       // Sends merged back into this dispatch ('adjusted') — restore to Pending.
       const adjustedOrphans = state.processingSends.filter(s => s.adjustedToDispatchId === id);
-      // (adjusted pcs were already drawn by the original sends and live in WIP;
-      // the batch-trail replay below restores everything correctly.)
-
-      // Restore adjusted orphans to Pending (clear the merge link)
       const restoredOrphans = adjustedOrphans.map(s => ({
         ...s,
         status: 'Pending' as const,
@@ -362,13 +378,58 @@ export const createCRUDActions = (
         ...restoredOrphans
       ];
 
+      // ── Cascade bills covering the deleted receipts ─────────────────────
+      // Fully-owned bills (every receipt belongs to this send) are removed
+      // together with their voucher + journal entries; shared bills keep their
+      // other receipts with a recomputed total and voucher amount.
+      let updatedBills = state.processorBills || [];
+      let updatedVouchers = state.vouchers || [];
+      let updatedJournalEntries = state.journalEntries || [];
+      const billsTouching = updatedBills.filter(b =>
+        b.receiptIds.some(rid => receiptIds.has(rid))
+      );
+      for (const bill of billsTouching) {
+        const remaining = bill.receiptIds.filter(rid => !receiptIds.has(rid));
+        if (remaining.length === 0) {
+          updatedBills = updatedBills.filter(b => b.id !== bill.id);
+          const voucher = updatedVouchers.find(v => v.sourceId === bill.id && v.sourceModule === 'Processing');
+          if (voucher) {
+            updatedVouchers = updatedVouchers.filter(v => v.id !== voucher.id);
+            updatedJournalEntries = updatedJournalEntries.filter(je => je.voucherId !== voucher.id);
+          }
+        } else {
+          const newTotal = remaining.reduce((sum, rid) => {
+            const r = state.processingReceipts.find(x => x.id === rid);
+            return sum + (r?.billAmount || 0);
+          }, 0);
+          const lineAmounts = { ...(bill.lineAmounts || {}) };
+          for (const rid of receiptIds) delete lineAmounts[rid];
+          updatedBills = updatedBills.map(b => b.id === bill.id
+            ? { ...b, receiptIds: remaining, totalAmount: newTotal, lineAmounts }
+            : b);
+          const voucher = updatedVouchers.find(v => v.sourceId === bill.id && v.sourceModule === 'Processing');
+          if (voucher) {
+            updatedVouchers = updatedVouchers.map(v =>
+              v.id === voucher.id ? { ...v, totalDebit: newTotal, totalCredit: newTotal } : v
+            );
+            updatedJournalEntries = updatedJournalEntries.map(je =>
+              je.voucherId === voucher.id
+                ? { ...je, debit: je.debit > 0 ? newTotal : 0, credit: je.credit > 0 ? newTotal : 0 }
+                : je
+            );
+          }
+        }
+      }
+
+      const remainingReceipts = (state.processingReceipts || []).filter(r => r.sendId !== id);
+
       // Rebuild the batch trail from the remaining history (idempotent,
       // stage-aware FIFO replay — the deleted send's loss is removed with it),
       // then re-derive the material counters from the rebuilt trail.
       const updatedBatches = InventoryCalculationService.recomputeFinishedPcsForMaterial(
         send.materialId,
         state.batches || [],
-        state.processingReceipts || [],
+        remainingReceipts,
         remainingSends,
         state.sales || [],
         state.products || [],
@@ -377,15 +438,24 @@ export const createCRUDActions = (
       );
       const updatedMaterials = InventoryCalculationService.syncMaterialCounters(state.materials, updatedBatches);
 
-      // Remove this dispatch's inventory movement
+      // Remove this dispatch's + its receipts' inventory movements
+      const removedReferenceNos = new Set([
+        send.dispatchNo,
+        ...receiptsToDelete.map(r => r.receiveNo)
+      ]);
       return {
         ...state,
         processingSends: remainingSends,
+        processingReceipts: remainingReceipts,
+        processorBills: updatedBills,
+        vouchers: updatedVouchers,
+        journalEntries: updatedJournalEntries,
         materials: updatedMaterials,
         batches: updatedBatches,
-        inventoryMovements: state.inventoryMovements.filter(im => im.referenceNo !== send.dispatchNo)
+        inventoryMovements: state.inventoryMovements.filter(im => !removedReferenceNos.has(im.referenceNo))
       };
     });
+    afterMutation?.();
   },
 
 
