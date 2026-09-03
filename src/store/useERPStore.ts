@@ -791,6 +791,8 @@ export const useERPStore = create<ERPState>()(
                   currentStageId: newAvail <= 0
                     ? (data.stageId || b.currentStageId)
                     : b.currentStageId,
+                  // Clear available-from tracking when fully consumed
+                  availableFromStageId: newAvail <= 0 ? undefined : b.availableFromStageId,
                 };
               }
               return b;
@@ -1001,6 +1003,7 @@ export const useERPStore = create<ERPState>()(
               return {
                 ...b,
                 stageAvailablePcs: (b.stageAvailablePcs || 0) + data.pcsReceived,
+                availableFromStageId: stageId, // track which stage produced these available pcs
               };
             }
             return b;

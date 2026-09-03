@@ -210,6 +210,8 @@ export class InventoryCalculationService {
           currentStageId: newAvail <= 0
             ? (targetStageId || b.currentStageId)
             : b.currentStageId,
+          // Clear available-from tracking when fully consumed
+          availableFromStageId: newAvail <= 0 ? undefined : b.availableFromStageId,
         };
       }),
       usedBatchIds,

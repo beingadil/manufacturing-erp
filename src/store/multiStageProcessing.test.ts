@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AccountingEngine } from '../lib/accounting/AccountingEngine';
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
-import { FinancialReportService } from '../lib/reporting/FinancialReportService';
 import { buildDefaultStages } from '../lib/processing/processingStageSeed';
+import { FinancialReportService } from '../lib/reporting/FinancialReportService';
 import type { ProcessingStage } from '../types/erp';
 import { migrateERPState } from './erpMigration';
 import { useERPStore } from './useERPStore';
@@ -631,5 +631,90 @@ describe('multi-stage processing engine', () => {
     } as any);
     expect(st().processingSends.length).toBe(before + 1);
     expect(st().batches[0].stageAvailablePcs).toBe(100);
+  });
+
+    // -- TEST U: Raw remainder + received pcs coexist (user scenario: 3700 sent to Initial, 93 raw left, 3700 received back) --
+  it("TEST U: with 3700 received from Initial and 93 still raw, the 3700 CAN be sent to Machine Man while raw stays sendable to Initial", () => {
+    purchase(); // 2000 in helper; use full amount
+    // Emulate the user scenario directly: raw remainder + received-back pcs coexist.
+    const initSend = sendToStage("Initial Processor", "Initial Processor", 1500, 5, "2026-08-02");
+    receiveFromStage(initSend, "Initial Processor", "Initial Processor", 1500, "2026-08-03");
+    // 500 raw still in the batch (never dispatched)
+    expect(InventoryCalculationService.batchRawAvailable(st().batches[0])).toBe(500);
+    expect(st().batches[0].stageAvailablePcs).toBe(1500);
+    expect(st().batches[0].availableFromStageId).toBe(stageByName("Initial Processor").id);
+    // Send the 1500 received pcs to Machine Man — must succeed despite raw remainder.
+    st().addProcessingSend({
+      processorId: processorByName("Machine Man"),
+      materialId: st().materials[0].id,
+      date: "2026-08-04",
+      pcsSent: 1500,
+      ratePerPiece: 32,
+      stageId: stageByName("Machine").id,
+    } as any);
+    const after = st();
+    expect(after.processingSends).toHaveLength(2);
+    expect(after.batches[0].stageAvailablePcs).toBe(0);
+    // Raw remainder is untouched and still sendable to Initial.
+    expect(InventoryCalculationService.batchRawAvailable(after.batches[0])).toBe(500);
+    // And the raw remainder can actually be dispatched to Initial.
+    st().addProcessingSend({
+      processorId: processorByName("Initial Processor"),
+      materialId: st().materials[0].id,
+      date: "2026-08-05",
+      pcsSent: 500,
+      ratePerPiece: 5,
+      stageId: stageByName("Initial Processor").id,
+    } as any);
+    const after2 = st();
+    expect(after2.processingSends).toHaveLength(3);
+    expect(InventoryCalculationService.batchRawAvailable(after2.batches[0])).toBe(0);
+    expect(after2.batches[0].atProcessorPcs).toBe(2000);
+    // Total inventory value untouched throughout.
+    expect(inventoryValue()).toBe(300000);
+  });
+
+// -- TEST T: Late partial returns use availableFromStageId --
+  it("TEST T: late partial returns use availableFromStageId so they are sent to the correct next stage", () => {
+    purchase(); // 2000 pcs
+    const initSend = sendToStage("Initial Processor", "Initial Processor", 2000, 5, "2026-08-02");
+    // Receive only 1500 back (500 still pending)
+    receiveFromStage(initSend, "Initial Processor", "Initial Processor", 1500, "2026-08-03");
+    const batch = st().batches[0];
+    expect(batch.stageAvailablePcs).toBe(1500);
+    expect(batch.availableFromStageId).toBe(stageByName("Initial Processor").id);
+    // Send 1500 to Machine Man
+    st().addProcessingSend({
+      processorId: processorByName("Machine Man"),
+      materialId: st().materials[0].id,
+      date: "2026-08-04",
+      pcsSent: 1500,
+      ratePerPiece: 32,
+      stageId: stageByName("Machine").id,
+    } as any);
+    const afterFirst = st();
+    expect(afterFirst.batches[0].stageAvailablePcs).toBe(0);
+    expect(afterFirst.batches[0].currentStageId).toBe(stageByName("Machine").id);
+    expect(afterFirst.batches[0].availableFromStageId).toBeUndefined();
+    // Late 500 return from Initial Processor
+    receiveFromStage(initSend, "Initial Processor", "Initial Processor", 500, "2026-08-05");
+    const afterLate = st();
+    expect(afterLate.batches[0].stageAvailablePcs).toBe(500);
+    expect(afterLate.batches[0].availableFromStageId).toBe(stageByName("Initial Processor").id);
+    // The 500 CAN be sent to Machine Man (not Acid Man)
+    st().addProcessingSend({
+      processorId: processorByName("Machine Man"),
+      materialId: st().materials[0].id,
+      date: "2026-08-06",
+      pcsSent: 500,
+      ratePerPiece: 32,
+      stageId: stageByName("Machine").id,
+    } as any);
+    const afterSecond = st();
+    expect(afterSecond.processingSends).toHaveLength(3); // init + 1500 + 500
+    expect(afterSecond.batches[0].stageAvailablePcs).toBe(0);
+    expect(afterSecond.batches[0].currentStageId).toBe(stageByName("Machine").id);
+    expect(afterSecond.batches[0].availableFromStageId).toBeUndefined();
+    expect(inventoryValue()).toBe(300000);
   });
 });

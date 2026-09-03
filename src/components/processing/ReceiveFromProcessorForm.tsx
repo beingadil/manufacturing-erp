@@ -1,12 +1,12 @@
-import { useMemo, useState } from 'react';
-import { PageModal } from '../ui/PageModal';
-import { SearchableSelect } from '../SearchableSelect';
-import { DatePicker } from '../ui/date-picker';
-import { QuickAddProcessor } from '../QuickAddModals';
+import { useEffect, useMemo, useState } from 'react';
+import { formatNumber } from '../../lib/utils';
 import { ErrorManagement } from '../../lib/validation';
 import { ProcessingService } from '../../services/ProcessingService';
 import { useERPStore } from '../../store/useERPStore';
-import { formatNumber } from '../../lib/utils';
+import { QuickAddProcessor } from '../QuickAddModals';
+import { SearchableSelect } from '../SearchableSelect';
+import { DatePicker } from '../ui/date-picker';
+import { PageModal } from '../ui/PageModal';
 
 interface ReceiveFromProcessorFormProps {
   isOpen: boolean;
@@ -31,6 +31,29 @@ export function ReceiveFromProcessorForm({
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [error, setError] = useState<string | null>(null);
   const [addProcessorOpen, setAddProcessorOpen] = useState(false);
+
+  // Edit mode: populate the form from the existing receipt when it opens.
+  // Without this the Edit dialog opens blank (and saving would wipe the record).
+  useEffect(() => {
+    if (!isOpen) return;
+    if (editReceiveId) {
+      const receipt = processingReceipts.find(r => r.id === editReceiveId);
+      if (receipt) {
+        setProcessorId(receipt.processorId || '');
+        setSendId(receipt.sendId || '');
+        setPcs(String(receipt.pcsReceived ?? ''));
+        setDate(receipt.date || new Date().toISOString().split('T')[0]);
+        setError(null);
+      }
+    } else {
+      setProcessorId('');
+      setSendId('');
+      setPcs('');
+      setDate(new Date().toISOString().split('T')[0]);
+      setError(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, editReceiveId]);
 
   const openSends = useMemo(() => processingSends.filter(s =>
     s.processorId === processorId && (s.status === 'Pending' || s.status === 'Partial')

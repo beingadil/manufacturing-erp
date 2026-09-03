@@ -3,21 +3,21 @@ import { useMemo, useState } from "react";
 import { Link } from 'react-router-dom';
 import { Column, DataTable } from "../components/DataTable";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
-import { VoucherHistoryTab } from "../components/VoucherHistoryTab";
-import { DispatchDetailModal } from '../components/processing/DispatchDetailModal';
-import { SendToProcessorForm } from '../components/processing/SendToProcessorForm';
-import { ReceiveFromProcessorForm } from '../components/processing/ReceiveFromProcessorForm';
 import { CreateProcessorBillForm } from '../components/processing/CreateProcessorBillForm';
+import { DispatchDetailModal } from '../components/processing/DispatchDetailModal';
+import { ReceiveFromProcessorForm } from '../components/processing/ReceiveFromProcessorForm';
+import { SendToProcessorForm } from '../components/processing/SendToProcessorForm';
 import { StageManagerPanel } from '../components/processing/StageManagerPanel';
 import { StageTimelinePanel } from '../components/processing/StageTimelinePanel';
 import { WipBoard } from '../components/processing/WipBoard';
 import { WipStageStrip } from '../components/processing/WipStageStrip';
-import { getSortedStages } from '../lib/processing/stageProgress';
-import { generateDispatchSlipPDF, generateProcessorBillPDF } from "../lib/documentGenerators";
-import { formatCurrency } from "../lib/utils";
 import { PageModal } from "../components/ui/PageModal";
-import { ErrorManagement } from '../lib/validation';
+import { VoucherHistoryTab } from "../components/VoucherHistoryTab";
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
+import { generateDispatchSlipPDF, generateProcessorBillPDF } from "../lib/documentGenerators";
+import { getSortedStages } from '../lib/processing/stageProgress';
+import { formatCurrency } from "../lib/utils";
+import { ErrorManagement } from '../lib/validation';
 import { ProcessingService } from '../services/ProcessingService';
 import { useERPStore } from "../store/useERPStore";
 
@@ -138,10 +138,9 @@ export function JobWork() {
         ><AlertTriangle className="h-4 w-4" /></button>
         <button
           onClick={() => setDeleteModal({ isOpen: true, type: 'send', id: item.id, no: item.dispatchNo || 'Unknown' })}
-          disabled={item.pcsReceived > 0}
-          aria-label={item.pcsReceived > 0 ? 'Delete linked receipts first' : 'Delete dispatch'}
-          title={item.pcsReceived > 0 ? 'Delete linked receipts first' : 'Delete dispatch'}
-          className="p-1.5 rounded-md text-destructive transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-destructive/10"
+          aria-label="Delete dispatch (also removes its receipts and bills)"
+          title="Delete dispatch (also removes its receipts and bills)"
+          className="p-1.5 rounded-md text-destructive transition-colors hover:bg-destructive/10"
         ><Trash2 className="h-4 w-4" /></button>
       </div>
     ) },
@@ -408,7 +407,7 @@ export function JobWork() {
         recordNo={deleteModal.no}
         description={
           deleteModal.type === 'send'
-            ? 'Are you sure you want to permanently delete this dispatch? Stock will be returned to raw material and the batch trail rebuilt.'
+            ? 'Are you sure you want to permanently delete this dispatch? Its receipts will be removed and any processor bills (and their vouchers) reversed; stock returns to raw material.'
             : deleteModal.type === 'receipt'
               ? 'Are you sure you want to permanently delete this receipt? The received pcs will move back to At Processor (WIP).'
               : 'Are you sure you want to permanently delete this processor bill? Receipts will be marked unbilled and the processor balance reversed.'

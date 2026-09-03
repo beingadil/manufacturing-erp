@@ -46,6 +46,8 @@ export interface Batch {
   currentStageId?: string;
   /** Pcs of this batch available to send to the next processing stage (received from previous stage, not yet dispatched). */
   stageAvailablePcs?: number;
+  /** The stage that produced these available pcs — used by the Send form to determine the next target stage. */
+  availableFromStageId?: string;
 }
 
 export type ProcessingRateMethod = "per_piece" | "per_kg";
