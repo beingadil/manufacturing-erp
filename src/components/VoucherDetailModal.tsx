@@ -1,10 +1,11 @@
 import { AlertCircle, CheckCircle2, Edit, FileText, History, Trash2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import { AccountingEngine } from '../lib/accounting/AccountingEngine';
 import { formatCurrency } from '../lib/utils';
 import { ErrorManagement } from '../lib/validation';
 import { useERPStore } from '../store/useERPStore';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
+import { ModalOverlay } from './ui/ModalOverlay';
 
 export function VoucherDetailModal({ voucherId, onClose }: { voucherId: string, onClose: () => void }) {
   const { vouchers, journalEntries, accounts } = useERPStore();
@@ -32,7 +33,7 @@ export function VoucherDetailModal({ voucherId, onClose }: { voucherId: string, 
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+    <ModalOverlay onClose={onClose} zIndex={60}>
       <div className="bg-card rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* Header */}
@@ -234,7 +235,7 @@ export function VoucherDetailModal({ voucherId, onClose }: { voucherId: string, 
 
       {/* Delete Confirmation */}
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent style={{ zIndex: 80 }}>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Voucher?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -249,6 +250,6 @@ export function VoucherDetailModal({ voucherId, onClose }: { voucherId: string, 
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </ModalOverlay>
   );
 }

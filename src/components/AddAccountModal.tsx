@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useERPStore } from '../store/useERPStore';
 import { AccountType, } from '../types/erp';
+import { ModalOverlay } from './ui/ModalOverlay';
 
 interface Props {
   isOpen: boolean;
@@ -99,7 +100,7 @@ export function AddAccountModal({ isOpen, onClose, onSave, editAccountId, quickA
   const validSubtypes = accountSubtypes.filter(st => st.type === type);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+    <ModalOverlay onClose={onClose} zIndex={50}>
       <div className="bg-card rounded-2xl shadow-xl w-full max-w-lg flex flex-col overflow-hidden">
         <div className="p-6 border-b border-border/50 flex justify-between items-center">
           <h2 className="text-xl font-bold text-foreground">{editAccountId ? 'Edit Account' : 'Add New Account'}</h2>
@@ -170,6 +171,6 @@ export function AddAccountModal({ isOpen, onClose, onSave, editAccountId, quickA
           </div>
         </form>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

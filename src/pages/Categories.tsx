@@ -6,6 +6,7 @@ import { InlineEditInput } from '../components/common/InlineEditInput';
 import { SafeDeleteDialog } from '../components/common/SafeDeleteDialog';
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
 import { KpiCard } from '../components/ui/KpiCard';
+import { ModalOverlay } from '../components/ui/ModalOverlay';
 import { formatNumber } from '../lib/utils';
 import { CategoryService } from '../services/CategoryService';
 import { useERPStore } from '../store/useERPStore';
@@ -256,10 +257,7 @@ export default function Categories() {
       />
 
       {isFormOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200"
-          onClick={closeForm}
-        >
+        <ModalOverlay onClose={closeForm} closeOnBackdropClick overlayClassName="animate-in fade-in duration-200">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -324,7 +322,7 @@ export default function Categories() {
               </div>
             </form>
           </motion.div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

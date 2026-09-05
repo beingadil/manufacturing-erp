@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import { useMemo } from 'react';
 import { useERPStore } from '../store/useERPStore';
 import { CashbookVoucherForm, VoucherFormMode } from './CashbookVoucherForm';
+import { ModalOverlay } from './ui/ModalOverlay';
 
 interface Props {
   isOpen: boolean;
@@ -33,7 +34,7 @@ export function CashbookEntryModal({ isOpen, onClose, onSave, defaultAccountId, 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <ModalOverlay onClose={onClose} variant="frost" zIndex={50}>
       <div className="bg-card w-full max-w-5xl rounded-2xl shadow-xl border border-border flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-border/50 shrink-0">
@@ -62,6 +63,6 @@ export function CashbookEntryModal({ isOpen, onClose, onSave, defaultAccountId, 
           />
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
