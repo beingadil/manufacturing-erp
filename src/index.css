@@ -131,7 +131,15 @@
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    /* Disable CSS transitions outright instead of shrinking their duration.
+       A forced ~0s duration combined with the implicit `transition-property:
+       all` arms a transition on EVERY style change — including the `transform`
+       writes that position libraries (Radix popover wrappers, react-day-picker
+       calendars) perform. While such a popover is being repositioned each frame
+       the transition restarts from its pre-position value, freezing the
+       calendar at translateY(-200%) — rendered far off-screen and unclickable
+       (broken date pickers app-wide). Reduced motion means no motion: snap. */
+    transition: none !important;
     scroll-behavior: auto !important;
   }
 }
