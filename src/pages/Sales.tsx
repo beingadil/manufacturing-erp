@@ -1,18 +1,19 @@
 import { Edit, Eye, Plus, Printer, Trash2 } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from 'react-router-dom';
+import { toast } from 'sonner';
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
-import { DatePicker } from "../components/ui/date-picker";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
 import { QuickAddCustomer, QuickAddProduct } from "../components/QuickAddModals";
 import { SearchableSelect } from "../components/SearchableSelect";
+import { DatePicker } from "../components/ui/date-picker";
+import { PageModal } from "../components/ui/PageModal";
 import { VoucherHistoryTab } from "../components/VoucherHistoryTab";
 import { generateInvoicePDF } from "../lib/documentGenerators";
 import { formatCurrency } from "../lib/utils";
 import { ErrorManagement } from '../lib/validation';
 import { SalesService } from '../services/SalesService';
 import { useERPStore } from "../store/useERPStore";
-import { PageModal } from "../components/ui/PageModal";
 
 export function Sales() {
   const { sales, products, materials, customers, vouchers } = useERPStore();
@@ -41,7 +42,10 @@ export function Sales() {
 
   const selectedProduct = products.find(p => p.id === productId);
   const linkedMaterial = selectedProduct ? materials.find(m => m.id === selectedProduct.materialId) : null;
-  const availableStock = linkedMaterial ? linkedMaterial.processedStockPcs : 0;
+  // When editing, this sale's own pcs are already deducted from stock — add
+  // them back so the guard doesn't block legitimate edits (price/date fixes).
+  const editingSalePcs = editSaleId ? (sales.find(s => s.id === editSaleId)?.pcsSold || 0) : 0;
+  const availableStock = (linkedMaterial ? linkedMaterial.processedStockPcs : 0) + editingSalePcs;
 
   
   const handleEditClick = (item: any) => {
@@ -66,6 +70,11 @@ export function Sales() {
     
     const pcs = parseInt(pcsSold);
     if (pcs > availableStock) {
+      toast.error('Insufficient stock', {
+        description: linkedMaterial
+          ? `${linkedMaterial.name} has only ${availableStock} finished PCS available — you tried to sell ${pcs}.`
+          : 'The selected product has no linked material/stock.',
+      });
       return;
     }
 
@@ -223,6 +232,11 @@ export function Sales() {
             <div>
               <label htmlFor="sale-pcs" className="block text-sm font-medium text-foreground/80 mb-1">PCS to Sell *</label>
               <input id="sale-pcs" name="sale-pcs" type="number" required placeholder="Quantity" value={pcsSold} onChange={e => setPcsSold(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 h-12" />
+              {linkedMaterial && (
+                <p className={`mt-1 text-xs ${pcsSold && parseInt(pcsSold) > availableStock ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
+                  Available: {availableStock} PCS of {linkedMaterial.name}
+                </p>
+              )}
             </div>
             <div>
               <label htmlFor="sale-price" className="block text-sm font-medium text-foreground/80 mb-1">Price Per Piece (PKR) *</label>
