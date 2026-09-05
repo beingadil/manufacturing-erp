@@ -1,7 +1,6 @@
 import { BarChart3, Bell, Briefcase, Calculator, ChevronDown, ChevronRight, Database, DollarSign, Factory, FileText, LayoutDashboard, LogOut, Menu, Monitor, Moon, PackageSearch, Search, Settings, ShoppingCart, Sun, Truck, UserCog, Users, Wallet, X } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { SyncStatusIndicator } from '../components/common/SyncStatusIndicator';
 import { useAuth } from "../contexts/AuthContext";
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { cn, } from "../lib/utils";
@@ -475,7 +474,6 @@ export function DashboardLayout() {
           </button>
           <NotificationBell />
           <div className="flex flex-col text-right mr-2 hidden sm:flex">
-          <SyncStatusIndicator />
             <span className="text-sm font-semibold text-foreground">{profile?.name || user?.email || "User"}</span>
             <span className="text-xs text-muted-foreground">{profile?.roles?.name || 'User'}</span>
           </div>
