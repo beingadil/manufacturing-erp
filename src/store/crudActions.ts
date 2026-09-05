@@ -233,17 +233,22 @@ export const createCRUDActions = (
       // account's COMPLETE ledger via the afterMutation callback — never
       // adjusted here (spec §14).
 
-      // Rebuild the material's finished pcs per batch from the authoritative
-      // history (receipts produce, sales consume FIFO, stage-aware) so an edit
-      // re-applies cleanly at actual purchase cost, then re-derive the material
-      // counters from the rebuilt trail.
-      const saleProduct = state.products.find(p => p.id === data.productId || p.id === oldSale.productId);
-      const linkedMaterialId = saleProduct?.materialId;
+      // Rebuild the affected materials' finished pcs per batch from the
+      // authoritative history (receipts produce, sales consume FIFO,
+      // stage-aware) so an edit re-applies cleanly at actual purchase cost.
+      // Recompute EVERY affected material — both the old and the new product's
+      // material when the product was changed — otherwise the abandoned
+      // material keeps counting this sale as consumed (stale finished stock).
+      const affectedMaterialIds = [...new Set(
+        [data.productId, oldSale.productId]
+          .map(pid => state.products.find(p => p.id === pid)?.materialId)
+          .filter((mid): mid is string => !!mid)
+      )];
       let updatedBatches = state.batches;
-      if (linkedMaterialId) {
+      for (const materialId of affectedMaterialIds) {
         updatedBatches = InventoryCalculationService.recomputeFinishedPcsForMaterial(
-          linkedMaterialId,
-          state.batches || [],
+          materialId,
+          updatedBatches || [],
           state.processingReceipts || [],
           state.processingSends || [],
           updatedSales,
@@ -261,7 +266,11 @@ export const createCRUDActions = (
         // Rebuild the sale voucher's entries by account role (receivable / sales /
         // COGS / finished goods) so the COGS leg is recomputed at the new quantity
         // instead of every debit/credit being stamped with the sale amount.
-        const product = state.products.find(p => p.id === data.productId || p.id === oldSale.productId);
+        // COGS must come from the NEW product's material when the product was
+        // changed — the old either/or find() could pick whichever product came
+        // first in the array, pricing the voucher leg from the wrong material.
+        const product = state.products.find(p => p.id === data.productId)
+          || state.products.find(p => p.id === oldSale.productId);
         const linkedMaterialId = product?.materialId;
         const fifo = linkedMaterialId
           ? InventoryCalculationService.getFIFOCOGSForSale(linkedMaterialId, data.pcsSold, updatedBatches || [])
