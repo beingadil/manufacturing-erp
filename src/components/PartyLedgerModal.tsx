@@ -1,11 +1,12 @@
 import { ArrowUpRight, BookOpenText, Scale, Wallet, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DatePicker } from './ui/date-picker';
 import { AccountingEngine } from '../lib/accounting/AccountingEngine';
 import { isDebitNormalAccount } from '../lib/accounting/accountClassification';
 import { cn, formatCurrency } from '../lib/utils';
 import { useERPStore } from '../store/useERPStore';
+import { DatePicker } from './ui/date-picker';
+import { ModalOverlay } from './ui/ModalOverlay';
 import { VoucherDetailModal } from './VoucherDetailModal';
 
 export type PartyKind = 'Customer' | 'Supplier' | 'Processor';
@@ -60,7 +61,7 @@ export function PartyLedgerModal({ party, onClose }: PartyLedgerModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+    <ModalOverlay onClose={onClose} zIndex={60}>
       <div className="bg-card rounded-2xl shadow-xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="px-6 py-4 border-b border-border/50 flex items-start justify-between bg-muted/20 shrink-0">
@@ -210,6 +211,6 @@ export function PartyLedgerModal({ party, onClose }: PartyLedgerModalProps) {
       </div>
 
       {viewVoucherId && <VoucherDetailModal voucherId={viewVoucherId} onClose={() => setViewVoucherId(null)} />}
-    </div>
+    </ModalOverlay>
   );
 }

@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import type { SourceModule } from '../types/erp';
 import { CashbookVoucherForm, VoucherFormMode } from './CashbookVoucherForm';
+import { ModalOverlay } from './ui/ModalOverlay';
 import { ACCENT_BAR, ACCENT_SOFT, KIND_ACCENT, KIND_ICON } from './voucherAccents';
 
 export type VoucherPageKind = VoucherFormMode;
@@ -38,7 +39,7 @@ export function VoucherEditorModal({ isOpen, onClose, onSaved, kind, editVoucher
   const KindIcon = KIND_ICON[kind];
 
   return (
-    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <ModalOverlay onClose={onClose} variant="frost" zIndex={50}>
       <div className="bg-card w-full max-w-5xl rounded-2xl shadow-xl border border-border flex flex-col max-h-[92vh] overflow-hidden">
         {/* Accent bar */}
         <div className={cn('shrink-0 h-1 bg-gradient-to-r', ACCENT_BAR[accent])} />
@@ -78,6 +79,6 @@ export function VoucherEditorModal({ isOpen, onClose, onSaved, kind, editVoucher
           />
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
