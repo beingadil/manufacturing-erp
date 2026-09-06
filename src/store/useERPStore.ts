@@ -5,8 +5,9 @@ import { SQLiteStorageAdapter } from '../database/sqlite/SQLiteStorageAdapter';
 import { AccountingEngine } from '../lib/accounting/AccountingEngine';
 import { getSystemAccountBySubtype, getSystemCOGSAccount, getSystemInventoryAccount } from '../lib/accounting/accountClassification';
 import { DocumentNumberingService } from '../lib/business/DocumentNumberingService';
-import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
-import { UnitConversionService } from '../lib/business/UnitConversionService';import {Account, 
+import { batchAvailableAtSource, batchTotalPcs, InsufficientStockError, InventoryCalculationService } from '../lib/business/InventoryCalculationService';
+import { UnitConversionService } from '../lib/business/UnitConversionService';
+import { AppError } from '../lib/errorHandler';import {Account, 
   AccountSubtype, 
   Batch, 
   CompanySettings, Customer, DocumentSettings, InventoryMovement, JournalEntry, 
@@ -16,6 +17,13 @@ import { UnitConversionService } from '../lib/business/UnitConversionService';im
 import { createCRUDActions } from './crudActions';
 import { databaseMiddleware } from './databaseMiddleware';
 import { migrateERPState } from './erpMigration';
+
+/** LAW 3 helper: total pcs across every bucket of one material's Active batches. */
+function batchTotalPcsBatch(materialId: string, batches: Batch[]): number {
+  return batches
+    .filter(b => b.materialId === materialId && b.status === 'Active')
+    .reduce((s, b) => s + batchTotalPcs(b), 0);
+}
 
 export interface ERPState {
   inventoryThreshold: number;
@@ -740,349 +748,311 @@ export const useERPStore = create<ERPState>()(
         AccountingEngine.recomputePartyBalances();
       },
 
-      addProcessingSend: (data, adjustSendIds) => set((state) => {
-        // ── Stage-worker guard: a processor assigned to a stage can only work
-        // that stage (general workers can work any). 'Machine' can never
-        // receive an 'Acid' dispatch.
-        const worker = state.processors.find(p => p.id === data.processorId);
-        if (worker?.stageId && data.stageId && worker.stageId !== data.stageId) return state;
-
-        const dispatchNo = DocumentNumberingService.nextDocumentNumber(state.processingSends, 'dispatchNo', 'DSP', data.date);
-        const newSendId = uuidv4();
-
-        const newSend: ProcessingSend = {
-          ...data,
-          id: newSendId,
-          dispatchNo,
-          pcsReceived: 0,
-          status: 'Pending'
-        };
-
-        // Stage-aware dispatch (spec §6): a stage-1 / legacy dispatch draws from
-        // RAW stock (raw → WIP); an intermediate-stage dispatch moves pcs that
-        // are ALREADY in WIP (WIP → WIP) and must NOT touch the raw counters or
-        // the batch buckets — the same economic pcs are never counted twice.
-        const consumesRaw = InventoryCalculationService.sendConsumesRaw(data.stageId, state.processingStages || []);
-
-        if (!consumesRaw) {
-          // Intermediate stage dispatch: pieces move from 'available at previous
-          // stage' to 'in transit at target stage'. Consume from the batch's
-          // stageAvailablePcs and advance its currentStageId to the target stage.
-          // Also update atProcessorPcs on the material (these pcs are now at a
-          // processor).
-          
-          let updatedBatches: Batch[] = state.batches || [];
-          let consumedBatchId = data.batchId;
-
-          if (data.batchId) {
-            // Guard: reject over-send at the batch level
-            const batch = updatedBatches.find(b => b.id === data.batchId);
-            const available = (batch?.stageAvailablePcs || 0);
-            if (data.pcsSent <= 0 || data.pcsSent > available) return state;
-            updatedBatches = updatedBatches.map(b => {
-              if (b.id === data.batchId) {
-                const newAvail = Math.max(0, (b.stageAvailablePcs || 0) - data.pcsSent);
-                return {
-                  ...b,
-                  stageAvailablePcs: newAvail,
-                  // Advance currentStageId only when EVERY available pc has
-                  // moved on — a partial dispatch must not mislabel the pcs
-                  // still waiting at the source stage (multi-position truth).
-                  currentStageId: newAvail <= 0
-                    ? (data.stageId || b.currentStageId)
-                    : b.currentStageId,
-                  // Clear available-from tracking when fully consumed
-                  availableFromStageId: newAvail <= 0 ? undefined : b.availableFromStageId,
-                };
-              }
-              return b;
-            });
-          } else {
-            // No explicit batch ('Auto / Any Batch'): FIFO-attribute the send
-            // across the source stage's available pcs so the batch trail moves
-            // in lockstep — the same pcs can never be sent to a stage twice.
-            const attributed = InventoryCalculationService.attributeStageDispatchFIFO(
-              data.materialId,
-              data.pcsSent,
-              data.stageId,
-              state.processingStages || [],
-              updatedBatches
-            );
-            // Reject unless the ENTIRE quantity was attributed — partial
-            // attribution means there aren't enough pcs available at the source
-            // stage, so the dispatch cannot be recorded without double-sending.
-            if (data.pcsSent <= 0 || attributed.attributedPcs < data.pcsSent) return state;
-            updatedBatches = attributed.batches;
-            consumedBatchId = attributed.usedBatchIds[0] || data.batchId;
-          }
-
-          // PCS remain in WIP (atProcessorPcs unchanged) — same economic pcs, just relocated.
-          const movement: InventoryMovement = {
-            id: uuidv4(),
-            materialId: data.materialId,
-            batchId: consumedBatchId,
-            date: data.date,
-            referenceNo: dispatchNo,
-            module: "Dispatch",
-            transactionType: "OUT",
-            quantity: data.pcsSent,
-            runningBalance: 0,
-            remarks: data.remarks
-          };
-          // Link the dispatch to the batch it physically drew from so the
-          // receipt handler can attribute the return correctly.
-          newSend.batchId = consumedBatchId;
-          return {
-            processingSends: [newSend, ...state.processingSends],
-            inventoryMovements: [movement, ...(state.inventoryMovements || [])],
-            batches: updatedBatches,
-          };
-        }
-
-        const currentMaterial = state.materials.find(m => m.id === data.materialId);
-        const currentStock = currentMaterial?.stockPcs || 0;
-
-        // ── Store-level guard (spec §7, §21): over-send rejected HERE — the
-        // authoritative layer can never dispatch more raw pcs than are on hand.
-        if (data.pcsSent <= 0 || data.pcsSent > currentStock) return state;
-
-        const newStock = currentStock - data.pcsSent;
-        const currentAtProcessor = currentMaterial?.atProcessorPcs || 0;
-
-        let totalAdjustedPcs = 0;
-        const updatedSends = state.processingSends.map(s => {
-          if (adjustSendIds?.includes(s.id)) {
-            const pending = s.pcsSent - s.pcsReceived;
-            totalAdjustedPcs += pending;
-            return { ...s, status: "Adjusted" as const, adjustedToDispatchId: newSendId, remarks: `${s.remarks || ''} (Adjusted ${pending} PCS into ${dispatchNo})` };
-          }
-          return s;
-        });
-
-        // Link adjusted pieces to the new dispatch so they can be received together
-        newSend.pcsSent += totalAdjustedPcs;
-
-        const updatedMaterials = state.materials.map(m =>
-          m.id === data.materialId ? {
-            ...m,
-            stockPcs: newStock,
-            atProcessorPcs: currentAtProcessor + data.pcsSent // only the new pcs being physically sent
-          } : m
-        );
-
-        // The batch trail ALWAYS moves with the physical stock: if no batch was
-        // selected ('Any Batch / General Stock'), consume FIFO (oldest batch
-        // first) so the same economic pcs are never counted as both raw and WIP.
-        const attributed = InventoryCalculationService.attributeDispatchFIFO(
-          data.materialId,
-          data.pcsSent,
-          state.batches || [],
-          data.batchId
-        );
-        const consumedBatchId = attributed.usedBatchIds[0] || data.batchId;
-        // Mark the consumed batch as being at the target stage so the receipt
-        // handler and Send form can track stage progression correctly — but a
-        // batch with pcs still never-dispatched (raw remainder) keeps its raw
-        // bucket sendable: advance currentStageId only when nothing raw is
-        // left in the batch (multi-position truth, partial raw dispatches).
-        const updatedBatches = attributed.batches.map(b => {
-          if (b.id !== consumedBatchId) return b;
-          const rawLeft = InventoryCalculationService.batchRawAvailable(b);
-          return rawLeft > 0 ? b : { ...b, currentStageId: data.stageId || b.currentStageId };
-        });
-
-        const movement: InventoryMovement = {
-          id: uuidv4(),
-          materialId: data.materialId,
-          batchId: consumedBatchId,
-          date: data.date,
-          referenceNo: dispatchNo,
-          module: "Dispatch",
-          transactionType: "OUT",
-          quantity: data.pcsSent,
-          runningBalance: newStock,
-          remarks: data.remarks
-        };
-
-        // Link the dispatch to the batch it physically drew from (when the user
-        // picked 'Any Batch', we attribute FIFO and record it for the receipt).
-        newSend.batchId = consumedBatchId;
-
-        return { 
-          processingSends: [newSend, ...updatedSends],
-          materials: updatedMaterials,
-          inventoryMovements: [movement, ...(state.inventoryMovements || [])],
-          batches: updatedBatches
-        };
-      }),
-
-      addProcessingReceipt: (data) => set((state) => {
-        const receiveNo = DocumentNumberingService.nextDocumentNumber(state.processingReceipts, 'receiveNo', 'REC', data.date);
-        const send = state.processingSends.find(s => s.id === data.sendId);
-        if (!send) return state;
-
-        // ── Store-level guards (spec §7, §21): over-receipt and duplicate
-        // receipt are rejected HERE, not just in the UI/validators, so the
-        // authoritative layer can never be bypassed. The over-receipt guard
-        // inherently blocks a second receipt of the same pcs (pending becomes 0).
-        const pending = send.pcsSent - send.pcsReceived - (send.lossQuantity || 0);
-        if (data.pcsReceived <= 0 || data.pcsReceived > pending) return state;
-
-        // Stage-aware receipt (spec §6): only a receipt from the configured
-        // FINAL stage (or a legacy stage-less receipt) produces Finished Goods
-        // (WIP → finished). Intermediate receipts move WIP → WIP and must NOT
-        // touch the finished counters or the batch buckets.
-        const stageId = data.stageId ?? send.stageId;
-        const producesFinished = InventoryCalculationService.receiptProducesFinished(stageId, state.processingStages || []);
-
-        // Per-stage billing (spec §9, §10): per_piece = qty × rate;
-        // per_kg = qty × weightPerPiece(kg) × rate (e.g. 32 KG × Rs 32 = Rs 1,024).
-        const stage = (state.processingStages || []).find(s => s.id === stageId);
-        const rateMethod = data.rateMethod ?? stage?.rateMethod ?? 'per_piece';
-        const batch = send.batchId ? state.batches.find(b => b.id === send.batchId) : undefined;
-        const billAmount = rateMethod === 'per_kg'
-          ? data.pcsReceived * (batch?.weightPerPiece || 0) * send.ratePerPiece
-          : data.pcsReceived * send.ratePerPiece;
-
-        const newReceipt: ProcessingReceipt = {
-          ...data,
-          id: uuidv4(),
-          receiveNo,
-          billAmount,
-          billedStatus: "Unbilled",
-          stageId,
-          rateMethod,
-          billingUnit: data.billingUnit ?? stage?.billingUnit,
-        };
-
-        const updatedSends = state.processingSends.map(s => {
-          if (s.id === data.sendId) {
-            const newReceived = s.pcsReceived + data.pcsReceived;
-            const status = newReceived >= s.pcsSent ? 'Closed' : (newReceived > 0 ? 'Partial' : 'Pending');
-            return { ...s, pcsReceived: newReceived, status: status as "Closed" | "Partial" | "Pending" | "Adjusted" };
-          }
-          return s;
-        });
-
-        const currentMaterial = state.materials.find(m => m.id === data.materialId);
-        const currentAtProcessor = currentMaterial?.atProcessorPcs || 0;
-
-        let updatedMaterials = state.materials;
-        let updatedBatches = state.batches;
-
-        if (producesFinished) {
-          updatedMaterials = state.materials.map(m =>
-            m.id === data.materialId ? {
-              ...m,
-              atProcessorPcs: Math.max(0, currentAtProcessor - data.pcsReceived),
-              processedStockPcs: m.processedStockPcs + data.pcsReceived
-            } : m
-          );
-
-          // Move the received pcs from the WIP stage to the finished stage so
-          // finished stock is valued at the actual purchase rate of the batch it
-          // was dispatched from. The batch trail ALWAYS moves in lockstep with the
-          // material counters (FIFO, preferring the send's batch) so the same pcs
-          // are never counted as both WIP and finished goods.
-          updatedBatches = InventoryCalculationService.attributeReceiptFIFO(
-            data.materialId,
-            data.pcsReceived,
-            state.batches || [],
-            send.batchId
-          );
-        } else {
-          // Non-final stage receipt: pieces are received back from the processor
-          // and become AVAILABLE to send to the NEXT stage in the chain.
-          // The batch stays at its CURRENT stage — the send handler advances
-          // currentStageId when it actually dispatches to the next stage.
-          // stageAvailablePcs tracks how many pcs are ready for the next send.
-
-          // PCS remain in WIP (atProcessorPcs unchanged) — marked available for next stage.
-          updatedBatches = (state.batches || []).map(b => {
-            if (b.id === send.batchId) {
-              return {
-                ...b,
-                stageAvailablePcs: (b.stageAvailablePcs || 0) + data.pcsReceived,
-                availableFromStageId: stageId, // track which stage produced these available pcs
-              };
+      addProcessingSend: (data, adjustSendIds) => {
+        let failure: AppError | null = null;
+        set((state) => {
+          try {
+            // ── Stage-worker guard: a processor assigned to a stage can only
+            // work that stage (general workers can work any).
+            const worker = state.processors.find(p => p.id === data.processorId);
+            if (worker?.stageId && data.stageId && worker.stageId !== data.stageId) {
+              throw new AppError('This processor does not work the selected stage.');
             }
-            return b;
-          });
-        }
+            if (!data.pcsSent || data.pcsSent <= 0) {
+              throw new AppError('Quantity must be a positive whole number of PCS.');
+            }
 
-        const movement: InventoryMovement = {
-          id: uuidv4(),
-          materialId: data.materialId,
-          batchId: send.batchId,
-          date: data.date,
-          referenceNo: receiveNo,
-          module: "Receive",
-          transactionType: "IN",
-          quantity: data.pcsReceived,
-          runningBalance: currentMaterial ? (currentMaterial.stockPcs + currentMaterial.processedStockPcs + data.pcsReceived) : 0,
-          remarks: data.remarks
-        };
+            const dispatchNo = DocumentNumberingService.nextDocumentNumber(state.processingSends, 'dispatchNo', 'DSP', data.date);
+            const newSendId = uuidv4();
 
-        return {
-          processingReceipts: [newReceipt, ...state.processingReceipts],
-          processingSends: updatedSends,
-          materials: updatedMaterials,
-          batches: updatedBatches,
-          inventoryMovements: [movement, ...(state.inventoryMovements || [])]
-        };
-      }),
+            const newSend: ProcessingSend = {
+              ...data,
+              id: newSendId,
+              dispatchNo,
+              pcsReceived: 0,
+              status: 'Pending'
+            };
 
-      recordProcessingLoss: (sendId, quantity, date, remarks) => set((state) => {
-        const send = state.processingSends.find(s => s.id === sendId);
-        if (!send) return state;
+            const stages = state.processingStages || [];
+            const consumesRaw = InventoryCalculationService.sendConsumesRaw(data.stageId, stages);
+            // ══ MOVEMENT MAP: the ONLY legal source bucket for this target ══
+            // Stage 1 draws RAW; stage N draws the availability produced by
+            // stage N−1. Anything else is rejected — stage-skipping and
+            // re-processing already-processed pcs are physically impossible.
+            const sourceStageId = consumesRaw
+              ? 'raw' as const
+              : InventoryCalculationService.requiredSourceForTarget(data.stageId!, stages);
 
-        // Explicit loss only (spec §8): pending pcs can be received OR recorded
-        // as loss — never automatic. Reject over-loss and negative/zero loss.
-        const pending = send.pcsSent - send.pcsReceived - (send.lossQuantity || 0);
-        if (quantity <= 0 || quantity > pending) return state;
+            let updatedBatches: Batch[] = state.batches || [];
+            let consumedBatchId = data.batchId;
 
-        const lossDate = date || new Date().toISOString().split('T')[0];
-        const updatedSends = state.processingSends.map(s =>
-          s.id === sendId ? { ...s, lossQuantity: (s.lossQuantity || 0) + quantity } : s
-        );
+            // Adjusted sends merge their pending pcs into this dispatch. Only
+            // the PHYSICAL pcs move here — adjusted pcs are already in WIP
+            // (their original dispatch moved them); merging reassigns their
+            // pending receipt target without touching any bucket twice.
+            let totalAdjustedPcs = 0;
+            const updatedSends = state.processingSends.map(s => {
+              if (adjustSendIds?.includes(s.id)) {
+                const adjPending = s.pcsSent - s.pcsReceived;
+                totalAdjustedPcs += adjPending;
+                return { ...s, status: "Adjusted" as const, adjustedToDispatchId: newSendId, remarks: `${s.remarks || ''} (Adjusted ${adjPending} PCS into ${dispatchNo})` };
+              }
+              return s;
+            });
 
-        // The lost pcs leave the WIP stage entirely — real shrinkage. Material
-        // counter and batch trail both drop by exactly `quantity` (FIFO,
-        // preferring the dispatch's batch), so total inventory value decreases
-        // by the lost pcs at purchase cost and is never double-counted.
-        const updatedMaterials = state.materials.map(m =>
-          m.id === send.materialId
-            ? { ...m, atProcessorPcs: Math.max(0, (m.atProcessorPcs || 0) - quantity) }
-            : m
-        );
-        const updatedBatches = InventoryCalculationService.attributeLossFIFO(
-          send.materialId,
-          quantity,
-          state.batches || [],
-          send.batchId
-        );
+            try {
+              const res = consumesRaw
+                ? InventoryCalculationService.moveRawToProcessor(data.materialId, data.pcsSent, updatedBatches, data.batchId || undefined)
+                : InventoryCalculationService.moveAvailableToProcessor(data.materialId, sourceStageId, data.pcsSent, updatedBatches, data.batchId || undefined);
+              updatedBatches = res.batches;
+              consumedBatchId = res.usedBatchIds[0] || data.batchId;
+              // Display metadata via the shared helper — identical to replay.
+              updatedBatches = InventoryCalculationService.advanceDrainedBatches(
+                updatedBatches, res.usedBatchIds, data.stageId, consumesRaw
+              );
+            } catch (e) {
+              if (e instanceof InsufficientStockError) {
+                const available = (state.batches || [])
+                  .filter(b => b.materialId === data.materialId && b.status === 'Active')
+                  .reduce((s, b) => s + (consumesRaw
+                    ? InventoryCalculationService.batchRawAvailable(b)
+                    : batchAvailableAtSource(b, sourceStageId)), 0);
+                throw new AppError(`Only ${available} PCS are available${consumesRaw ? ' in raw stock' : ' from this stage'}.`);
+              }
+              throw e;
+            }
 
-        const movement: InventoryMovement = {
-          id: uuidv4(),
-          materialId: send.materialId,
-          batchId: send.batchId,
-          date: lossDate,
-          referenceNo: send.dispatchNo,
-          module: "Loss",
-          transactionType: "OUT",
-          quantity,
-          runningBalance: Math.max(0, (state.materials.find(m => m.id === send.materialId)?.atProcessorPcs || 0) - quantity),
-          remarks: remarks || `Loss recorded against ${send.dispatchNo}`
-        };
+            newSend.pcsSent = data.pcsSent + totalAdjustedPcs;
+            newSend.batchId = consumedBatchId;
 
-        return {
-          processingSends: updatedSends,
-          materials: updatedMaterials,
-          batches: updatedBatches,
-          inventoryMovements: [movement, ...(state.inventoryMovements || [])]
-        };
-      }),
+            const currentMaterial = state.materials.find(m => m.id === data.materialId);
+            const currentStock = currentMaterial?.stockPcs || 0;
+            const currentAtProcessor = currentMaterial?.atProcessorPcs || 0;
 
+            const movement: InventoryMovement = {
+              id: uuidv4(),
+              materialId: data.materialId,
+              batchId: consumedBatchId,
+              date: data.date,
+              referenceNo: dispatchNo,
+              module: "Dispatch",
+              transactionType: "OUT",
+              quantity: newSend.pcsSent,
+              runningBalance: batchTotalPcsBatch(data.materialId, updatedBatches),
+              remarks: data.remarks
+            };
+
+            // LAW 3: the whole update commits only if pcs are conserved.
+            InventoryCalculationService.assertConservation(data.materialId, state.batches || [], updatedBatches);
+
+            return {
+              processingSends: [newSend, ...updatedSends],
+              materials: state.materials.map(m =>
+                m.id === data.materialId
+                  ? {
+                      ...m,
+                      stockPcs: consumesRaw ? Math.max(0, currentStock - data.pcsSent) : m.stockPcs,
+                      // Pipeline semantics: a RAW send adds new pcs to the
+                      // processing pipeline. An intermediate send moves pcs
+                      // availability → at-processor — both already counted in
+                      // the pipeline, so the counter does not move.
+                      atProcessorPcs: consumesRaw ? currentAtProcessor + data.pcsSent : currentAtProcessor,
+                    }
+                  : m
+              ),
+              inventoryMovements: [movement, ...(state.inventoryMovements || [])],
+              batches: updatedBatches,
+            };
+          } catch (e) {
+            failure = e instanceof AppError ? e : new AppError((e as Error)?.message || 'Dispatch failed.');
+            return state;
+          }
+        });
+        if (failure) throw failure;
+      },
+      addProcessingReceipt: (data) => {
+        let failure: AppError | null = null;
+        set((state) => {
+          try {
+            const receiveNo = DocumentNumberingService.nextDocumentNumber(state.processingReceipts, 'receiveNo', 'REC', data.date);
+            const send = state.processingSends.find(s => s.id === data.sendId);
+            if (!send) throw new AppError('Dispatch not found.');
+
+            // ── Guards: over-receipt and duplicate receipt are rejected HERE,
+            // not just in the UI, so the authoritative layer can never be
+            // bypassed. Pending is ALWAYS computed, never stored (LAW 2).
+            const pending = send.pcsSent - send.pcsReceived - (send.lossQuantity || 0);
+            if (!data.pcsReceived || data.pcsReceived <= 0) throw new AppError('Quantity must be a positive whole number of PCS.');
+            if (data.pcsReceived > pending) {
+              throw new AppError(pending <= 0
+                ? 'This dispatch is already fully received.'
+                : `Only ${pending} PCS are pending on this dispatch.`);
+            }
+
+            const stageId = data.stageId ?? send.stageId;
+            const stages = state.processingStages || [];
+            const producesFinished = InventoryCalculationService.receiptProducesFinished(stageId, stages);
+
+            // Per-stage billing: per_piece = qty × rate; per_kg = qty × weightPerPiece(kg) × rate.
+            const stage = stages.find(s => s.id === stageId);
+            const rateMethod = data.rateMethod ?? stage?.rateMethod ?? 'per_piece';
+            const batch = send.batchId ? state.batches.find(b => b.id === send.batchId) : undefined;
+            const billAmount = InventoryCalculationService.computeReceiptBillAmount(data.pcsReceived, rateMethod, send, batch, stage);
+
+            const newReceipt: ProcessingReceipt = {
+              ...data,
+              id: uuidv4(),
+              receiveNo,
+              billAmount,
+              billedStatus: "Unbilled",
+              stageId,
+              rateMethod,
+              billingUnit: data.billingUnit ?? stage?.billingUnit,
+            };
+
+            const updatedSends = state.processingSends.map(s => {
+              if (s.id === data.sendId) {
+                const newReceived = s.pcsReceived + data.pcsReceived;
+                const status = newReceived >= s.pcsSent ? 'Closed' : (newReceived > 0 ? 'Partial' : 'Pending');
+                return { ...s, pcsReceived: newReceived, status: status as "Closed" | "Partial" | "Pending" | "Adjusted" };
+              }
+              return s;
+            });
+
+            const currentMaterial = state.materials.find(m => m.id === data.materialId);
+            const currentAtProcessor = currentMaterial?.atProcessorPcs || 0;
+
+            let updatedMaterials = state.materials;
+            let updatedBatches: Batch[] = state.batches || [];
+
+            if (producesFinished) {
+              // LAW 2 transfer: AT_final → FINISHED.
+              updatedMaterials = state.materials.map(m =>
+                m.id === data.materialId ? {
+                  ...m,
+                  atProcessorPcs: Math.max(0, currentAtProcessor - data.pcsReceived),
+                  processedStockPcs: (m.processedStockPcs || 0) + data.pcsReceived
+                } : m
+              );
+              updatedBatches = InventoryCalculationService.attributeReceiptFIFO(
+                data.materialId, data.pcsReceived, updatedBatches, send.batchId || undefined
+              );
+            } else {
+              // LAW 2 transfer: AT_stage → AVAILABLE(source = this stage).
+              // atProcessorPcs DECREASES — buckets stay disjoint so the same
+              // pcs are never counted in two places, and pcs that came back
+              // from DIFFERENT stages keep SEPARATE availability entries
+              // (they can never be merged or routed to the wrong next stage).
+              try {
+                updatedBatches = InventoryCalculationService.moveProcessorToAvailable(
+                  data.materialId, stageId || 'legacy', data.pcsReceived, updatedBatches, send.batchId || undefined
+                ).batches;
+              } catch (e) {
+                if (e instanceof InsufficientStockError) {
+                  throw new AppError("This dispatch's pcs are not traceable in the batch trail — receive was rolled back.");
+                }
+                throw e;
+              }
+              // Material roll-up semantics: atProcessorPcs counts the whole
+              // processing pipeline (at a processor OR waiting for the next
+              // stage). The pcs moved AT→availability, both counted — the
+              // pipeline total is unchanged, so the material counter does not
+              // move here (same basis as syncMaterialCounters).
+            }
+
+            const movement: InventoryMovement = {
+              id: uuidv4(),
+              materialId: data.materialId,
+              batchId: send.batchId,
+              date: data.date,
+              referenceNo: receiveNo,
+              module: "Receive",
+              transactionType: "IN",
+              quantity: data.pcsReceived,
+              runningBalance: batchTotalPcsBatch(data.materialId, updatedBatches),
+              remarks: data.remarks
+            };
+
+            // LAW 3: the whole update commits only if pcs are conserved.
+            InventoryCalculationService.assertConservation(data.materialId, state.batches || [], updatedBatches);
+
+            return {
+              processingReceipts: [newReceipt, ...state.processingReceipts],
+              processingSends: updatedSends,
+              materials: updatedMaterials,
+              batches: updatedBatches,
+              inventoryMovements: [movement, ...(state.inventoryMovements || [])]
+            };
+          } catch (e) {
+            failure = e instanceof AppError ? e : new AppError((e as Error)?.message || 'Receive failed.');
+            return state;
+          }
+        });
+        if (failure) throw failure;
+      },
+      recordProcessingLoss: (sendId, quantity, date, remarks) => {
+        let failure: AppError | null = null;
+        set((state) => {
+          try {
+            const send = state.processingSends.find(s => s.id === sendId);
+            if (!send) throw new AppError('Dispatch not found.');
+
+            // Explicit loss only: pending pcs can be received OR recorded as
+            // loss — never automatic. Reject over-loss and non-positive loss.
+            const pending = send.pcsSent - send.pcsReceived - (send.lossQuantity || 0);
+            if (!quantity || quantity <= 0) throw new AppError('Loss quantity must be a positive whole number of PCS.');
+            if (quantity > pending) throw new AppError(`Only ${pending} PCS are pending on this dispatch.`);
+
+            const lossDate = date || new Date().toISOString().split('T')[0];
+            const updatedSends = state.processingSends.map(s =>
+              s.id === sendId ? { ...s, lossQuantity: (s.lossQuantity || 0) + quantity } : s
+            );
+
+            // LAW 2 shrinkage: the lost pcs leave the trail entirely. They may
+            // sit at the processor (not yet received) or in the stage's
+            // availability bucket (received back, reported lost later) —
+            // consumeLoss takes them from whichever holds them.
+            const { batches: updatedBatches, fromProcessor, fromAvailable } = InventoryCalculationService.consumeLoss(
+              send.materialId, send.stageId, quantity, state.batches || [], send.batchId || undefined
+            );
+            // Pipeline semantics: the counter spans atProcessor + availability,
+            // so a loss from either bucket shrinks it.
+            const updatedMaterials = state.materials.map(m =>
+              m.id === send.materialId
+                ? { ...m, atProcessorPcs: Math.max(0, (m.atProcessorPcs || 0) - fromProcessor - fromAvailable) }
+                : m
+            );
+
+            const movement: InventoryMovement = {
+              id: uuidv4(),
+              materialId: send.materialId,
+              batchId: send.batchId,
+              date: lossDate,
+              referenceNo: send.dispatchNo,
+              module: "Loss",
+              transactionType: "OUT",
+              quantity,
+              runningBalance: batchTotalPcsBatch(send.materialId, updatedBatches),
+              remarks: remarks || `Loss recorded against ${send.dispatchNo}`
+            };
+
+            // LAW 3 with the expected shrinkage delta — anything other than
+            // exactly −quantity aborts the whole update.
+            InventoryCalculationService.assertConservation(send.materialId, state.batches || [], updatedBatches, -quantity);
+
+            return {
+              processingSends: updatedSends,
+              materials: updatedMaterials,
+              batches: updatedBatches,
+              inventoryMovements: [movement, ...(state.inventoryMovements || [])]
+            };
+          } catch (e) {
+            failure = e instanceof AppError ? e : new AppError((e as Error)?.message || 'Loss recording failed.');
+            return state;
+          }
+        });
+        if (failure) throw failure;
+      },
       addProcessorBill: (data) => {
         set((state) => {
         const billNo = DocumentNumberingService.nextDocumentNumber(state.processorBills, 'billNo', 'BILL', data.date);
@@ -1090,8 +1060,11 @@ export const useERPStore = create<ERPState>()(
 
         // ── Store-level guard: duplicate billing (spec §7, §21) — a receipt
         // that is already Billed cannot be billed again, so the authoritative
-        // layer can never double-pay a stage.
-        if (receiptsToBill.some(r => r.billedStatus === 'Billed')) return state;
+        // layer can never double-pay a stage. LOUD rejection: throws so no
+        // silent no-op can hide it (uniform with every other guard).
+        if (receiptsToBill.some(r => r.billedStatus === 'Billed')) {
+          throw new AppError('One or more receipts on this bill are already billed — duplicate billing is blocked.');
+        }
 
         // Line-level billing (spec §10): when the bill carries explicit
         // per-receipt amounts (rate finalized at bill time), the total is the

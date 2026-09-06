@@ -72,7 +72,9 @@ export function MonitorScreen() {
     });
 
     const rawMaterialStock = materials.reduce((sum, m) => sum + (m.stockPcs || 0), 0);
-    const wipStock = materials.reduce((sum, m) => sum + (m.processedStockPcs || 0), 0);
+    // True WIP: pcs in the processing pipeline (at a processor OR waiting for
+    // the next stage) — not finished stock, which has its own column.
+    const wipStock = materials.reduce((sum, m) => sum + (m.atProcessorPcs || 0), 0);
     
     const totalAR = customers.reduce((sum, c) => sum + (c.balanceReceivable || 0), 0);
     const totalAP = suppliers.reduce((sum, s) => sum + (s.balancePayable || 0), 0) + 
@@ -256,7 +258,7 @@ export function MonitorScreen() {
                 <tr>
                   <th className="px-4 py-3 font-medium whitespace-nowrap">Material</th>
                   <th className="px-4 py-3 font-medium whitespace-nowrap text-right">Stock (PCS)</th>
-                  <th className="px-4 py-3 font-medium whitespace-nowrap text-right">WIP (PCS)</th>
+                  <th className="px-4 py-3 font-medium whitespace-nowrap text-right">Finished (PCS)</th>
                   <th className="px-4 py-3 font-medium whitespace-nowrap">Status</th>
                 </tr>
               </thead>

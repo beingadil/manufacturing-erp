@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AccountingEngine } from '../lib/accounting/AccountingEngine';
-import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
+import { batchAvailableAtSource, batchAvailableTotal, batchTotalPcs, InventoryCalculationService } from '../lib/business/InventoryCalculationService';
 import { buildDefaultStages } from '../lib/processing/processingStageSeed';
 import { FinancialReportService } from '../lib/reporting/FinancialReportService';
 import type { ProcessingStage } from '../types/erp';
@@ -92,6 +92,15 @@ function purchase() {
 
 function st() {
   return useERPStore.getState();
+}
+
+/** Pcs of a batch waiting for their next stage, produced by `stageName` (per-source bucket). */
+function availFrom(batchOrAny: any, stageName: string): number {
+  return batchAvailableAtSource(batchOrAny, stageByName(stageName).id);
+}
+/** Total pcs of a batch waiting for their next stage (all sources). */
+function availTotal(batchOrAny: any): number {
+  return batchAvailableTotal(batchOrAny);
 }
 
 function material() {
@@ -222,19 +231,30 @@ describe('multi-stage processing engine', () => {
 
     expect(st().processors.find(p => p.name === 'Acid Man')!.balancePayable).toBe(1280);
     expect(inventoryValue()).toBe(300000); // still no double-count
-  });
-
-  // ── TEST E — Spot Machine (final) completes → Finished Goods ────────────────────
+  });  // ── TEST E — Spot Machine (final) completes → Finished Goods ────────────────────
   it('TEST E: completing the final stage produces finished goods exactly once', () => {
     purchase();
+
     const initSend = sendToStage('Initial Processor', 'Initial Processor', 2000, 5, '2026-08-02');
     receiveFromStage(initSend, 'Initial Processor', 'Initial Processor', 2000, '2026-08-03');
 
+    // Movement map: pcs must walk EVERY stage — Initial → Machine → Acid →
+    // Polish → Spot. A direct Initial → Spot dispatch is stage-skipping and
+    // is rejected by the engine.
+    expect(() => sendToStage('Spot Machine', 'Spot Machine Man', 64, 50, '2026-08-04')).toThrow(/available/i);
+
+    const machineSend = sendToStage('Machine', 'Machine Man', 64, 32, '2026-08-04');
+    receiveFromStage(machineSend, 'Machine', 'Machine Man', 64, '2026-08-05');
+    const acidSend = sendToStage('Acid', 'Acid Man', 64, 40, '2026-08-06');
+    receiveFromStage(acidSend, 'Acid', 'Acid Man', 64, '2026-08-07');
+    const polishSend = sendToStage('Polish', 'Polisher', 64, 45, '2026-08-08');
+    receiveFromStage(polishSend, 'Polish', 'Polisher', 64, '2026-08-09');
     const spotSend = sendToStage('Spot Machine', 'Spot Machine Man', 64, 50, '2026-08-10');
     receiveFromStage(spotSend, 'Spot Machine', 'Spot Machine Man', 64, '2026-08-11');
 
     const stages = InventoryCalculationService.getMaterialStageValues(material().id, st().batches);
     expect(material().processedStockPcs).toBe(64);
+    // Pipeline semantics: the other 1936 pcs wait mid-chain — still counted.
     expect(material().atProcessorPcs).toBe(2000 - 64);
     expect(stages.finished.value).toBe(64 * 150); // 9,600
     expect(stages.atProcessor.value).toBe((2000 - 64) * 150); // 290,400
@@ -263,7 +283,8 @@ describe('multi-stage processing engine', () => {
     purchase();
     sendToStage('Initial Processor', 'Initial Processor', 100, 5, '2026-08-02');
     const sendId = st().processingSends[0].id;
-    receiveFromStage(sendId, 'Initial Processor', 'Initial Processor', 101, '2026-08-03');
+    // Guards are LOUD: the rejection throws so no silent no-op can hide it.
+    expect(() => receiveFromStage(sendId, 'Initial Processor', 'Initial Processor', 101, '2026-08-03')).toThrow(/pending/i);
 
     expect(st().processingReceipts.length).toBe(0); // rejected
     expect(material().processedStockPcs).toBe(0);
@@ -273,7 +294,7 @@ describe('multi-stage processing engine', () => {
   it('TEST H: over-send (51 > 50 available) is rejected by the store', () => {
     const s = st();
     s.addPurchase({ supplierId: s.suppliers[0].id, materialId: s.materials[0].id, date: '2026-08-01', weight: 25, weightUnit: 'KGs', ratePerUnit: 300, weightPerPiece: 0.5 } as any); // 50 pcs
-    sendToStage('Initial Processor', 'Initial Processor', 51, 5, '2026-08-02');
+    expect(() => sendToStage('Initial Processor', 'Initial Processor', 51, 5, '2026-08-02')).toThrow(/available/i);
 
     expect(st().processingSends.length).toBe(0); // rejected
     expect(material().stockPcs).toBe(50);
@@ -285,11 +306,13 @@ describe('multi-stage processing engine', () => {
     sendToStage('Initial Processor', 'Initial Processor', 100, 5, '2026-08-02');
     const sendId = st().processingSends[0].id;
     receiveFromStage(sendId, 'Initial Processor', 'Initial Processor', 100, '2026-08-03');
-    // Second receipt of the same 100 pcs → pending is now 0 → rejected
-    receiveFromStage(sendId, 'Initial Processor', 'Initial Processor', 100, '2026-08-04');
+    // Second receipt of the same 100 pcs → pending is now 0 → rejected loudly
+    expect(() => receiveFromStage(sendId, 'Initial Processor', 'Initial Processor', 100, '2026-08-04')).toThrow(/received|pending/i);
 
     expect(st().processingReceipts.length).toBe(1);
-    expect(material().atProcessorPcs).toBe(100); // non-final: still held in WIP
+    // Pipeline semantics: the 100 pcs left the processor but WAIT for the
+    // next stage — still counted in the pipeline.
+    expect(material().atProcessorPcs).toBe(100);
     expect(material().processedStockPcs).toBe(0);
   });
 
@@ -302,8 +325,8 @@ describe('multi-stage processing engine', () => {
 
     const receiptId = st().processingReceipts[0].id;
     st().addProcessorBill({ processorId: processorByName('Initial Processor'), date: '2026-08-04', receiptIds: [receiptId] } as any);
-    // Second bill on the same receipt → rejected
-    st().addProcessorBill({ processorId: processorByName('Initial Processor'), date: '2026-08-05', receiptIds: [receiptId] } as any);
+    // Second bill on the same receipt → rejected loudly
+    expect(() => st().addProcessorBill({ processorId: processorByName('Initial Processor'), date: '2026-08-05', receiptIds: [receiptId] } as any)).toThrow(/already billed/i);
 
     expect(st().processorBills.length).toBe(1);
     expect(st().processors.find(p => p.name === 'Initial Processor')!.balancePayable).toBe(500); // 100 pcs × 5
@@ -331,12 +354,16 @@ describe('multi-stage processing engine', () => {
     // the receipt (WIP→WIP) — only the final stage would produce finished.
     const migrated = migrateERPState(snapshot as any);
     expect(migrated.processingStages.length).toBe(5);
-    expect(migrated.batches[0].atProcessorPcs).toBe(2000);
+    // Non-final receipt: pcs wait in the Initial availability bucket (disjoint
+    // from the at-processor bucket, which is empty).
+    expect(migrated.batches[0].atProcessorPcs).toBe(0);
+    expect(availFrom(migrated.batches[0], 'Initial Processor')).toBe(2000);
     expect(migrated.batches[0].processedPcs).toBe(0);
     expect(migrated.vouchers.length).toBe(before.vouchers.length);
     // Idempotent: running twice yields the same trail
     const migrated2 = migrateERPState(migrated as any);
-    expect(migrated2.batches[0].atProcessorPcs).toBe(2000);
+    expect(migrated2.batches[0].atProcessorPcs).toBe(0);
+    expect(availFrom(migrated2.batches[0], 'Initial Processor')).toBe(2000);
     expect(migrated2.batches[0].processedPcs).toBe(0);
     expect(migrated2.processingStages.length).toBe(5);
   });
@@ -400,7 +427,7 @@ describe('multi-stage processing engine', () => {
     receiveFromStage(initSend, 'Initial Processor', 'Initial Processor', 2000, '2026-08-03');
     const s = st();
     const batch = s.batches[0];
-    expect(batch.stageAvailablePcs).toBe(2000); // available at Initial → Machine
+    expect(availFrom(batch, 'Initial Processor')).toBe(2000); // available at Initial → Machine
 
     // Send 500 to Machine WITHOUT choosing a batch (Auto / Any Batch path).
     s.addProcessingSend({
@@ -414,7 +441,7 @@ describe('multi-stage processing engine', () => {
 
     const after = st();
     // The dispatch was attributed to the batch (FIFO) — availability dropped.
-    expect(after.batches[0].stageAvailablePcs).toBe(1500);
+    expect(availFrom(after.batches[0], 'Initial Processor')).toBe(1500);
     // Multi-position truth: 1500 pcs still wait at Initial, so the batch is
     // NOT relabeled to Machine — a partial dispatch must not mislabel the pcs
     // still available at the source stage (they remain sendable to Machine).
@@ -434,7 +461,7 @@ describe('multi-stage processing engine', () => {
       stageId: stageByName('Machine').id,
     } as any);
     const drained = st();
-    expect(drained.batches[0].stageAvailablePcs).toBe(0);
+    expect(availFrom(drained.batches[0], 'Initial Processor')).toBe(0);
     // …and once fully drained the batch advances to the dispatched stage.
     expect(drained.batches[0].currentStageId).toBe(stageByName('Machine').id);
     expect(drained.processingSends).toHaveLength(3); // init + 500 + 1500
@@ -445,16 +472,18 @@ describe('multi-stage processing engine', () => {
     const initSend = sendToStage('Initial Processor', 'Initial Processor', 2000, 5, '2026-08-02');
     receiveFromStage(initSend, 'Initial Processor', 'Initial Processor', 2000, '2026-08-03');
     const before = st().processingSends.length;
-    st().addProcessingSend({
-      processorId: processorByName('Machine Man'),
-      materialId: st().materials[0].id,
-      date: '2026-08-04',
-      pcsSent: 2500, // more than the 2000 available
-      ratePerPiece: 32,
-      stageId: stageByName('Machine').id,
-    } as any);
+    expect(() =>
+      st().addProcessingSend({
+        processorId: processorByName('Machine Man'),
+        materialId: st().materials[0].id,
+        date: '2026-08-04',
+        pcsSent: 2500, // more than the 2000 available
+        ratePerPiece: 32,
+        stageId: stageByName('Machine').id,
+      } as any)
+    ).toThrow(/available/i);
     expect(st().processingSends.length).toBe(before); // rejected
-    expect(st().batches[0].stageAvailablePcs).toBe(2000);
+    expect(availFrom(st().batches[0], 'Initial Processor')).toBe(2000);
   });
 
   // ── TEST O — Bill line-level rate override (finalize at bill time) ───────
@@ -501,7 +530,7 @@ describe('multi-stage processing engine', () => {
     const liveBatch = st().batches[0];
     // Live engine: batch stays at Initial after the receipt; 2000 available for Machine.
     expect(liveBatch.currentStageId).toBe(stageByName('Initial Processor').id);
-    expect(liveBatch.stageAvailablePcs).toBe(2000);
+    expect(availFrom(liveBatch, 'Initial Processor')).toBe(2000);
 
     const before = st();
     const snapshot = JSON.parse(JSON.stringify({
@@ -516,8 +545,8 @@ describe('multi-stage processing engine', () => {
     const replayedBatch = migrated.batches.find((b: any) => b.id === liveBatch.id);
     // Migration replay agrees with the live engine — no stage advancement.
     expect(replayedBatch.currentStageId).toBe(stageByName('Initial Processor').id);
-    expect(replayedBatch.stageAvailablePcs).toBe(2000);
-    expect(replayedBatch.atProcessorPcs).toBe(2000);
+    expect(availFrom(replayedBatch, 'Initial Processor')).toBe(2000);
+    expect(replayedBatch.atProcessorPcs).toBe(0);
     expect(replayedBatch.processedPcs).toBe(0);
   });
 
@@ -563,13 +592,12 @@ describe('multi-stage processing engine', () => {
     st().addProcessorBill({ processorId: receipt.processorId, date: '2026-08-12', receiptIds: [receipt.id] } as any);
 
     const b = st().batches[0];
-    // Batch holds 1000 raw and 1000 WIP simultaneously (multi-position): the
-    // dispatch FIFO consumed 1000 from remainingPcs (the raw bucket), the
-    // receipt made those 1000 available for the NEXT stage.
-    // simultaneously (multi-position). atProcessorPcs is the WIP marker; the
-    // receipt made those 1000 available for the NEXT stage.
-    expect(b.atProcessorPcs).toBe(1000);
-    expect(b.stageAvailablePcs).toBe(1000);
+    // Batch holds 1000 raw and 1000 waiting simultaneously (multi-position):
+    // the dispatch FIFO consumed 1000 from remainingPcs (the raw bucket), the
+    // receipt moved those 1000 into the Initial availability bucket. The WIP
+    // bucket is empty — the pcs WAIT, they are not at a processor.
+    expect(b.atProcessorPcs).toBe(0);
+    expect(availFrom(b, 'Initial Processor')).toBe(1000);
     expect(b.remainingPcs).toBe(1000); // the raw bucket
     // …and the raw remainder is still derivable.
     expect(InventoryCalculationService.batchRawAvailable(b)).toBe(1000);
@@ -590,7 +618,9 @@ describe('multi-stage processing engine', () => {
     expect(InventoryCalculationService.batchRawAvailable(after.batches[0])).toBe(0);
     // With nothing raw left, the batch advances to the dispatched stage.
     expect(after.batches[0].currentStageId).toBe(stageByName('Initial Processor').id);
-    expect(after.batches[0].atProcessorPcs).toBe(2000);
+    // Pipeline: the first 1000 wait at Initial, the new 1000 are at the processor.
+    expect(after.batches[0].atProcessorPcs).toBe(1000);
+    expect(availFrom(after.batches[0], 'Initial Processor')).toBe(1000);
     // Raw stage value left the books, WIP carries it — total untouched.
     expect(inventoryValue()).toBe(300000);
   });
@@ -608,17 +638,20 @@ describe('multi-stage processing engine', () => {
     receiveFromStage(init, 'Initial Processor', 'Initial Processor', 200, '2026-08-03');
 
     const before = st().processingSends.length;
-    // Wrong stage: the Acid worker cannot take a MACHINE dispatch.
-    st().addProcessingSend({
-      processorId: acidWorker.id,
-      materialId: st().materials[0].id,
-      date: '2026-08-04',
-      pcsSent: 200,
-      ratePerPiece: 40,
-      stageId: stageByName('Machine').id,
-    } as any);
+    // Wrong stage: the Acid worker cannot take a MACHINE dispatch — rejected
+    // loudly by the worker-stage guard before any bucket moves.
+    expect(() =>
+      st().addProcessingSend({
+        processorId: acidWorker.id,
+        materialId: st().materials[0].id,
+        date: '2026-08-04',
+        pcsSent: 200,
+        ratePerPiece: 40,
+        stageId: stageByName('Machine').id,
+      } as any)
+    ).toThrow(/does not work/i);
     expect(st().processingSends.length).toBe(before); // rejected by the store
-    expect(st().batches[0].stageAvailablePcs).toBe(200); // untouched
+    expect(availFrom(st().batches[0], 'Initial Processor')).toBe(200); // untouched
 
     // General worker (no stage assignment) CAN take the Machine dispatch.
     st().addProcessingSend({
@@ -630,7 +663,7 @@ describe('multi-stage processing engine', () => {
       stageId: stageByName('Machine').id,
     } as any);
     expect(st().processingSends.length).toBe(before + 1);
-    expect(st().batches[0].stageAvailablePcs).toBe(100);
+    expect(availFrom(st().batches[0], 'Initial Processor')).toBe(100);
   });
 
     // -- TEST U: Raw remainder + received pcs coexist (user scenario: 3700 sent to Initial, 93 raw left, 3700 received back) --
@@ -641,8 +674,7 @@ describe('multi-stage processing engine', () => {
     receiveFromStage(initSend, "Initial Processor", "Initial Processor", 1500, "2026-08-03");
     // 500 raw still in the batch (never dispatched)
     expect(InventoryCalculationService.batchRawAvailable(st().batches[0])).toBe(500);
-    expect(st().batches[0].stageAvailablePcs).toBe(1500);
-    expect(st().batches[0].availableFromStageId).toBe(stageByName("Initial Processor").id);
+    expect(availFrom(st().batches[0], "Initial Processor")).toBe(1500);
     // Send the 1500 received pcs to Machine Man — must succeed despite raw remainder.
     st().addProcessingSend({
       processorId: processorByName("Machine Man"),
@@ -654,7 +686,7 @@ describe('multi-stage processing engine', () => {
     } as any);
     const after = st();
     expect(after.processingSends).toHaveLength(2);
-    expect(after.batches[0].stageAvailablePcs).toBe(0);
+    expect(availFrom(after.batches[0], "Initial Processor")).toBe(0);
     // Raw remainder is untouched and still sendable to Initial.
     expect(InventoryCalculationService.batchRawAvailable(after.batches[0])).toBe(500);
     // And the raw remainder can actually be dispatched to Initial.
@@ -681,8 +713,7 @@ describe('multi-stage processing engine', () => {
     // Receive only 1500 back (500 still pending)
     receiveFromStage(initSend, "Initial Processor", "Initial Processor", 1500, "2026-08-03");
     const batch = st().batches[0];
-    expect(batch.stageAvailablePcs).toBe(1500);
-    expect(batch.availableFromStageId).toBe(stageByName("Initial Processor").id);
+    expect(availFrom(batch, "Initial Processor")).toBe(1500);
     // Send 1500 to Machine Man
     st().addProcessingSend({
       processorId: processorByName("Machine Man"),
@@ -693,14 +724,13 @@ describe('multi-stage processing engine', () => {
       stageId: stageByName("Machine").id,
     } as any);
     const afterFirst = st();
-    expect(afterFirst.batches[0].stageAvailablePcs).toBe(0);
+    expect(availFrom(afterFirst.batches[0], "Initial Processor")).toBe(0);
     expect(afterFirst.batches[0].currentStageId).toBe(stageByName("Machine").id);
-    expect(afterFirst.batches[0].availableFromStageId).toBeUndefined();
-    // Late 500 return from Initial Processor
+    // Late 500 return from Initial Processor lands in its OWN per-source
+    // bucket — it can never merge with the 1500 already dispatched onward.
     receiveFromStage(initSend, "Initial Processor", "Initial Processor", 500, "2026-08-05");
     const afterLate = st();
-    expect(afterLate.batches[0].stageAvailablePcs).toBe(500);
-    expect(afterLate.batches[0].availableFromStageId).toBe(stageByName("Initial Processor").id);
+    expect(availFrom(afterLate.batches[0], "Initial Processor")).toBe(500);
     // The 500 CAN be sent to Machine Man (not Acid Man)
     st().addProcessingSend({
       processorId: processorByName("Machine Man"),
@@ -712,9 +742,198 @@ describe('multi-stage processing engine', () => {
     } as any);
     const afterSecond = st();
     expect(afterSecond.processingSends).toHaveLength(3); // init + 1500 + 500
-    expect(afterSecond.batches[0].stageAvailablePcs).toBe(0);
+    expect(availFrom(afterSecond.batches[0], "Initial Processor")).toBe(0);
     expect(afterSecond.batches[0].currentStageId).toBe(stageByName("Machine").id);
-    expect(afterSecond.batches[0].availableFromStageId).toBeUndefined();
     expect(inventoryValue()).toBe(300000);
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // MASTER-PROMPT PROOF §7 — the 561-pcs scenario, bucket state printed
+  // after every step. TOTAL must equal 561 in EVERY row; no number may ever
+  // exceed 561. (561 pcs = 280.5 KG @ 300/KG.)
+  // ═══════════════════════════════════════════════════════════════════════
+  it('PROOF §7: the 561-pcs master-prompt scenario conserves every bucket at every step', () => {
+    const s0 = st();
+    s0.addPurchase({ supplierId: s0.suppliers[0].id, materialId: s0.materials[0].id, date: '2026-09-01', weight: 280.5, weightUnit: 'KGs', ratePerUnit: 300, weightPerPiece: 0.5 } as any); // 561 pcs
+    const B = () => st().batches[0];
+    const TOTAL = () => batchTotalPcs(B());
+    const row = (label: string, raw: number, atIni: number, pendM: number, atM: number, pendA: number) => {
+      // eslint-disable-next-line no-console
+      console.log(`  ${label.padEnd(28)} RAW=${raw} AT_INI=${atIni} PEND_M=${pendM} AT_M=${atM} PEND_A=${pendA} TOTAL=${TOTAL()}`);
+      expect(TOTAL()).toBe(561); // LAW 3 at every step
+    };
+    const wipAt = (stageName: string) => InventoryCalculationService.getStageWIP(stageByName(stageName).id, st().processingSends, st().processingReceipts);
+
+    row('0 start', B().remainingPcs, wipAt('Initial Processor'), availFrom(B(), 'Initial Processor'), wipAt('Machine'), availFrom(B(), 'Machine'));
+    expect(B().remainingPcs).toBe(561);
+
+    // 1. SEND 400 INITIAL
+    const t1 = sendToStage('Initial Processor', 'Initial Processor', 400, 5, '2026-09-02');
+    row('1 SEND 400 INITIAL', B().remainingPcs, wipAt('Initial Processor'), availFrom(B(), 'Initial Processor'), wipAt('Machine'), availFrom(B(), 'Machine'));
+    expect(B().remainingPcs).toBe(161);
+    expect(wipAt('Initial Processor')).toBe(400);
+
+    // 2. RECV 400 INITIAL
+    receiveFromStage(t1!, 'Initial Processor', 'Initial Processor', 400, '2026-09-03');
+    row('2 RECV 400 INITIAL', B().remainingPcs, wipAt('Initial Processor'), availFrom(B(), 'Initial Processor'), wipAt('Machine'), availFrom(B(), 'Machine'));
+    expect(availFrom(B(), 'Initial Processor')).toBe(400);
+
+    // 3. BILL txn#1 — no qty change; and a second bill is rejected (§6e)
+    const r1 = st().processingReceipts.find(r => r.sendId === t1)!.id;
+    st().addProcessorBill({ processorId: processorByName('Initial Processor'), date: '2026-09-03', receiptIds: [r1] } as any);
+    expect(st().processorBills).toHaveLength(1);
+    expect(st().processors.find(p => p.name === 'Initial Processor')!.balancePayable).toBe(2000); // 400 × 5
+    expect(() => st().addProcessorBill({ processorId: processorByName('Initial Processor'), date: '2026-09-03', receiptIds: [r1] } as any)).toThrow();
+    expect(st().processorBills).toHaveLength(1);
+    row('3 BILL txn#1', B().remainingPcs, wipAt('Initial Processor'), availFrom(B(), 'Initial Processor'), wipAt('Machine'), availFrom(B(), 'Machine'));
+
+    // 4. SEND 400 MACHINE
+    const t2 = sendToStage('Machine', 'Machine Man', 400, 32, '2026-09-04');
+    row('4 SEND 400 MACHINE', B().remainingPcs, wipAt('Initial Processor'), availFrom(B(), 'Initial Processor'), wipAt('Machine'), availFrom(B(), 'Machine'));
+    expect(availFrom(B(), 'Initial Processor')).toBe(0);
+    expect(wipAt('Machine')).toBe(400);
+
+    // 5. SEND 161 INITIAL (new txn) — AT_MACHINE must remain 400, untouched.
+    const t3 = sendToStage('Initial Processor', 'Initial Processor', 161, 5, '2026-09-05');
+    row('5 SEND 161 INITIAL', B().remainingPcs, wipAt('Initial Processor'), availFrom(B(), 'Initial Processor'), wipAt('Machine'), availFrom(B(), 'Machine'));
+    expect(B().remainingPcs).toBe(0);
+    expect(wipAt('Initial Processor')).toBe(161);
+    expect(wipAt('Machine')).toBe(400); // CRITICAL: untouched
+    // Nothing may show 800/861/961:
+    expect(batchTotalPcs(B())).toBe(561);
+
+    // 6. RECV 400 MACHINE
+    receiveFromStage(t2!, 'Machine', 'Machine Man', 400, '2026-09-06');
+    row('6 RECV 400 MACHINE', B().remainingPcs, wipAt('Initial Processor'), availFrom(B(), 'Initial Processor'), wipAt('Machine'), availFrom(B(), 'Machine'));
+    expect(availFrom(B(), 'Machine')).toBe(400);
+
+    // 7. RECV 161 INITIAL
+    receiveFromStage(t3!, 'Initial Processor', 'Initial Processor', 161, '2026-09-07');
+    row('7 RECV 161 INITIAL', B().remainingPcs, wipAt('Initial Processor'), availFrom(B(), 'Initial Processor'), wipAt('Machine'), availFrom(B(), 'Machine'));
+    expect(availFrom(B(), 'Initial Processor')).toBe(161);
+    expect(availFrom(B(), 'Machine')).toBe(400); // coexists per-source
+
+    // 8. SEND 161 MACHINE — draws ONLY from the Initial bucket; the 400
+    //    waiting for Acid is untouched.
+    const t4 = sendToStage('Machine', 'Machine Man', 161, 32, '2026-09-08');
+    row('8 SEND 161 MACHINE', B().remainingPcs, wipAt('Initial Processor'), availFrom(B(), 'Initial Processor'), wipAt('Machine'), availFrom(B(), 'Machine'));
+    expect(availFrom(B(), 'Initial Processor')).toBe(0);
+    expect(availFrom(B(), 'Machine')).toBe(400);
+    expect(wipAt('Machine')).toBe(161); // 400+161 sent − 400 received
+
+    // 9. ACID → POLISH → SPOT identically for both tracks (561 total).
+    receiveFromStage(t4!, 'Machine', 'Machine Man', 161, '2026-09-09');
+    expect(availFrom(B(), 'Machine')).toBe(561);
+    const t5 = sendToStage('Acid', 'Acid Man', 561, 40, '2026-09-10');
+    receiveFromStage(t5!, 'Acid', 'Acid Man', 561, '2026-09-11');
+    expect(availFrom(B(), 'Acid')).toBe(561);
+    const t6 = sendToStage('Polish', 'Polisher', 561, 45, '2026-09-12');
+    receiveFromStage(t6!, 'Polish', 'Polisher', 561, '2026-09-13');
+    expect(availFrom(B(), 'Polish')).toBe(561);
+    const t7 = sendToStage('Spot Machine', 'Spot Machine Man', 561, 50, '2026-09-14');
+    receiveFromStage(t7!, 'Spot Machine', 'Spot Machine Man', 561, '2026-09-15');
+
+    // FINAL: FINISHED = 561, every other bucket = 0.
+    expect(B().processedPcs).toBe(561);
+    expect(material().processedStockPcs).toBe(561);
+    expect(B().remainingPcs).toBe(0);
+    expect(B().atProcessorPcs).toBe(0);
+    expect(availTotal(B())).toBe(0);
+    expect(batchTotalPcs(B())).toBe(561);
+    expect(inventoryValue()).toBe(561 * 150); // 84,150 = the full purchase cost, still held in finished goods
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // USER SCENARIO — 600 pcs through Initial→Machine, then 100 raw through
+  // Initial. The 600 waiting for Acid and the 100 waiting for Machine are
+  // SEPARATE per-source buckets: the 100 go to Machine, the 600 go to Acid,
+  // and the 600 are NEVER re-offered to Machine Man.
+  // ═══════════════════════════════════════════════════════════════════════
+  it('PROOF dual-track: 600-from-Machine and 100-from-Initial coexist; the 600 are never re-processed at Machine', () => {
+    const s0 = st();
+    s0.addPurchase({ supplierId: s0.suppliers[0].id, materialId: s0.materials[0].id, date: '2026-09-01', weight: 350, weightUnit: 'KGs', ratePerUnit: 300, weightPerPiece: 0.5 } as any); // 700 pcs
+    const B = () => st().batches[0];
+    const TOTAL = () => batchTotalPcs(B());
+    expect(TOTAL()).toBe(700);
+
+    // 600 raw → Initial → back → Machine → back (waiting for Acid)
+    const s1 = sendToStage('Initial Processor', 'Initial Processor', 600, 5, '2026-09-02');
+    receiveFromStage(s1!, 'Initial Processor', 'Initial Processor', 600, '2026-09-03');
+    const s2 = sendToStage('Machine', 'Machine Man', 600, 32, '2026-09-04');
+    receiveFromStage(s2!, 'Machine', 'Machine Man', 600, '2026-09-05');
+    expect(availFrom(B(), 'Machine')).toBe(600);
+    expect(availFrom(B(), 'Initial Processor')).toBe(0);
+
+    // 100 raw → Initial → back (waiting for Machine)
+    const s3 = sendToStage('Initial Processor', 'Initial Processor', 100, 5, '2026-09-06');
+    receiveFromStage(s3!, 'Initial Processor', 'Initial Processor', 100, '2026-09-07');
+
+    // THE COLLAPSE BUG: the two tracks must NOT merge into 700 "from Initial".
+    expect(availFrom(B(), 'Initial Processor')).toBe(100);
+    expect(availFrom(B(), 'Machine')).toBe(600);
+    expect(availTotal(B())).toBe(700);
+    expect(TOTAL()).toBe(700);
+
+    // The 600 that already passed Machine are NOT re-offered to Machine Man.
+    expect(() => sendToStage('Machine', 'Machine Man', 600, 32, '2026-09-08')).toThrow(/available/i);
+    // The 100 CAN go to Machine — and it draws only the Initial bucket.
+    const s4 = sendToStage('Machine', 'Machine Man', 100, 32, '2026-09-08');
+    expect(s4).toBeTruthy();
+    expect(availFrom(B(), 'Initial Processor')).toBe(0);
+    expect(availFrom(B(), 'Machine')).toBe(600); // untouched
+    // …and an attempt to over-draw the Acid input (700 > 600) is rejected.
+    expect(() => sendToStage('Acid', 'Acid Man', 700, 40, '2026-09-09')).toThrow(/available/i);
+
+    // Both tracks legitimately merge only at the ACID input (all 700 have
+    // passed Machine): receive the 100 from Machine, then 700 → Acid.
+    receiveFromStage(s4!, 'Machine', 'Machine Man', 100, '2026-09-09');
+    expect(availFrom(B(), 'Machine')).toBe(700);
+    const s5 = sendToStage('Acid', 'Acid Man', 700, 40, '2026-09-10');
+    receiveFromStage(s5!, 'Acid', 'Acid Man', 700, '2026-09-11');
+    expect(availFrom(B(), 'Acid')).toBe(700);
+    expect(TOTAL()).toBe(700);
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // VALIDATIONS §6 (a–g) — every guard fires loudly.
+  // ═══════════════════════════════════════════════════════════════════════
+  it('PROOF validations: zero/negative qty, stage-skip, over-send, over-receipt, duplicate receipt, double bill all rejected', () => {
+    const s0 = st();
+    s0.addPurchase({ supplierId: s0.suppliers[0].id, materialId: s0.materials[0].id, date: '2026-09-01', weight: 280.5, weightUnit: 'KGs', ratePerUnit: 300, weightPerPiece: 0.5 } as any); // 561 pcs
+
+    // (f) zero / negative quantity
+    expect(() => sendToStage('Initial Processor', 'Initial Processor', 0, 5, '2026-09-02')).toThrow();
+    expect(() => sendToStage('Initial Processor', 'Initial Processor', -5, 5, '2026-09-02')).toThrow();
+    expect(st().processingSends).toHaveLength(0);
+
+    // (a) over-send beyond the input bucket
+    expect(() => sendToStage('Initial Processor', 'Initial Processor', 562, 5, '2026-09-02')).toThrow(/available/i);
+
+    const t1 = sendToStage('Initial Processor', 'Initial Processor', 400, 5, '2026-09-02');
+    receiveFromStage(t1!, 'Initial Processor', 'Initial Processor', 400, '2026-09-03');
+
+    // (b) stage-skipping: nothing has passed Machine, so Acid/Polish/Spot reject.
+    expect(() => sendToStage('Acid', 'Acid Man', 100, 40, '2026-09-04')).toThrow();
+    expect(() => sendToStage('Spot Machine', 'Spot Machine Man', 100, 50, '2026-09-04')).toThrow();
+
+    const t2 = sendToStage('Machine', 'Machine Man', 100, 32, '2026-09-04');
+
+    // (c) over-receipt against a dispatch's pending qty
+    expect(() => receiveFromStage(t2!, 'Machine', 'Machine Man', 101, '2026-09-05')).toThrow(/pending/i);
+    // (d) zero/negative receipt
+    expect(() => receiveFromStage(t2!, 'Machine', 'Machine Man', 0, '2026-09-05')).toThrow();
+
+    receiveFromStage(t2!, 'Machine', 'Machine Man', 100, '2026-09-05');
+    // (d) duplicate receipt on a fully received dispatch
+    expect(() => receiveFromStage(t2!, 'Machine', 'Machine Man', 1, '2026-09-06')).toThrow(/received|pending/i);
+
+    // (e) double bill on the same receipt
+    const r2 = st().processingReceipts.find(r => r.sendId === t2)!.id;
+    st().addProcessorBill({ processorId: processorByName('Machine Man'), date: '2026-09-06', receiptIds: [r2] } as any);
+    expect(() => st().addProcessorBill({ processorId: processorByName('Machine Man'), date: '2026-09-06', receiptIds: [r2] } as any)).toThrow();
+
+    // (g) Law 3 is enforced inside every handler (assertConservation); the
+    // per-step TOTAL checks in the 561 proof above demonstrate it live.
+    expect(batchTotalPcs(st().batches[0])).toBe(561);
   });
 });

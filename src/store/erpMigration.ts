@@ -173,154 +173,42 @@ export function migrateERPState(state: any): any {
 
   let migratedBatches = batches;
   if (batches.length > 0) {
-    // Reset every batch to its purchase baseline (all pcs in the raw stage).
-    let trail: any[] = batches.map((b: any) => ({
-      ...b,
-      remainingPcs: b.initialPcs > 0 ? b.initialPcs : b.remainingPcs,
-      atProcessorPcs: 0,
-      processedPcs: 0,
-      stageAvailablePcs: 0,
-      currentStageId: undefined,
-      availableFromStageId: undefined,
-    }));
-
-    // Dispatches: stage-1 / legacy draws raw → WIP. Intermediate-stage
-    // dispatches are WIP → WIP and do not touch the batch buckets.
-    const orderedSends = [...sends]
-      .filter((s: any) => s.status !== 'Adjusted' && (s.pcsSent || 0) > 0)
-      .sort((a: any, b: any) => (a.date || '').localeCompare(b.date || ''));
-    for (const s of orderedSends) {
-      if (!InventoryCalculationService.sendConsumesRaw(s.stageId, processingStages)) continue;
-      const attributed = InventoryCalculationService.attributeDispatchFIFO(
-        s.materialId,
-        s.pcsSent,
-        trail as any,
-        s.batchId || undefined
-      );
-      trail = attributed.batches;
-      // Mark the consumed batch(es) as being at the dispatched stage — matches
-      // the live engine so currentStageId is replay-consistent. A batch with
-      // pcs still never-dispatched (raw remainder) keeps its raw bucket
-      // sendable: advance only when nothing raw is left (multi-position truth).
-      const used = new Set(attributed.usedBatchIds);
-      trail = trail.map((b: any) => {
-        if (!used.has(b.id) || !s.stageId) return b;
-        const rawLeft = InventoryCalculationService.batchRawAvailable(b);
-        return rawLeft > 0 ? b : { ...b, currentStageId: s.stageId };
-      });
-    }
-
-    // Recorded losses: WIP −= loss (FIFO, preferring the dispatch's batch).
-    for (const s of orderedSends) {
-      if (!(s.lossQuantity || 0)) continue;
-      if (!InventoryCalculationService.sendConsumesRaw(s.stageId, processingStages)) continue;
-      trail = InventoryCalculationService.attributeLossFIFO(
-        s.materialId,
-        s.lossQuantity || 0,
-        trail as any,
-        s.batchId || undefined
+    // Replay each material's full trail through the SAME bucket engine the
+    // live handlers use (disjoint per-source availability, movement-map
+    // enforced, conservation-checked). One code path for startup migration,
+    // edits, and deletes — replay is consistent by construction.
+    let trail: any[] = batches;
+    const materialIds = [...new Set(batches.map((b: any) => String(b.materialId)))];
+    for (const mid of materialIds as string[]) {
+      trail = InventoryCalculationService.recomputeFinishedPcsForMaterial(
+        String(mid),
+        trail,
+        receipts,
+        sends,
+        salesArr,
+        products,
+        undefined,
+        processingStages
       );
     }
-
-    // Receipts: final-stage / legacy → WIP to finished (prefer the send's
-    // batch). Intermediate receipts are WIP → WIP and do not touch buckets.
-    const orderedReceipts = [...receipts]
-      .filter((r: any) => (r.pcsReceived || 0) > 0)
-      .sort((a: any, b: any) => (a.date || '').localeCompare(b.date || ''));
-    for (const r of orderedReceipts) {
-      const send = sends.find((x: any) => x.id === r.sendId);
-      const stageId = r.stageId ?? send?.stageId;
-      if (!InventoryCalculationService.receiptProducesFinished(stageId, processingStages)) continue;
-      trail = InventoryCalculationService.attributeReceiptFIFO(
-        r.materialId,
-        r.pcsReceived,
-        trail as any,
-        send?.batchId || undefined
-      );
-    }
-
-    // Intermediate sends and non-final receipts are replayed together in
-    // chronological order so stageAvailablePcs / currentStageId stay exactly
-    // replay-consistent with the live engine (the same economic pcs relocated):
-    //   - an intermediate send consumes stageAvailablePcs (explicit batch or
-    //     FIFO across the source stage) and advances currentStageId to the
-    //     target stage;
-    //   - a non-final receipt adds to stageAvailablePcs WITHOUT advancing
-    //     currentStageId (the batch stays at the stage it was dispatched to —
-    //     the send handler advances it when the pcs actually move on).
-    const stageEvents = [
-      ...orderedSends
-        .filter((s: any) => !InventoryCalculationService.sendConsumesRaw(s.stageId, processingStages))
-        .map((s: any) => ({ kind: 'send' as const, date: s.date || '', s })),
-      ...orderedReceipts
-        .filter((r: any) => {
-          const send = sends.find((x: any) => x.id === r.sendId);
-          return !InventoryCalculationService.receiptProducesFinished(r.stageId ?? send?.stageId, processingStages);
-        })
-        .map((r: any) => ({ kind: 'receipt' as const, date: r.date || '', r })),
-    ].sort((a: any, b: any) => a.date.localeCompare(b.date));
-
-    for (const ev of stageEvents) {
-      if (ev.kind === 'send') {
-        const s = ev.s;
-        if (s.batchId) {
-          trail = trail.map((b: any) => {
-            if (b.id !== s.batchId) return b;
-            const newAvail = Math.max(0, (b.stageAvailablePcs || 0) - (s.pcsSent || 0));
-            return {
-              ...b,
-              stageAvailablePcs: newAvail,
-              // Matches the live engine: advance currentStageId only when every
-              // available pc moved on (multi-position truth on partial sends).
-              currentStageId: newAvail <= 0
-                ? (s.stageId || b.currentStageId)
-                : b.currentStageId,
-              // Clear available-from tracking when fully consumed
-              availableFromStageId: newAvail <= 0 ? undefined : b.availableFromStageId,
-            };
-          });
-        } else {
-          const attributed = InventoryCalculationService.attributeStageDispatchFIFO(
-            s.materialId,
-            s.pcsSent || 0,
-            s.stageId,
-            processingStages,
-            trail as any
-          );
-          trail = attributed.batches;
-        }
-      } else {
-        const r = ev.r;
-        const send = sends.find((x: any) => x.id === r.sendId);
-        if (send?.batchId) {
-          trail = trail.map((b: any) =>
-            b.id === send.batchId
-              ? { ...b, stageAvailablePcs: (b.stageAvailablePcs || 0) + (r.pcsReceived || 0), availableFromStageId: r.stageId ?? send?.stageId }
-              : b
-          );
-        }
-        // Legacy no-batch non-final receipts leave stageAvailablePcs untouched
-        // (mirrors the live engine: no batch → no bucket to accumulate on).
-      }
-    }
-
-
-
-    // Sales: finished → sold consume FIFO per material (same as the engine).
-    const productMaterial = new Map<string, string>(
-      products.map((p: any) => [p.id as string, p.materialId as string])
-    );
-    const orderedSales = [...salesArr]
-      .filter((s: any) => (s.pcsSold || 0) > 0)
-      .sort((a: any, b: any) => (a.date || '').localeCompare(b.date || ''));
-    for (const sale of orderedSales) {
-      const materialId = productMaterial.get(sale.productId);
-      if (!materialId) continue;
-      trail = InventoryCalculationService.consumeFinishedFIFO(materialId, sale.pcsSold, trail as any);
-    }
-
-    migratedBatches = trail;
+    // Scrub the legacy scalar availability fields — the per-source map
+    // (stageAvailableBySource) replaced them and stale values must never
+    // re-enter the store.
+    migratedBatches = trail.map((b: any) => {
+      if (!('stageAvailablePcs' in b) && !('availableFromStageId' in b)) return b;
+      const { stageAvailablePcs: _sap, availableFromStageId: _afs, ...rest } = b;
+      void _sap; void _afs;
+      return rest;
+    });
   }
+
+  // 5b. Re-derive material counters from the rebuilt batch trail — the trail
+  //     is the single source of truth (pipeline semantics: atProcessorPcs
+  //     spans at-processor + waiting buckets). Idempotent.
+  const migratedMaterials = InventoryCalculationService.syncMaterialCounters(
+    Array.isArray(state.materials) ? state.materials : [],
+    migratedBatches
+  );
 
   // 6. Drop legacy parallel trail
   const { ledgerEntries, ...rest } = state;
@@ -330,6 +218,7 @@ export function migrateERPState(state: any): any {
     accounts: migratedAccounts,
     vouchers,
     batches: migratedBatches,
+    materials: migratedMaterials,
     processingStages,
     customers: migratedCustomers,
     suppliers: migratedSuppliers,
