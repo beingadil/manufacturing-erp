@@ -1,20 +1,26 @@
 import type { Batch, ProcessingStage } from '../../types/erp';
-import { InventoryCalculationService } from '../business/InventoryCalculationService';
+import {
+  batchAvailableAtSource,
+  batchAvailableTotal,
+  batchRawAvailableOf,
+  InventoryCalculationService,
+  stageAvailableEntries,
+} from '../business/InventoryCalculationService';
 
 /**
  * Batch-scoped stage progress — the building block for multi-stage display.
  *
- * In a multi-stage system the SAME material's batches sit at DIFFERENT stages
- * simultaneously. Material-level progress (the old UI) collapsed them into one
- * number and silently blocked sending an earlier batch forward. These helpers
- * derive progress per batch from the batch's own stage fields (replay-consistent
- * with the live engine: currentStageId = stage last dispatched to, never advanced
- * by a non-final receipt).
+ * Buckets are DISJOINT (raw / atProcessor / per-source availability / finished),
+ * so any sum of them is the true on-hand total and can never double-count.
+ * A batch is multi-position: its pcs can sit in several buckets at once, and
+ * availability is tracked PER SOURCE STAGE — pcs that came back from Machine
+ * and pcs that came back from Initial coexist as separate entries and can
+ * never merge or mislabel (the 600+100 collapse bug).
  */
 
 export interface BatchStageProgress {
   batch: Batch;
-  /** The stage the batch is currently at (null when raw / not yet dispatched). */
+  /** The stage the batch's dispatched pcs are currently at (null when raw). */
   currentStage: ProcessingStage | null;
   /** Stages strictly before currentStage — completed legs of the chain. */
   completedStages: ProcessingStage[];
@@ -22,11 +28,11 @@ export interface BatchStageProgress {
   nextStage: ProcessingStage | null;
   /** Pcs never dispatched anywhere — sendable to stage 1 at any time. */
   rawPcs: number;
-  /** Pcs available to send to nextStage (received back from currentStage). */
+  /** Pcs waiting for their next stage (all sources combined). */
   availablePcs: number;
-  /** Pcs currently out with a processor (in transit at currentStage). */
+  /** Pcs currently out with a processor. */
   inTransitPcs: number;
-  /** Pcs finished (only non-zero after the final stage completes). */
+  /** Pcs finished (non-zero once the final stage starts completing). */
   finishedPcs: number;
   isRaw: boolean;
   isFinished: boolean;
@@ -38,7 +44,7 @@ export function getSortedStages(stages: ProcessingStage[]): ProcessingStage[] {
   return [...stages].sort((a, b) => a.sequence - b.sequence);
 }
 
-/** Derive one batch's progress from its own stage fields. */
+/** Derive one batch's progress from its own disjoint buckets. */
 export function getBatchStageProgress(
   batch: Batch,
   stages: ProcessingStage[]
@@ -48,33 +54,28 @@ export function getBatchStageProgress(
     ? sorted.find(s => s.id === batch.currentStageId) || null
     : null;
 
-  // A batch is MULTI-POSITION: dispatched pcs sit at currentStageId while pcs
-  // that CAME BACK from a processor sit at availableFromStageId waiting for
-  // the next leg. When pcs are waiting, the ACTIVE position for routing is the
-  // source stage — the next leg is the stage AFTER it (3700 received from
-  // Shape Processor must go to Machine, never back to Shape, even while some
-  // raw pcs remain and currentStageId has not advanced past the source).
-  const sourceStage = batch.availableFromStageId
-    ? sorted.find(s => s.id === batch.availableFromStageId) || null
-    : null;
-  const activeStage = (batch.stageAvailablePcs || 0) > 0 && sourceStage
-    ? sourceStage
-    : currentStage;
+  // Routing position: the source stage of whatever is WAITING (per-source
+  // availability) decides the next leg; when nothing waits, the batch's
+  // current stage does. With multiple sources waiting, the EARLIEST stage in
+  // the chain routes first (its pcs must complete the chain before later
+  // sources' pcs — upstream work always finishes first).
+  const waitingSources = stageAvailableEntries(batch)
+    .map(e => sorted.find(s => s.id === e.stageId))
+    .filter((s): s is ProcessingStage => !!s)
+    .sort((a, b) => a.sequence - b.sequence);
 
-  const completedStages = activeStage
-    ? sorted.filter(s => s.sequence < activeStage.sequence)
-    : [];
-
+  const activeStage = waitingSources[0] || currentStage;
   const nextStage = activeStage
     ? sorted.find(s => s.sequence === activeStage.sequence + 1) || null
     : sorted[0] || null;
 
-  const availablePcs = batch.stageAvailablePcs || 0;
+  const availablePcs = batchAvailableTotal(batch);
   const inTransitPcs = batch.atProcessorPcs || 0;
   const finishedPcs = batch.processedPcs || 0;
-  const rawPcs = InventoryCalculationService.batchRawAvailable(batch);
+  const rawPcs = batchRawAvailableOf(batch);
   const isRaw = !activeStage;
-  const isFinished = !!currentStage?.isFinalStage && inTransitPcs <= 0 && availablePcs <= 0;
+  const isFinished = !!currentStage && !!sorted.find(s => s.id === currentStage.id)?.isFinalStage
+    && inTransitPcs <= 0 && availablePcs <= 0 && rawPcs <= 0;
 
   const lastRelevantSeq = isFinished
     ? (currentStage?.sequence || 0)
@@ -86,7 +87,7 @@ export function getBatchStageProgress(
   return {
     batch,
     currentStage,
-    completedStages,
+    completedStages: activeStage ? sorted.filter(s => s.sequence < activeStage.sequence) : [],
     nextStage,
     availablePcs,
     inTransitPcs,
@@ -115,16 +116,9 @@ export function getMaterialBatchProgress(
 /**
  * True when a dispatch is a candidate for the given target stage.
  *
- * A batch is MULTI-POSITION: its pcs can sit in several stage buckets at once
- * (1100 purchased, 1000 at Machine, 100 still raw). currentStageId describes
- * where the DISPATCHED pcs went — it must never lock the other buckets:
- *  - target stage 1 / legacy: the batch has raw pcs never sent anywhere
- *    (remaining − atProcessor − stageAvailable), OR plain remainingPcs for
- *    legacy batches that predate the stage system;
- *  - intermediate target: the batch holds pcs AVAILABLE at the source stage
- *    (stageAvailablePcs > 0) — regardless of currentStageId, because a second
- *    partial dispatch to a later stage advances currentStageId while earlier
- *    received pcs still wait at the source.
+ * Stage 1 draws the batch's raw pcs (never-dispatched remainder). An
+ * intermediate target is legal ONLY for pcs waiting from that target's
+ * predecessor stage (movement map: stage N's output IS stage N+1's input).
  */
 export function batchCanSendToStage(
   batch: Batch,
@@ -133,13 +127,10 @@ export function batchCanSendToStage(
 ): boolean {
   const sorted = getSortedStages(stages);
   const target = targetStageId ? sorted.find(s => s.id === targetStageId) : undefined;
-
-  const rawPcs = InventoryCalculationService.batchRawAvailable(batch);
-  const legacyRaw = (batch.remainingPcs || 0) > 0
-    && !(batch.atProcessorPcs || 0) && !(batch.stageAvailablePcs || 0);
-
-  if (!target || target.sequence <= 1) return rawPcs > 0 || legacyRaw;
-  return (batch.stageAvailablePcs || 0) > 0;
+  if (!target) return batchRawAvailableOf(batch) > 0;
+  if (target.sequence <= 1) return batchRawAvailableOf(batch) > 0;
+  const requiredSource = InventoryCalculationService.requiredSourceForTarget(target.id, sorted);
+  return batchAvailableAtSource(batch, requiredSource) > 0;
 }
 
 /**

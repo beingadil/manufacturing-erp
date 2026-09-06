@@ -46,7 +46,7 @@ export function RawMaterials() {
     }
 
     if (material.stockPcs > 0 || material.processedStockPcs > 0) {
-      impactDetails.push(`This material currently has stock (${material.stockPcs} PCS) or work-in-progress (${material.processedStockPcs} PCS).`);
+      impactDetails.push(`This material currently has raw stock (${material.stockPcs} PCS) or finished stock (${material.processedStockPcs} PCS).`);
     }
 
     setDeleteDialog({

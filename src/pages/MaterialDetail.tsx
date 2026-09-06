@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
+import { InventoryCalculationService, stageAvailableEntries } from '../lib/business/InventoryCalculationService';
 import { getMaterialBatchProgress, getSortedStages } from '../lib/processing/stageProgress';
 import { cn, formatCurrency, formatNumber } from '../lib/utils';
 import { useERPStore } from '../store/useERPStore';
@@ -92,11 +92,19 @@ export function MaterialDetail() {
       pos.inTransit += p.inTransitPcs;
       pos.available += p.availablePcs;
       pos.finished += p.finishedPcs;
-      if (p.availablePcs > 0 && p.batch.availableFromStageId) {
-        const src = sortedStages.find(s => s.id === p.batch.availableFromStageId);
-        if (src) pos.availableFromStage = src.name;
+    }
+    // Which stage(s) produced the pcs now waiting for their next leg —
+    // availability is PER SOURCE, so multiple producers coexist as
+    // separate buckets and are all named (never merged).
+    const srcNames = new Set<string>();
+    for (const p of batchProgress) {
+      for (const e of stageAvailableEntries(p.batch)) {
+        if (e.pcs <= 0) continue;
+        const src = sortedStages.find(s => s.id === e.stageId);
+        if (src) srcNames.add(src.name);
       }
     }
+    if (srcNames.size > 0) pos.availableFromStage = [...srcNames].join(' + ');
     return pos;
   }, [batchProgress, sortedStages]);
 
@@ -336,10 +344,12 @@ export function MaterialDetail() {
                     materialBatches.map(b => {
                       const prog = batchProgress.find(p => p.batch.id === b.id);
                       const costPcs = InventoryCalculationService.getBatchCostPerPiece(b);
+                      const availPcs = prog?.availablePcs ?? 0;
                       // Everything still on hand for this batch: raw + WIP +
                       // awaiting-next-stage + finished-not-yet-sold (the same
                       // Raw+WIP+Finished basis the Dashboard reconciles on).
-                      const valueOnHand = ((prog?.rawPcs || 0) + (b.atProcessorPcs || 0) + (b.stageAvailablePcs || 0) + (prog?.finishedPcs || 0)) * costPcs;
+                      // Buckets are disjoint, so this sum never double-counts.
+                      const valueOnHand = ((prog?.rawPcs || 0) + (b.atProcessorPcs || 0) + availPcs + (prog?.finishedPcs || 0)) * costPcs;
                       return (
                         <tr key={b.id} className="hover:bg-muted/40 transition-colors">
                           <td className="px-4 py-3 font-medium text-foreground">{b.batchNo}</td>
@@ -347,7 +357,7 @@ export function MaterialDetail() {
                           <td className="px-4 py-3 text-right text-muted-foreground tabular-nums">{formatNumber(b.initialPcs)}</td>
                           <td className="px-4 py-3 text-right font-medium text-foreground tabular-nums">{formatNumber(prog?.rawPcs ?? 0)}</td>
                           <td className="px-4 py-3 text-right text-warning tabular-nums">{formatNumber(b.atProcessorPcs || 0)}</td>
-                          <td className="px-4 py-3 text-right text-info tabular-nums">{formatNumber(b.stageAvailablePcs || 0)}</td>
+                          <td className="px-4 py-3 text-right text-info tabular-nums">{formatNumber(availPcs)}</td>
                           <td className="px-4 py-3 text-right text-success tabular-nums">{formatNumber(prog?.finishedPcs ?? 0)}</td>
                           <td className="px-4 py-3 text-right font-medium text-foreground tabular-nums">{costPcs > 0 ? formatCurrency(costPcs) : '—'}</td>
                           <td className="px-4 py-3 text-right font-medium text-foreground tabular-nums">{formatCurrency(valueOnHand)}</td>

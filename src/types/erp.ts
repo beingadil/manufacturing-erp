@@ -44,10 +44,15 @@ export interface Batch {
   processedPcs?: number;
   /** The processing stage this batch is currently at (informational; derived from movements). */
   currentStageId?: string;
-  /** Pcs of this batch available to send to the next processing stage (received from previous stage, not yet dispatched). */
-  stageAvailablePcs?: number;
-  /** The stage that produced these available pcs — used by the Send form to determine the next target stage. */
-  availableFromStageId?: string;
+  /**
+   * Per-source availability buckets (LAW 2, disjoint). Key = the stage that
+   * PRODUCED these pcs; value = pcs waiting for the NEXT stage in the chain.
+   * Pcs that came back from different stages never merge, so they can never be
+   * routed to the wrong next stage (the 600-from-Machine + 100-from-Initial
+   * collapse bug). Replaces the legacy scalar stageAvailablePcs /
+   * availableFromStageId pair.
+   */
+  stageAvailableBySource?: Record<string, number>;
 }
 
 export type ProcessingRateMethod = "per_piece" | "per_kg";

@@ -17,7 +17,7 @@ import type {
 } from '../../types/erp';
 import { AccountingEngine } from '../accounting/AccountingEngine';
 import { getBankAccounts, getCashAccounts } from '../accounting/accountClassification';
-import { InventoryCalculationService } from '../business/InventoryCalculationService';
+import { batchAvailableTotal, InventoryCalculationService } from '../business/InventoryCalculationService';
 
 /**
  * Dashboard Financial & Inventory Position — a READ-ONLY presentation layer
@@ -186,7 +186,10 @@ export class DashboardSummaryService {
       if (!materialIds.has(b.materialId)) continue;
       const cost = b.initialPcs > 0 ? b.amount / b.initialPcs : 0;
       const raw = b.remainingPcs || 0;
-      const wip = b.atProcessorPcs || 0;
+      // WIP = pcs in the processing pipeline: at a processor now OR received
+      // back waiting for the next stage (per-source availability buckets).
+      // Buckets are disjoint, so the sum is the true pipeline count.
+      const wip = (b.atProcessorPcs || 0) + batchAvailableTotal(b);
       const fin = b.processedPcs || 0;
       attrRaw.set(b.materialId, (attrRaw.get(b.materialId) || 0) + raw);
       attrWip.set(b.materialId, (attrWip.get(b.materialId) || 0) + wip);
