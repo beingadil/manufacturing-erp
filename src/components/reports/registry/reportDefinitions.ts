@@ -51,8 +51,8 @@ import { SalesComparison } from '../sales/SalesComparison';
 import { SalesRegister } from '../sales/SalesRegister';
 import { SalesSummary } from '../sales/SalesSummary';
 import { SalesTrend } from '../sales/SalesTrend';
-import type { ReportCategoryId, ReportDefinition } from './reportTypes';
 import { pointInTimeReports, reportDescriptions, reportIcons, reportTags } from './reportMetadata';
+import type { ReportCategoryId, ReportDefinition } from './reportTypes';
 
 const categoryLabels: Record<ReportCategoryId, string> = {
   purchase: 'Purchase Reports', sales: 'Sales Reports', processing: 'Processing Reports',

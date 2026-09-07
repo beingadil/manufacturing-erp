@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { batchAvailableAtSource, batchRawAvailableOf, InventoryCalculationService, stageAvailableEntries } from '../../lib/business/InventoryCalculationService';
+import { batchAvailableAtSource, batchRawAvailableOf, InventoryCalculationService } from '../../lib/business/InventoryCalculationService';
 import { batchCanSendToStage, getMaterialBatchProgress, getSortedStages } from '../../lib/processing/stageProgress';
 import { formatNumber } from '../../lib/utils';
 import { ProcessingService } from '../../services/ProcessingService';

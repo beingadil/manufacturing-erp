@@ -6,9 +6,9 @@ import { DeleteConfirmationModal } from "../components/DeleteConfirmationModal";
 import { QuickAddMaterial } from "../components/QuickAddModals";
 import { SearchableSelect } from "../components/SearchableSelect";
 import { KpiCard } from '../components/ui/KpiCard';
+import { PageModal } from "../components/ui/PageModal";
 import { formatCurrency, formatNumber } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
-import { PageModal } from "../components/ui/PageModal";
 
 export function FinishedGoods() {
   const { products, materials, categories, sales, addProduct, updateModuleItem, removeModuleItem } = useERPStore();

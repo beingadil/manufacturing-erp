@@ -1,5 +1,5 @@
-import type { ComponentType, ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
+import type { ComponentType, ReactNode } from 'react';
 
 export type ReportCategoryId = 'purchase' | 'sales' | 'processing' | 'inventory' | 'financial';
 

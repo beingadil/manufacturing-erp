@@ -1,9 +1,9 @@
 import { ArrowDown, PackageCheck } from 'lucide-react';
 import { useMemo } from 'react';
-import { formatCurrency, formatDate, formatNumber } from '../../lib/utils';
 import { InventoryCalculationService } from '../../lib/business/InventoryCalculationService';
-import type { Batch, ProcessingReceipt, ProcessingSend, Processor, ProcessingStage, RawMaterial } from '../../types/erp';
 import { getSortedStages } from '../../lib/processing/stageProgress';
+import { formatCurrency, formatDate, formatNumber } from '../../lib/utils';
+import type { Batch, ProcessingReceipt, ProcessingSend, ProcessingStage, Processor, RawMaterial } from '../../types/erp';
 import { StageProgressStepper } from './StageProgressStepper';
 
 interface StageTimelinePanelProps {

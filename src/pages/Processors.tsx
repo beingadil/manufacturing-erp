@@ -5,9 +5,9 @@ import { toast } from "sonner";
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
 import { PartyLedgerModal } from "../components/PartyLedgerModal";
 import { KpiCard } from '../components/ui/KpiCard';
+import { PageModal } from "../components/ui/PageModal";
 import { cn, formatCurrency, formatNumber } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
-import { PageModal } from "../components/ui/PageModal";
 
 export function Processors() {
   const { processors, addProcessor, updateProcessor, processingStages } = useERPStore();
