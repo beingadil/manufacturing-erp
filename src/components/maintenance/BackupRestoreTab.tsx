@@ -4,12 +4,12 @@ import {AlertTriangle, CheckCircle2, Database,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { clearStorageMirrors } from '../../database/sqlite/SQLiteStorageAdapter';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '../ui/alert-dialog';
-import { clearStorageMirrors } from '../../database/sqlite/SQLiteStorageAdapter';
 
 // ─── Single canonical backup/restore component ──────────────────────────────
 // Used by BOTH Settings → Backup & Restore AND System Maintenance → Backup &

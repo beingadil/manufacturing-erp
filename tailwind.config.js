@@ -1,5 +1,5 @@
-import tailwindAnimate from 'tailwindcss-animate';
 import containerQuery from '@tailwindcss/container-queries';
+import tailwindAnimate from 'tailwindcss-animate';
 import intersect from 'tailwindcss-intersect';
 
 export default {

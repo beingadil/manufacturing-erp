@@ -1,7 +1,7 @@
+import { Activity, AlertTriangle, CheckCircle, RefreshCw, XCircle } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { useERPStore } from '../store/useERPStore';
 import { formatCurrency } from '../lib/utils';
-import { Activity, CheckCircle, XCircle, AlertTriangle, RefreshCw } from 'lucide-react';
+import { useERPStore } from '../store/useERPStore';
 
 interface Issue {
   category: string;

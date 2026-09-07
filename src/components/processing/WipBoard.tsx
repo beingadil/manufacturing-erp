@@ -1,7 +1,7 @@
 import { ArrowRight, PackageCheck, PackageOpen, User } from 'lucide-react';
 import { useMemo } from 'react';
 import { formatNumber } from '../../lib/utils';
-import type { Batch, ProcessingSend, Processor, ProcessingStage, RawMaterial } from '../../types/erp';
+import type { Batch, ProcessingSend, ProcessingStage, Processor, RawMaterial } from '../../types/erp';
 import { StageProgressStepper } from './StageProgressStepper';
 
 interface WipBoardProps {
