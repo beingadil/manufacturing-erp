@@ -1,0 +1,37 @@
+#!/bin/sh
+# Pre-push gate — blocks pushes that would fail CI's lint stage.
+#
+# Why: a broken commit costs a full CI release run (~10+ min) before failing,
+# and a failed release run leaves installed users without the update. This
+# hook runs the two checks that failed us before (tsc type check + biome lint)
+# in ~seconds. Full pipeline (`npm run lint`) still runs on CI.
+#
+# ACTIVATION (one-time per clone — git does not ship hooks from worktrees):
+#   git config core.hooksPath .githooks
+#
+# Bypass (emergencies only): git push --no-verify
+
+set -u
+
+echo "━━━ pre-push: type check (tsgo) ━━━"
+npx tsgo -p tsconfig.check.json
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "❌ Type check failed — push blocked. Fix the errors above, then push again."
+  echo "   (Bypass with: git push --no-verify — not recommended.)"
+  exit 1
+fi
+
+echo ""
+echo "━━━ pre-push: biome lint ━━━"
+npx biome lint
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "❌ Biome lint failed — push blocked. Run 'npx biome lint' to see details."
+  echo "   (Bypass with: git push --no-verify — not recommended.)"
+  exit 1
+fi
+
+echo ""
+echo "✅ pre-push checks passed."
+exit 0
