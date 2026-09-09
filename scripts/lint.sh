@@ -28,6 +28,12 @@ step() {
 step "TypeScript (tsgo)"        npx tsgo -p tsconfig.check.json
 step "Biome Lint"               npx biome lint
 
+# Tool-consistency guard: biome autofixes (e.g. removed "unused" imports) can
+# break symbol resolution — verify tsgo still passes after biome, and fail fast
+# with an actionable error when they disagree. Runs regardless of biome's exit
+# code (biome exits non-zero on *found* lint errors) so the guard always fires.
+bash "$SCRIPT_DIR/consistency-check.sh" || EXIT_CODE=$?
+
 # ast-grep rule checks live in .rules/ which is gitignored (dev-only) —
 # skip gracefully when absent so CI (fresh checkout) doesn't fail on it.
 if [ -f "$PROJECT_DIR/.rules/check.sh" ]; then
