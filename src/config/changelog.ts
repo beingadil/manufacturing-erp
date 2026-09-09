@@ -20,6 +20,30 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.34',
+    date: '2026-09-09',
+    title: 'Dropdown & Search Redesign, CI Quality Gates',
+    sections: [
+      {
+        title: 'Searchable Dropdowns (all modules)',
+        items: [
+          'Account tree dropdown redesigned: wide panel with single-line rows — no more double scrollbars or wrapped labels in Journal Voucher and every voucher form',
+          'Dropdown panels portal above modals and flip up near the screen bottom — never clipped, never push form fields around',
+          'Search field now reads as one integrated row (icon + input) instead of a boxed field floating inside the dropdown',
+          'Thin, unobtrusive scrollbar; horizontal scrolling removed — long names truncate cleanly',
+          'Quick Add forms (Processor, Product, Material) and Add/Edit Account now use the same searchable dropdown with a separate + button',
+        ],
+      },
+      {
+        title: 'Developer Experience',
+        items: [
+          'CI fails fast with a clear error when Biome autofixes break TypeScript symbol resolution (the failure that killed the 1.0.33 release run)',
+          'Pre-push hook runs type check + lint so broken commits never reach GitHub (git config core.hooksPath .githooks)',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.28',
     date: '2026-09-01',
     title: 'Processing Engine Overhaul & Report Center Redesign',
