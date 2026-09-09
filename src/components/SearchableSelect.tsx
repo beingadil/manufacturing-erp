@@ -1,6 +1,7 @@
 import { Check, ChevronsUpDown, Plus, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../lib/utils";
+import { AnchoredOverlay } from "./ui/AnchoredOverlay";
 
 export interface Option {
   id: string;
@@ -18,6 +19,12 @@ interface SearchableSelectProps {
   required?: boolean;
 }
 
+/** One per-component-instance id so multiple selects on a page don't collide. */
+let listboxSeq = 0;
+function nextListboxId() {
+  return `searchable-select-listbox-${++listboxSeq}`;
+}
+
 export function SearchableSelect({
   options,
   value,
@@ -30,13 +37,21 @@ export function SearchableSelect({
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const listboxId = useRef(nextListboxId());
 
   // Close on outside click or Escape.
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      // The overlay panel is portal'd outside containerRef — include it in the
+      // "inside" set so clicking the panel/scrollbar doesn't close the dropdown.
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node) &&
+        !listRef.current?.contains(e.target as Node)
+      ) {
         setIsOpen(false);
       }
     };
@@ -77,7 +92,7 @@ export function SearchableSelect({
 
   // "Select Material..." -> "Search Material..."; never "search select material......"
   const searchPlaceholder = `Search ${placeholder
-    .replace(/\.\.\.?$/, "")
+    .replace(/\.+$/, "")
     .replace(/^Select\s+/i, "")}...`;
 
   const openDropdown = () => {
@@ -120,9 +135,10 @@ export function SearchableSelect({
     <div className="relative" ref={containerRef}>
       <div className="flex gap-2">
         <div
+          ref={triggerRef}
           role="combobox"
           aria-expanded={isOpen}
-          aria-controls="searchable-select-listbox"
+          aria-controls={listboxId.current}
           aria-haspopup="listbox"
           aria-label={placeholder}
           tabIndex={0}
@@ -141,7 +157,7 @@ export function SearchableSelect({
             {selectedOption && (
               <button
                 type="button"
-                aria-label={`Clear ${placeholder.replace(/\.\.\.?$/, "")}`}
+                aria-label={`Clear ${placeholder.replace(/\.+$/, "")}`}
                 onClick={e => {
                   e.stopPropagation();
                   onChange("");
@@ -176,19 +192,23 @@ export function SearchableSelect({
         tabIndex={-1}
       />
 
-      {isOpen && (
+      <AnchoredOverlay
+        anchorEl={triggerRef.current}
+        open={isOpen}
+        onClose={() => setIsOpen(false)}
+        minWidth={288}
+      >
         <div
-          id="searchable-select-listbox"
+          id={listboxId.current}
           role="listbox"
           aria-label={placeholder}
-          ref={listRef}
-          className="absolute top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-hidden rounded-xl border border-border bg-card shadow-md flex flex-col"
+          className="rounded-xl border border-border bg-card shadow-md flex flex-col max-h-60 overflow-hidden"
         >
-          <div className="flex items-center border-b px-3">
+          <div className="dropdown-search flex items-center border-b px-3 shrink-0">
             <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" aria-hidden="true" />
             <input
               ref={inputRef}
-              className="flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground"
+              className="flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none focus:border-transparent focus:ring-0 focus:shadow-none placeholder:text-muted-foreground"
               placeholder={searchPlaceholder}
               value={query}
               onChange={e => setQuery(e.target.value)}
@@ -209,7 +229,7 @@ export function SearchableSelect({
               </button>
             )}
           </div>
-          <div className="overflow-y-auto p-1">
+          <div ref={listRef} className="overflow-y-auto dropdown-scroll p-1">
             {filteredOptions.length === 0 ? (
               <div className="py-6 text-center text-sm text-muted-foreground">
                 No results found.
@@ -232,7 +252,7 @@ export function SearchableSelect({
                   aria-selected={value === option.id}
                   data-active={index === activeIndex}
                   className={cn(
-                    "relative flex cursor-pointer select-none items-center rounded-sm px-2 py-2 text-sm outline-none",
+                    "relative flex cursor-pointer select-none items-center rounded-sm px-2 py-2 text-sm outline-none whitespace-nowrap",
                     index === activeIndex && "bg-muted/70",
                     value === option.id && "bg-muted"
                   )}
@@ -241,14 +261,14 @@ export function SearchableSelect({
                 >
                   <Check
                     className={cn(
-                      "mr-2 h-4 w-4",
+                      "mr-2 h-4 w-4 shrink-0",
                       value === option.id ? "opacity-100" : "opacity-0"
                     )}
                   />
-                  <div className="flex flex-col">
-                    <span>{option.label}</span>
+                  <div className="flex flex-col min-w-0">
+                    <span className="truncate">{option.label}</span>
                     {option.secondaryLabel && (
-                      <span className="text-xs text-muted-foreground">{option.secondaryLabel}</span>
+                      <span className="text-xs text-muted-foreground truncate">{option.secondaryLabel}</span>
                     )}
                   </div>
                 </div>
@@ -256,7 +276,7 @@ export function SearchableSelect({
             )}
           </div>
         </div>
-      )}
+      </AnchoredOverlay>
     </div>
   );
 }

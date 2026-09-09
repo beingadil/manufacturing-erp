@@ -1,5 +1,6 @@
 import { Check, ChevronDown, ChevronRight, FileText, FolderOpen, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { AnchoredOverlay } from '../../components/ui/AnchoredOverlay';
 import { cn } from '../../lib/utils';
 import { useERPStore } from '../../store/useERPStore';
 import type { Account, AccountSubtype, AccountType } from '../../types/erp';
@@ -42,8 +43,16 @@ export function SearchableAccountTree({
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set());
+  const [activeIndex, setActiveIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const treeRef = useRef<HTMLDivElement>(null);
+
+  // Build the tree of account types
+  const types = useMemo(() => {
+    return [...new Set(accounts.map(a => a.type))] as AccountType[];
+  }, [accounts]);
 
   // Auto-expand all types on open
   useEffect(() => {
@@ -51,25 +60,10 @@ export function SearchableAccountTree({
       const allTypes = new Set(types);
       setExpandedTypes(allTypes);
       setQuery('');
+      setActiveIndex(0);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
-  }, [isOpen]);
-
-  // Close on outside click
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
-
-  // Build the tree of account types
-  const types = useMemo(() => {
-    return [...new Set(accounts.map(a => a.type))] as AccountType[];
-  }, [accounts]);
+  }, [isOpen, types]);
 
   // Filtered accounts
   const filteredAccounts = useMemo(() => {
@@ -166,6 +160,27 @@ export function SearchableAccountTree({
       .filter(section => section.nodes.length > 0);
   }, [types, filteredAccounts, accountSubtypes, accounts, allowParents, query]);
 
+  // Flat list of selectable accounts in render order, for keyboard navigation.
+  const selectableNodes = useMemo(
+    () =>
+      treeNodes.flatMap(section =>
+        section.nodes.filter(n => n.type === 'account' && n.isLeaf)
+      ),
+    [treeNodes]
+  );
+
+  // Reset / keep the highlighted option visible.
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [query, treeNodes]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    treeRef.current
+      ?.querySelector('[data-active="true"]')
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex, isOpen]);
+
   // Selections
   const selectedAccount = accounts.find(a => a.id === value);
 
@@ -184,21 +199,50 @@ export function SearchableAccountTree({
     });
   };
 
+  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex(i => Math.min(i + 1, Math.max(selectableNodes.length - 1, 0)));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const node = selectableNodes[activeIndex];
+      if (node) handleSelect(node);
+    }
+    // Escape is handled by AnchoredOverlay's closeOnEscape.
+  };
+
+  let selectableIndex = -1;
+
   return (
     <div className="relative" ref={containerRef}>
       {/* Trigger */}
       <div
+        ref={triggerRef}
+        role="combobox"
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        aria-label={placeholder}
+        tabIndex={0}
         className={cn(
-          'flex items-center justify-between rounded-xl border bg-card p-3 text-sm cursor-pointer',
+          'flex items-center justify-between rounded-xl border bg-card p-3 text-sm cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
           !selectedAccount && 'text-muted-foreground',
           isOpen && 'ring-2 ring-primary border-transparent'
         )}
         onClick={() => setIsOpen(!isOpen)}
+        onKeyDown={(e) => {
+          if (!isOpen && (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            setIsOpen(true);
+          }
+        }}
       >
         <div className="flex-1 truncate flex items-center gap-2">
           {selectedAccount ? (
             <>
-              <FileText className="h-4 w-4 text-primary shrink-0" />
+              <FileText className="h-4 w-4 text-primary shrink-0" aria-hidden="true" />
               <span className="text-foreground font-medium">{selectedAccount.code}</span>
               <span className="text-foreground">— {selectedAccount.name}</span>
             </>
@@ -211,6 +255,7 @@ export function SearchableAccountTree({
             'h-4 w-4 shrink-0 opacity-50 transition-transform',
             isOpen && 'rotate-180'
           )}
+          aria-hidden="true"
         />
       </div>
 
@@ -224,23 +269,35 @@ export function SearchableAccountTree({
         tabIndex={-1}
       />
 
-      {/* Dropdown */}
-      {isOpen && (
-        <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-xl border border-border bg-card shadow-md flex flex-col max-h-80 overflow-hidden">
+      {/* Dropdown (portal'd — never clipped by modal/scroll containers) */}
+      <AnchoredOverlay
+        anchorEl={triggerRef.current}
+        open={isOpen}
+        onClose={() => setIsOpen(false)}
+        minWidth={340}
+      >
+        <div
+          role="listbox"
+          aria-label={placeholder}
+          className="rounded-xl border border-border bg-card shadow-md flex flex-col max-h-80 overflow-hidden"
+        >
           {/* Search */}
-          <div className="flex items-center border-b px-3">
-            <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+          <div className="dropdown-search flex items-center border-b px-3 shrink-0">
+            <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" aria-hidden="true" />
             <input
               ref={inputRef}
-              className="flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground"
+              className="flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none focus:border-transparent focus:ring-0 focus:shadow-none placeholder:text-muted-foreground"
               placeholder="Search accounts..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              aria-label="Search accounts..."
             />
           </div>
 
-          {/* Tree */}
-          <div className="overflow-y-auto p-1">
+          {/* Tree — vertical scroll only (thin scrollbar); rows never wrap and
+              never force a horizontal scrollbar. */}
+          <div ref={treeRef} className="overflow-y-auto overflow-x-hidden dropdown-scroll p-1">
             {treeNodes.length === 0 ? (
               <div className="py-6 text-center text-sm text-muted-foreground">
                 No accounts found.
@@ -252,12 +309,12 @@ export function SearchableAccountTree({
                   <button
                     type="button"
                     onClick={() => toggleType(section.type)}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-muted/50 rounded-sm transition-colors sticky top-0 bg-card z-10"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-muted/50 rounded-sm transition-colors sticky top-0 bg-card z-10 whitespace-nowrap"
                   >
                     {expandedTypes.has(section.type) ? (
-                      <ChevronDown className="h-3 w-3" />
+                      <ChevronDown className="h-3 w-3" aria-hidden="true" />
                     ) : (
-                      <ChevronRight className="h-3 w-3" />
+                      <ChevronRight className="h-3 w-3" aria-hidden="true" />
                     )}
                     {section.type}
                     <span className="ml-auto text-[10px] font-normal normal-case opacity-60">
@@ -273,37 +330,48 @@ export function SearchableAccountTree({
                           return (
                             <div
                               key={node.id}
-                              className="flex items-center gap-2 px-6 py-1.5 text-xs font-medium text-muted-foreground border-b border-border/20"
+                              className="flex items-center gap-2 px-6 py-1.5 text-xs font-medium text-muted-foreground border-b border-border/20 whitespace-nowrap"
                             >
-                              <FolderOpen className="h-3 w-3" />
-                              {node.label}
+                              <FolderOpen className="h-3 w-3 shrink-0" aria-hidden="true" />
+                              <span className="truncate">{node.label}</span>
                             </div>
                           );
                         }
+
+                        const isSelectable = node.isLeaf;
+                        if (isSelectable) selectableIndex += 1;
+                        const flatIndex = isSelectable ? selectableIndex : -1;
 
                         return (
                           <button
                             key={node.id}
                             type="button"
                             disabled={!node.isLeaf}
+                            aria-selected={value === node.id}
+                            data-active={isSelectable && flatIndex === activeIndex}
                             onClick={() => handleSelect(node)}
+                            onMouseEnter={() => {
+                              if (isSelectable) setActiveIndex(flatIndex);
+                            }}
                             className={cn(
-                              'flex w-full items-center gap-2 px-8 py-2 text-sm rounded-sm transition-colors text-left',
+                              'flex w-full items-center gap-2 py-2 pr-3 text-sm rounded-sm transition-colors text-left whitespace-nowrap max-w-full',
                               node.isLeaf
                                 ? 'cursor-pointer hover:bg-muted'
                                 : 'cursor-default opacity-50',
+                              isSelectable && flatIndex === activeIndex && 'bg-muted/70',
                               value === node.id && 'bg-primary/10 text-primary'
                             )}
-                            style={{ paddingLeft: `${node.depth * 1.5 + 2}rem` }}
+                            style={{ paddingLeft: `${node.depth * 1.5 + 0.5}rem` }}
                           >
                             <Check
                               className={cn(
                                 'h-4 w-4 shrink-0',
                                 value === node.id ? 'opacity-100 text-primary' : 'opacity-0'
                               )}
+                              aria-hidden="true"
                             />
-                            <span className="font-mono text-xs text-muted-foreground">{node.account?.code}</span>
-                            <span className="font-medium text-foreground">{node.account?.name}</span>
+                            <span className="font-mono text-xs text-muted-foreground shrink-0">{node.account?.code}</span>
+                            <span className="font-medium text-foreground truncate min-w-0">{node.account?.name}</span>
                           </button>
                         );
                       })}
@@ -314,7 +382,7 @@ export function SearchableAccountTree({
             )}
           </div>
         </div>
-      )}
+      </AnchoredOverlay>
     </div>
   );
 }
