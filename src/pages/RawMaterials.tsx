@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { InlineEditInput } from '../components/common/InlineEditInput';
 import { SafeDeleteDialog } from '../components/common/SafeDeleteDialog';
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
+import { SearchableSelect } from "../components/SearchableSelect";
 import { KpiCard } from '../components/ui/KpiCard';
 import { PageModal } from "../components/ui/PageModal";
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
@@ -340,12 +341,13 @@ export function RawMaterials() {
           </div>
           <div className="space-y-2">
             <label htmlFor="material-category" className="text-sm font-semibold text-foreground">Category *</label>
-            <select id="material-category" name="material-category" required value={categoryId} onChange={e => setCategoryId(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors bg-card">
-              <option value="" disabled>Select a category</option>
-              {categories.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+            <SearchableSelect
+              options={categories.map(c => ({ id: c.id, label: c.name }))}
+              value={categoryId}
+              onChange={setCategoryId}
+              placeholder="Select Category..."
+              required
+            />
           </div>
           <div className="space-y-2">
             <label htmlFor="material-description" className="text-sm font-semibold text-foreground">Description</label>

@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useERPStore } from '../store/useERPStore';
 import { AccountType, } from '../types/erp';
+import { SearchableSelect } from './SearchableSelect';
 import { ModalOverlay } from './ui/ModalOverlay';
 
 interface Props {
@@ -140,10 +141,17 @@ export function AddAccountModal({ isOpen, onClose, onSave, editAccountId, quickA
           <div className="grid grid-cols-1 gap-4">
             <div>
               <label className="block text-sm font-medium text-muted-foreground mb-1">Parent Account (Optional)</label>
-              <select value={parentId} onChange={e => setParentId(e.target.value)} className="w-full rounded-xl border border-border px-4 py-2.5 text-sm focus:border-primary bg-background text-foreground">
-                <option value="">None (Top Level)</option>
-                {accounts.filter(a => a.type === type && a.id !== editAccountId).map(a => <option key={a.id} value={a.id}>{a.code} - {a.name}</option>)}
-              </select>
+              <SearchableSelect
+                options={[
+                  { id: '', label: 'None (Top Level)' },
+                  ...accounts
+                    .filter(a => a.type === type && a.id !== editAccountId)
+                    .map(a => ({ id: a.id, label: `${a.code} — ${a.name}` })),
+                ]}
+                value={parentId}
+                onChange={setParentId}
+                placeholder="Select parent account..."
+              />
             </div>
           </div>
           

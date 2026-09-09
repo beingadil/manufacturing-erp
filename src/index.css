@@ -125,6 +125,18 @@
   textarea {
     @apply bg-background border-border text-foreground focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-colors;
   }
+
+  /* Bare inputs embedded in dropdown search rows: the panel owns the chrome.
+     Kill the global focus ring/border so the search field reads as one
+     integrated row instead of a boxed input floating inside the dropdown.
+     The :not() chain matches the global rule's specificity (and then some)
+     so this override always wins the cascade. */
+  .dropdown-search input:not([type="checkbox"]):not([type="radio"]):focus {
+    --tw-ring-shadow: 0 0 #0000;
+    box-shadow: none !important;
+    border-color: transparent;
+    outline: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -147,5 +159,28 @@
 @layer utilities {
   .tabular-nums {
     font-variant-numeric: tabular-nums;
+  }
+
+  /* Dropdown list scrollers — thin, unobtrusive scrollbar; never a horizontal
+     one (rows truncate instead of overflowing). Used by SearchableSelect and
+     SearchableAccountTree result lists. */
+  .dropdown-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+    overscroll-behavior: contain;
+  }
+  .dropdown-scroll::-webkit-scrollbar {
+    width: 6px;
+    height: 0;
+  }
+  .dropdown-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .dropdown-scroll::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 9999px;
+  }
+  .dropdown-scroll::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.4);
   }
 }

@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { useERPStore } from "../store/useERPStore";
+import { SearchableSelect } from "./SearchableSelect";
 
 interface BaseModalProps {
   isOpen: boolean;
@@ -142,12 +143,15 @@ export function QuickAddProcessor({ isOpen, onClose, onSuccess }: BaseModalProps
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground/80 mb-1">Worker Type</label>
-            <select value={workerStageId} onChange={e => setWorkerStageId(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm">
-              <option value="">General Worker (any stage)</option>
-              {sortedStages.map(s => (
-                <option key={s.id} value={s.id}>{s.name}{s.isFinalStage ? ' (Final Polish)' : ''}</option>
-              ))}
-            </select>
+            <SearchableSelect
+              options={[
+                { id: "", label: "General Worker (any stage)" },
+                ...sortedStages.map(s => ({ id: s.id, label: `${s.name}${s.isFinalStage ? " (Final Polish)" : ""}` })),
+              ]}
+              value={workerStageId}
+              onChange={setWorkerStageId}
+              placeholder="Select worker type..."
+            />
           </div>
           <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">Save Processor</button>
         </form>
@@ -192,10 +196,13 @@ export function QuickAddProduct({ isOpen, onClose, onSuccess }: BaseModalProps) 
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground/80 mb-1">Linked Material *</label>
-            <select required value={materialId} onChange={e => setMaterialId(e.target.value)} className="w-full rounded-xl border p-3 text-sm">
-              <option value="">Select Material...</option>
-              {materials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
+            <SearchableSelect
+              options={materials.map(m => ({ id: m.id, label: m.name }))}
+              value={materialId}
+              onChange={setMaterialId}
+              placeholder="Select Material..."
+              required
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground/80 mb-1">Selling Price *</label>
@@ -243,10 +250,13 @@ export function QuickAddMaterial({ isOpen, onClose, onSuccess }: BaseModalProps)
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground/80 mb-1">Category *</label>
-            <select required value={categoryId} onChange={e => setCategoryId(e.target.value)} className="w-full rounded-xl border p-3 text-sm">
-              <option value="">Select Category...</option>
-              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <SearchableSelect
+              options={categories.map(c => ({ id: c.id, label: c.name }))}
+              value={categoryId}
+              onChange={setCategoryId}
+              placeholder="Select Category..."
+              required
+            />
           </div>
           <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">Save Material</button>
         </form>
