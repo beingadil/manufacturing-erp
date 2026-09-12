@@ -137,7 +137,10 @@ export function AiAssistantTab({ showSavedToast }: { showSavedToast: boolean }) 
       setTesting(false);
       if (res.success) {
         setTestResult('ok');
-        if (res.data?.model && res.data.model !== model) setModel(res.data.model);
+        // The active model comes from getConfig(), not the chat response.
+        // Refresh it so the badge reflects any fallback the gateway applied.
+        const cfg = await aiClient.getConfig();
+        if (cfg.success && cfg.data?.model && cfg.data.model !== model) setModel(cfg.data.model);
         toast.success('Groq connection working.');
       } else {
         setTestResult('fail');

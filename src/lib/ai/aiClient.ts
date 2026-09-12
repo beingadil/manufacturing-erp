@@ -70,7 +70,8 @@ export const aiClient = {
     if (!window.electronAI) return unavailable('chat');
 
     const configured = await this.getConfig();
-    const modelList = configured.success && configured.data ? [configured.data.model, ...FALLBACK_MODELS.filter(m => m !== configured.data.model)] : FALLBACK_MODELS;
+    const currentModel = configured.success && configured.data?.model ? configured.data.model : FALLBACK_MODELS[0];
+    const modelList = [currentModel, ...FALLBACK_MODELS.filter(m => m !== currentModel)];
 
     let lastError = '';
     for (const model of modelList) {
