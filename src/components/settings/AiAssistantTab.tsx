@@ -54,14 +54,15 @@ function Toggle({ checked, onChange, label, description, disabled }: {
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={cn(
-          'relative h-6 w-11 shrink-0 rounded-full transition-colors',
-          checked ? 'bg-primary' : 'bg-muted-foreground/30'
+          'w-11 h-6 rounded-full transition-colors duration-150 relative flex items-center px-1 shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+          checked ? 'bg-primary' : 'bg-muted-foreground/30',
+          disabled && 'opacity-50'
         )}
       >
-        <span
+        <div
           className={cn(
-            'absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform',
-            checked ? 'translate-x-[22px]' : 'translate-x-0.5'
+            'w-4 h-4 rounded-full bg-background transition-transform transform shadow-sm',
+            checked ? 'translate-x-5' : 'translate-x-0'
           )}
         />
       </button>
@@ -83,7 +84,7 @@ export function AiAssistantTab({ showSavedToast }: { showSavedToast: boolean }) 
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<'ok' | 'fail' | null>(null);
-  const [model, setModel] = useState<string>('');
+  const [model, setModel] = useState<string>('openai/gpt-oss-20b');
 
   // Load the gateway config on mount (key presence only — the key itself
   // never crosses the IPC boundary back to the renderer).
@@ -105,11 +106,12 @@ export function AiAssistantTab({ showSavedToast }: { showSavedToast: boolean }) 
       return;
     }
     setSaving(true);
-    const res = await aiClient.setConfig({ apiKey: keyDraft.trim() });
+    const res = await aiClient.setConfig({ apiKey: keyDraft.trim(), model: 'openai/gpt-oss-20b' });
     setSaving(false);
     if (res.success) {
       setHasKey(true);
       setKeyDraft('');
+      setModel('openai/gpt-oss-20b');
       toast.success('API key saved securely on this device.');
     } else {
       toast.error(res.error || 'Could not save the key.');
