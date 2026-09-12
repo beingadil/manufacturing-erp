@@ -32,3 +32,11 @@ contextBridge.exposeInMainWorld('electronDB', {
   // Update migration notice — legacy per-machine install detection
   checkLegacyInstall: () => ipcRenderer.invoke('migration:checkLegacyInstall'),
 });
+
+// AI gateway surface (Groq) — the API key lives only in the main process.
+contextBridge.exposeInMainWorld('electronAI', {
+  getConfig: () => ipcRenderer.invoke('ai:getConfig'),
+  setConfig: (patch) => ipcRenderer.invoke('ai:setConfig', patch),
+  chat: (payload) => ipcRenderer.invoke('ai:chat', payload),
+  transcribe: (payload) => ipcRenderer.invoke('ai:transcribe', payload),
+});
