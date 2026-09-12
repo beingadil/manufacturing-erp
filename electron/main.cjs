@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { autoUpdater } = require('electron-updater');
 const db = require('./database.cjs');
+const ai = require('./ai.cjs');
 const { detectLegacyInstall } = require('./legacy-install-detector.cjs');
 
 const createWindow = () => {
@@ -44,6 +45,9 @@ const createWindow = () => {
 
 app.whenReady().then(() => {
   console.log('[Main] App ready, userData:', app.getPath('userData'));
+
+  // AI gateway config lives in userData (key never in renderer/SQLite).
+  ai.initAiConfig(app.getPath('userData'));
 
   const fs = require('fs');
   const dbPath = require('path').join(app.getPath('userData'), 'manufacturing-erp.sqlite');
@@ -402,6 +406,9 @@ app.whenReady().then(() => {
       createWindow();
     }
   });
+
+  // AI (Groq) IPC handlers — config, tool-calling chat, Whisper transcription.
+  ai.registerAiHandlers(ipcMain);
 });
 
 app.on('window-all-closed', () => {
