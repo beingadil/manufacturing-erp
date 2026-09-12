@@ -2,10 +2,10 @@
 // Header mic button — visible only when the AI assistant and voice input are
 // enabled. Opens the VoiceAssistant panel.
 
-import { useEffect, useState } from 'react';
 import { Mic } from 'lucide-react';
-import { VoiceAssistant } from './VoiceAssistant';
+import { useEffect, useState } from 'react';
 import { useSettingsStore } from '../../store/useSettingsStore';
+import { VoiceAssistant } from './VoiceAssistant';
 
 export function AiMicButton() {
   const aiAssistantEnabled = useSettingsStore(s => s.aiAssistantEnabled);
