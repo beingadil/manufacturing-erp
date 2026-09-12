@@ -4,11 +4,12 @@ import {
   Save, Settings as SettingsIcon,
   Sparkles, Trash2,
   User, 
-  Users, Wrench
+  Users, Wrench, Bot
 } from "lucide-react";
 import React, { useRef, useState } from "react";
 import { toast } from 'sonner';
 import { AccessManagementPanel } from "@/components/access/AccessManagementPanel";
+import { AiAssistantTab } from "@/components/settings/AiAssistantTab";
 import { SystemMaintenancePanel } from "@/components/maintenance/SystemMaintenancePanel";
 import { SeedChartOfAccountsButton } from "@/components/settings/SeedChartOfAccountsButton";
 import { CHANGELOG, type ChangelogEntry } from '../config/changelog';
@@ -35,6 +36,7 @@ export function Settings() {
     { id: 'maintenance', label: 'System Maintenance', icon: Wrench },
     { id: 'advanced', label: 'Advanced Features', icon: Monitor },
     { id: 'voucher', label: 'Voucher Numbering', icon: Hash },
+    { id: 'ai', label: 'AI Assistant', icon: Bot },
     { id: 'about', label: 'About & Updates', icon: Info },
   ];
 
@@ -84,6 +86,7 @@ export function Settings() {
           {activeTab === 'maintenance' && <SystemMaintenancePanel />}
           {activeTab === 'advanced' && <AdvancedTab />}
           {activeTab === 'voucher' && <VoucherNumberingTab onSave={handleSave} showSavedToast={showSavedToast} />}
+          {activeTab === 'ai' && <AiAssistantTab showSavedToast={false} />}
           {activeTab === 'about' && <AboutUpdatesTab />}
         </div>
       </div>

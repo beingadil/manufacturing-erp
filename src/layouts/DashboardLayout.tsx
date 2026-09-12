@@ -1,6 +1,7 @@
 import { BarChart3, Bell, Briefcase, Calculator, ChevronDown, ChevronRight, Database, DollarSign, Factory, FileText, LayoutDashboard, LogOut, Menu, Monitor, Moon, PackageSearch, Search, Settings, ShoppingCart, Sun, Truck, UserCog, Users, Wallet, X } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { AiMicButton } from "../components/ai/AiMicButton";
 import { useAuth } from "../contexts/AuthContext";
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { cn, } from "../lib/utils";
@@ -464,6 +465,7 @@ export function DashboardLayout() {
         </div>
 
         <div className="flex items-center gap-1 sm:gap-3">
+          <AiMicButton />
           <button 
             onClick={() => setTheme(isDarkMode ? 'light' : 'dark')}
             aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
