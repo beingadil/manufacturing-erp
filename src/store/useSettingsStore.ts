@@ -9,6 +9,13 @@ export interface SettingsState {
   profilePhoto: string | null;
   setProfile: (name: string, email: string, photo: string | null) => void;
 
+  // AI Assistant (UI mirror only — the API key never lives in the renderer;
+  // it is stored by electron/ai.cjs in userData/ai-config.json)
+  aiAssistantEnabled: boolean;
+  aiVoiceEnabled: boolean;
+  setAiAssistantEnabled: (v: boolean) => void;
+  setAiVoiceEnabled: (v: boolean) => void;
+
   // Branding
   dashboardName: string;
   tagline: string;
@@ -38,6 +45,11 @@ export const useSettingsStore = create<SettingsState>()(
       userEmail: 'admin@example.com',
       profilePhoto: null,
       setProfile: (userName, userEmail, profilePhoto) => set({ userName, userEmail, profilePhoto }),
+
+      aiAssistantEnabled: false,
+      aiVoiceEnabled: true,
+      setAiAssistantEnabled: (aiAssistantEnabled) => set({ aiAssistantEnabled }),
+      setAiVoiceEnabled: (aiVoiceEnabled) => set({ aiVoiceEnabled }),
 
       dashboardName: 'Manufacturing ERP',
       tagline: 'Enterprise Resource Planning',
