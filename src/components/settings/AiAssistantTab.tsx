@@ -4,10 +4,10 @@
 // never persisted in the renderer, the store, or the SQLite blob. This tab
 // only mirrors the enabled/voice flags for UI reactivity.
 
-import { useEffect, useState } from 'react';
 import { Bot, CheckCircle2, Eye, EyeOff, XCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { aiClient } from '../../lib/ai/aiClient';
+import { aiClient, FALLBACK_MODELS } from '../../lib/ai/aiClient';
 import { cn } from '../../lib/utils';
 import { useSettingsStore } from '../../store/useSettingsStore';
 
@@ -106,12 +106,11 @@ export function AiAssistantTab({ showSavedToast }: { showSavedToast: boolean }) 
       return;
     }
     setSaving(true);
-    const res = await aiClient.setConfig({ apiKey: keyDraft.trim(), model: 'openai/gpt-oss-20b' });
+    const res = await aiClient.setConfig({ apiKey: keyDraft.trim(), model });
     setSaving(false);
     if (res.success) {
       setHasKey(true);
       setKeyDraft('');
-      setModel('openai/gpt-oss-20b');
       toast.success('API key saved securely on this device.');
     } else {
       toast.error(res.error || 'Could not save the key.');
@@ -190,8 +189,26 @@ export function AiAssistantTab({ showSavedToast }: { showSavedToast: boolean }) 
                 {hasKey
                   ? 'A key is saved on this device (stored by the desktop app, never in your data).'
                   : 'Get a free key at console.groq.com/keys'}
-              {hasKey && model && (
-                <span className="ml-2 text-[10px] font-mono text-muted-foreground">model: {model}</span>
+              {hasKey && (
+                <>
+                  <span className="ml-2 text-[10px] font-mono text-muted-foreground">model: {model}</span>
+                  <select
+                    value={model}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setModel(next);
+                      void aiClient.setConfig({ model: next });
+                    }}
+                    className="ml-2 text-[11px] font-mono rounded border border-border bg-card px-1.5 py-0.5 focus:border-primary focus:outline-none"
+                    aria-label="AI model"
+                  >
+                    {FALLBACK_MODELS.map((m) => (
+                      <option key={m} value={m}>
+                        {m.replace('openai/gpt-oss-', 'gpt-oss-').replace('qwen/qwen3.8-27b', 'qwen3.8-27b')}
+                      </option>
+                    ))}
+                  </select>
+                </>
               )}
               </p>
             </div>
