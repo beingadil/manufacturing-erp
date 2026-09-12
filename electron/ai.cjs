@@ -16,7 +16,7 @@ const GROQ_BASE = 'https://api.groq.com/openai/v1';
 const DEFAULTS = {
   enabled: false,
   voiceEnabled: true,
-  model: 'llama-3.3-70b-versatile',
+  model: 'openai/gpt-oss-20b',
   transcribeModel: 'whisper-large-v3',
   // Stored ONLY on disk in the main process, never in the SQLite blob the
   // renderer reads. getConfig returns hasKey, never the key itself.

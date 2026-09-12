@@ -83,6 +83,7 @@ export function AiAssistantTab({ showSavedToast }: { showSavedToast: boolean }) 
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<'ok' | 'fail' | null>(null);
+  const [model, setModel] = useState<string>('');
 
   // Load the gateway config on mount (key presence only — the key itself
   // never crosses the IPC boundary back to the renderer).
@@ -90,8 +91,10 @@ export function AiAssistantTab({ showSavedToast }: { showSavedToast: boolean }) 
     let cancelled = false;
     aiClient.getConfig().then((res) => {
       if (cancelled) return;
-      if (res.success && res.data) setHasKey(res.data.hasKey);
-      else if (res.error) toast.error(res.error);
+      if (res.success && res.data) {
+        setHasKey(res.data.hasKey);
+        if (res.data.model) setModel(res.data.model);
+      } else if (res.error) toast.error(res.error);
     });
     return () => { cancelled = true; };
   }, []);
@@ -125,19 +128,19 @@ export function AiAssistantTab({ showSavedToast }: { showSavedToast: boolean }) 
 
   const testConnection = async () => {
     setTesting(true);
-    setTestResult(null);
-    const res = await aiClient.chat(
-      [{ role: 'user', content: 'Reply with exactly: OK' }],
-      undefined
-    );
-    setTesting(false);
-    if (res.success) {
-      setTestResult('ok');
-      toast.success('Groq connection working.');
-    } else {
-      setTestResult('fail');
-      toast.error(res.error || 'Connection test failed.');
-    }
+    setTestResult(null);      const res = await aiClient.chat(
+        [{ role: 'user', content: 'Reply with exactly: OK' }],
+        undefined
+      );
+      setTesting(false);
+      if (res.success) {
+        setTestResult('ok');
+        if (res.data?.model && res.data.model !== model) setModel(res.data.model);
+        toast.success('Groq connection working.');
+      } else {
+        setTestResult('fail');
+        toast.error(res.error || 'Connection test failed.');
+      }
   };
 
   return (
@@ -182,6 +185,9 @@ export function AiAssistantTab({ showSavedToast }: { showSavedToast: boolean }) 
                 {hasKey
                   ? 'A key is saved on this device (stored by the desktop app, never in your data).'
                   : 'Get a free key at console.groq.com/keys'}
+              {hasKey && model && (
+                <span className="ml-2 text-[10px] font-mono text-muted-foreground">model: {model}</span>
+              )}
               </p>
             </div>
             {hasKey && <CheckCircle2 className="h-5 w-5 text-emerald-600" />}
