@@ -20,6 +20,36 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.35',
+    date: '2026-09-16',
+    title: 'AI Assistant: Voice & Typed Commands',
+    sections: [
+      {
+        title: 'AI Voice Assistant (Settings → AI Assistant)',
+        items: [
+          'Groq-powered assistant: speak or type commands like "how many pcs of Coil are in stock" or "receive Ali 400"',
+          'Multi-action chains supported — the assistant plans each step, shows a confirmation checklist, then executes them in order through the engine',
+          'Write commands are confirm-gated; read-only queries run instantly',
+          'Groq API key stored locally, with a live connection test in Settings',
+        ],
+      },
+      {
+        title: 'Model Handling',
+        items: [
+          'Automatic model fallback: if the default model 404s on your Groq plan, the assistant retries the next model in the list and remembers what worked',
+          'Manual model selector dropdown — pick gpt-oss-120b or qwen3.8-27b directly',
+          'Saving the API key now establishes the correct default model so a stale config can never resurrect an unavailable model',
+        ],
+      },
+      {
+        title: 'Fixes',
+        items: [
+          'AI tab toggle now matches the standard Settings toggle style (correct knob color and travel)',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.34',
     date: '2026-09-09',
     title: 'Dropdown & Search Redesign, CI Quality Gates',

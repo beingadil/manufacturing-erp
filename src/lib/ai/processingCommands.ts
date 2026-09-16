@@ -14,13 +14,13 @@
 
 import { z } from 'zod';
 import { useERPStore } from '../../store/useERPStore';
+import type { Batch, ProcessingSend } from '../../types/erp';
 import {
   batchAvailableAtSource,
   InventoryCalculationService,
 } from '../business/InventoryCalculationService';
-import type { Batch, ProcessingSend } from '../../types/erp';
-import type { AiToolDef, CommandResult } from './types';
 import { resolveEntity } from './entityResolver';
+import type { AiToolDef, CommandResult } from './types';
 
 const fmtPcs = (n: number): string => new Intl.NumberFormat('en-US').format(n);
 const fmtRs = (n: number): string =>

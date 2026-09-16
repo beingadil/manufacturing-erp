@@ -1,16 +1,16 @@
 import {
-  AlertCircle,Bell,CheckCircle2, ChevronDown, ChevronRight, 
+  AlertCircle,Bell,Bot, CheckCircle2, ChevronDown, ChevronRight, 
   Database, DownloadCloud,ExternalLink, Hash, Image as ImageIcon, Info, Monitor, Palette, RotateCw, 
   Save, Settings as SettingsIcon,
   Sparkles, Trash2,
   User, 
-  Users, Wrench, Bot
+  Users, Wrench 
 } from "lucide-react";
 import React, { useRef, useState } from "react";
 import { toast } from 'sonner';
 import { AccessManagementPanel } from "@/components/access/AccessManagementPanel";
-import { AiAssistantTab } from "@/components/settings/AiAssistantTab";
 import { SystemMaintenancePanel } from "@/components/maintenance/SystemMaintenancePanel";
+import { AiAssistantTab } from "@/components/settings/AiAssistantTab";
 import { SeedChartOfAccountsButton } from "@/components/settings/SeedChartOfAccountsButton";
 import { CHANGELOG, type ChangelogEntry } from '../config/changelog';
 import { APP_VERSION, BUILD_NUMBER, DATABASE_SCHEMA_VERSION, RELEASE_DATE } from '../config/version';

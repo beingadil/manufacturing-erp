@@ -3,8 +3,8 @@
 // context. Kept separate from the orchestrator so prompt wording can evolve
 // without touching execution logic.
 
-import type { AiChatMessage } from './types';
 import { buildEntityContext, SYSTEM_PROMPT } from './contextBuilder';
+import type { AiChatMessage } from './types';
 
 export function buildSystemMessages(userUtterance: string): AiChatMessage[] {
   return [

@@ -4,10 +4,10 @@
 // blocking — and that every rejection is loud, with nothing mutated.
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { buildDefaultStages } from '../processing/processingStageSeed';
-import { batchAvailableTotal, batchRawAvailableOf } from '../business/InventoryCalculationService';
 import { useERPStore } from '../../store/useERPStore';
 import type { ProcessingStage } from '../../types/erp';
+import { batchAvailableTotal, batchRawAvailableOf } from '../business/InventoryCalculationService';
+import { buildDefaultStages } from '../processing/processingStageSeed';
 import { findCommand } from './commandRegistry';
 
 const STAGES: ProcessingStage[] = buildDefaultStages();
