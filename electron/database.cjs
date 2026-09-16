@@ -332,6 +332,49 @@ function backupDatabase() {
   }
 }
 
+// ─── Daily local backup ──────────────────────────────────────────────────
+// One snapshot per calendar day: backupDatabase() keeps the newest 30 in
+// userData/backups, and each day's snapshot is copied to a user-visible
+// folder (Documents/Manufacturing ERP Backups) so backups are findable
+// without digging through hidden AppData. Safe to call repeatedly — skips
+// silently when today's snapshot already exists.
+function runDailyBackup() {
+  try {
+    const fs = require('fs');
+    const today = new Date().toISOString().slice(0, 10);
+    const backupDir = path.join(app.getPath('userData'), 'backups');
+    const todays = fs.existsSync(backupDir)
+      ? fs.readdirSync(backupDir).filter(f => f.includes(today))
+      : [];
+    if (todays.length > 0) {
+      return { success: true, skipped: true, path: path.join(backupDir, todays[0]) };
+    }
+    const result = backupDatabase();
+    if (!result.success) return result;
+
+    // User-visible copy in Documents (non-fatal if Documents is unavailable,
+    // e.g. redirected or locked-down folders).
+    try {
+      const visibleDir = path.join(app.getPath('documents'), 'Manufacturing ERP Backups');
+      if (!fs.existsSync(visibleDir)) fs.mkdirSync(visibleDir, { recursive: true });
+      fs.copyFileSync(result.path, path.join(visibleDir, path.basename(result.path)));
+      // Mirror the 30-snapshot retention in the visible folder too.
+      const visibleFiles = fs.readdirSync(visibleDir)
+        .filter(f => f.startsWith('manufacturing-erp-') && f.endsWith('.sqlite.bak'))
+        .sort().reverse();
+      if (visibleFiles.length > 30) {
+        visibleFiles.slice(30).forEach(f => fs.rmSync(path.join(visibleDir, f), { force: true }));
+      }
+    } catch (e) {
+      console.warn('[DB] Visible backup copy failed (non-fatal):', e.message);
+    }
+    return result;
+  } catch (error) {
+    console.error('[DB] Daily backup error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 function deleteBackup(filename) {
   try {
     const fs = require('fs');
@@ -684,4 +727,4 @@ function listBackups() {
   }
 }
 
-module.exports = { initializeDatabase, query, queryOne, execute, transaction, closeDatabase, runIntegrityCheck, backupDatabase, deleteBackup, restoreDatabase, listBackups, exportBackupToPath, importBackupFromPath, exportUnifiedBackupToPath, importUnifiedBackupFromPath, createUpdateSafeBackup, restoreFromUpdateSafeBackup };
+module.exports = { initializeDatabase, query, queryOne, execute, transaction, closeDatabase, runIntegrityCheck, backupDatabase, runDailyBackup, deleteBackup, restoreDatabase, listBackups, exportBackupToPath, importBackupFromPath, exportUnifiedBackupToPath, importUnifiedBackupFromPath, createUpdateSafeBackup, restoreFromUpdateSafeBackup };

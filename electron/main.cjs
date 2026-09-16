@@ -77,23 +77,27 @@ app.whenReady().then(() => {
     return;
   }
 
-  // Schedule daily backup (check if already done today)
-  const today = new Date().toISOString().slice(0, 10);
-  try {
-    const fs = require('fs');
-    const backupsDir = require('path').join(app.getPath('userData'), 'backups');
-    const files = fs.existsSync(backupsDir)
-      ? fs.readdirSync(backupsDir).filter(f => f.includes(today))
-      : [];
-    if (files.length === 0) {
-      console.log('[Main] No backup for today, creating one...');
-      db.backupDatabase();
-    } else {
-      console.log('[Main] Backup for today already exists, skipping');
+  // Daily backup: one snapshot per calendar day (startup + hourly re-check so
+  // long-running desktop sessions still get the day's snapshot if the app was
+  // left open across midnight). Each snapshot is also copied to a user-visible
+  // Documents/Manufacturing ERP Backups folder by runDailyBackup().
+  const runDailyBackupSafe = () => {
+    try {
+      const result = db.runDailyBackup();
+      if (result.success && result.skipped) {
+        console.log('[Main] Backup for today already exists, skipping');
+      } else if (result.success) {
+        console.log('[Main] Daily backup created:', result.path);
+      } else {
+        console.warn('[Main] Daily backup failed:', result.error);
+      }
+    } catch (e) {
+      console.warn('[Main] Daily backup check failed (non-fatal):', e.message);
     }
-  } catch (e) {
-    console.warn('[Main] Backup schedule check failed (non-fatal):', e.message);
-  }
+  };
+  runDailyBackupSafe();
+  const dailyBackupTimer = setInterval(runDailyBackupSafe, 60 * 60 * 1000);
+  app.on('will-quit', () => clearInterval(dailyBackupTimer));
 
   // Register IPC handlers
   ipcMain.handle('db:initialize', async () => {
