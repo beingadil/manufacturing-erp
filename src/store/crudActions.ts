@@ -327,6 +327,43 @@ export const createCRUDActions = (
   updateCustomer: (id: string, data: any) => set(state => ({ customers: state.customers.map(c => c.id === id ? { ...c, ...data } : c) })),
   updateProcessor: (id: string, data: any) => set(state => ({ processors: state.processors.map(p => p.id === id ? { ...p, ...data } : p) })),
 
+  deleteProcessor: (id: string) => {
+    const processor = _get().processors.find(p => p.id === id);
+    if (!processor) return { deleted: false, reason: 'Processor not found' };
+
+    // Reference guard — deleting a processor that processing jobs point at
+    // would orphan dispatches, receipts, bills and ledger rows.
+    const state = _get();
+    const sendCount = state.processingSends.filter(s => s.processorId === id).length;
+    const receiptCount = state.processingReceipts.filter(r => r.processorId === id).length;
+    const billCount = state.processorBills.filter(b => b.processorId === id).length;
+    const entryCount = processor.accountId
+      ? state.journalEntries.filter(e => e.accountId === processor.accountId).length
+      : 0;
+
+    if (sendCount > 0 || receiptCount > 0 || billCount > 0 || entryCount > 0) {
+      const impact: string[] = [];
+      if (sendCount > 0) impact.push(`${sendCount} processing job(s)`);
+      if (receiptCount > 0) impact.push(`${receiptCount} receipt(s)`);
+      if (billCount > 0) impact.push(`${billCount} bill(s)`);
+      if (entryCount > 0) impact.push(`${entryCount} ledger entr(y/ies)`);
+      // Deactivate to preserve referential integrity (same policy as materials).
+      set({
+        processors: state.processors.map(p => p.id === id ? { ...p, status: 'Inactive' } : p)
+      });
+      return { deleted: false, reason: `Referenced by ${impact.join(', ')} — deactivated instead` };
+    }
+
+    // No references: remove the processor and its (empty) AP account together.
+    set({
+      processors: state.processors.filter(p => p.id !== id),
+      accounts: processor.accountId
+        ? state.accounts.filter(a => a.id !== processor.accountId)
+        : state.accounts
+    });
+    return { deleted: true };
+  },
+
   updateAccount: (id: string, data: any) => {
     set((state) => ({
       ...state,
