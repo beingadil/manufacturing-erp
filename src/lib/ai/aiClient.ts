@@ -81,7 +81,7 @@ export const aiClient = {
         // does not re-walk the fallback list. Only touch model here — leave
         // the key, enable flags, and transcribe model untouched.
         if (model !== configured.data?.model) {
-          await this.setConfig({ model }).then(r => { /* best-effort; keep using it regardless */ }).catch(() => {/* non-fatal */});
+          await this.setConfig({ model }).then(_r => { /* best-effort; keep using it regardless */ }).catch(() => {/* non-fatal */});
         }
         return res;
       }
