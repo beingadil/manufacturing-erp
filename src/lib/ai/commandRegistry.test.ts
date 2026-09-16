@@ -4,10 +4,10 @@
 // (stock check fires, store state actually changes, party balances recompute).
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { buildDefaultStages } from '../processing/processingStageSeed';
 import { useERPStore } from '../../store/useERPStore';
-import { AI_TOOLS, findCommand, validateArgs } from './commandRegistry';
 import type { ProcessingStage } from '../../types/erp';
+import { buildDefaultStages } from '../processing/processingStageSeed';
+import { AI_TOOLS, findCommand, validateArgs } from './commandRegistry';
 
 const STAGES: ProcessingStage[] = buildDefaultStages();
 const initial = STAGES[0];

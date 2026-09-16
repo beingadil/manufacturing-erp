@@ -15,11 +15,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { z } from 'zod';
-import { getMaterialBatchProgress } from '../processing/stageProgress';
 import { useERPStore } from '../../store/useERPStore';
-import type { AiToolDef, CommandResult } from './types';
-import { PROCESSING_COMMANDS } from './processingCommands';
+import { getMaterialBatchProgress } from '../processing/stageProgress';
 import { resolveEntity } from './entityResolver';
+import { PROCESSING_COMMANDS } from './processingCommands';
+import type { AiToolDef, CommandResult } from './types';
 
 // ── Formatting helpers (match the app's shared conventions) ──────────────
 

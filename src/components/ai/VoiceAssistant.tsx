@@ -7,16 +7,16 @@
 // Writes NEVER execute without the explicit Confirm button; read-only
 // commands auto-run immediately after parsing.
 
+import { AlertTriangle, Check, CornerDownLeft, Keyboard, Loader2, Mic, Square, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Mic, Square, X, Check, AlertTriangle, Loader2, Keyboard, CornerDownLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { aiClient } from '../../lib/ai/aiClient';
 import {
   type AssistantPlan,
-  type PlanStep,
-  type StepOutcome,
   executePlan,
+  type PlanStep,
   parseTranscript,
+  type StepOutcome,
   summarizeOutcomes,
 } from '../../lib/ai/assistantService';
 
