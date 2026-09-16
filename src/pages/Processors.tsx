@@ -1,7 +1,8 @@
-import { CircleDollarSign, Pencil, Plus, UserCog, Wallet } from "lucide-react";
+import { CircleDollarSign, Pencil, Plus, Trash2, UserCog, Wallet } from "lucide-react";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { SafeDeleteDialog } from "../components/common/SafeDeleteDialog";
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
 import { PartyLedgerModal } from "../components/PartyLedgerModal";
 import { KpiCard } from '../components/ui/KpiCard';
@@ -10,7 +11,7 @@ import { cn, formatCurrency, formatNumber } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
 
 export function Processors() {
-  const { processors, addProcessor, updateProcessor, processingStages } = useERPStore();
+  const { processors, addProcessor, updateProcessor, deleteProcessor, processingStages, processingSends, processingReceipts, processorBills } = useERPStore();
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [ledgerParty, setLedgerParty] = useState<{ id: string; name: string; kind: 'Processor' } | null>(null);
@@ -24,6 +25,49 @@ export function Processors() {
   // Worker type = the processing stage this person works at (config-driven,
   // so new stages appear here automatically). Empty = General (any stage).
   const [workerStageId, setWorkerStageId] = useState("");
+  const [deleteDialog, setDeleteDialog] = useState<{
+    isOpen: boolean;
+    id: string;
+    name: string;
+    impactDetails: string[];
+    isReferenced: boolean;
+  }>({ isOpen: false, id: "", name: "", impactDetails: [], isReferenced: false });
+
+  const handleDeleteClick = (processor: any) => {
+    const impactDetails: string[] = [];
+    const sendCount = processingSends.filter(s => s.processorId === processor.id).length;
+    const receiptCount = processingReceipts.filter(r => r.processorId === processor.id).length;
+    const billCount = processorBills.filter(b => b.processorId === processor.id).length;
+
+    if (sendCount > 0) impactDetails.push(`Referenced by ${sendCount} processing job(s).`);
+    if (receiptCount > 0) impactDetails.push(`Referenced by ${receiptCount} receipt(s).`);
+    if (billCount > 0) impactDetails.push(`Referenced by ${billCount} bill(s).`);
+
+    const isReferenced = sendCount > 0 || receiptCount > 0 || billCount > 0;
+    if (isReferenced) {
+      impactDetails.push("Because of these references, the processor cannot be deleted to preserve data integrity. It will be deactivated instead.");
+    }
+    if ((processor.balancePayable || 0) > 0) {
+      impactDetails.push(`This processor has an outstanding payable balance of ${formatCurrency(processor.balancePayable)}.`);
+    }
+
+    setDeleteDialog({ isOpen: true, id: processor.id, name: processor.name, impactDetails, isReferenced });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteDialog.id) return;
+    try {
+      const result = deleteProcessor(deleteDialog.id);
+      if (result.deleted) {
+        toast.success("Processor deleted successfully");
+      } else {
+        toast.warning(result.reason || "Processor deactivated instead");
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Failed to delete processor");
+    }
+    setDeleteDialog(prev => ({ ...prev, isOpen: false }));
+  };
 
   const sortedStages = [...(processingStages || [])].sort((a, b) => a.sequence - b.sequence);
   const stageNameOf = (stageId?: string) => {
@@ -134,6 +178,9 @@ export function Processors() {
         <div className="flex justify-end items-center gap-2">
           <RowActionButton onClick={() => openEditModal(item)} label={`Edit ${item.name}`} tone="primary">
             <Pencil />
+          </RowActionButton>
+          <RowActionButton onClick={() => handleDeleteClick(item)} label={`Delete ${item.name}`} tone="destructive">
+            <Trash2 />
           </RowActionButton>
           <button onClick={() => setLedgerParty({ id: item.id, name: item.name, kind: 'Processor' })} className="px-3 py-1.5 text-xs font-semibold text-primary bg-primary/10 border border-primary/20 rounded-md hover:bg-primary/20 transition-all">View Ledger</button>
           <button onClick={() => navigate(`/ledgers?tab=Processor&id=${item.id}&action=pay`)} className="px-3 py-1.5 text-xs font-semibold text-foreground bg-card border border-border rounded-md hover:bg-muted/40 transition-all">Pay</button>
@@ -246,6 +293,17 @@ export function Processors() {
 </PageModal>
 
       {ledgerParty && <PartyLedgerModal party={ledgerParty} onClose={() => setLedgerParty(null)} />}
+
+      <SafeDeleteDialog
+        isOpen={deleteDialog.isOpen}
+        itemName={deleteDialog.name}
+        itemType="Processor"
+        actionType={deleteDialog.isReferenced ? 'Deactivate' : 'Delete'}
+        impactDetails={deleteDialog.impactDetails}
+        requiresAuth={deleteDialog.impactDetails.length > 0}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteDialog({ ...deleteDialog, isOpen: false })}
+      />
     </div>
   );
 }

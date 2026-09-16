@@ -87,6 +87,8 @@ export interface ERPState {
   updateSupplier: (id: string, data: Partial<Supplier>) => void;
   updateCustomer: (id: string, data: Partial<Customer>) => void;
   updateProcessor: (id: string, data: Partial<Processor>) => void;
+  /** Delete a processor only when nothing references it (jobs, bills, ledger). Referenced processors are deactivated instead. */
+  deleteProcessor: (id: string) => { deleted: boolean; reason?: string };
   deleteAccount: (id: string) => void;
 
   addPurchase: (data: Omit<Purchase, 'id' | 'purchaseNo' | 'calculatedPcs' | 'amount'>) => void;
