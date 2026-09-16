@@ -20,6 +20,29 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.36',
+    date: '2026-09-17',
+    title: 'Processor Delete & Daily Local Backups',
+    sections: [
+      {
+        title: 'Processors',
+        items: [
+          'Delete button on every processor row with a full impact analysis before confirming',
+          'Referenced processors (processing jobs, receipts, bills, ledger entries) are deactivated instead of deleted to preserve data integrity — confirmation requires typing DEACTIVATE',
+          'Unreferenced processors are deleted together with their linked Chart of Accounts AP entry, so no orphan accounts',
+        ],
+      },
+      {
+        title: 'Backups',
+        items: [
+          'Automatic daily database backup — one snapshot per day, even if the app stays open across midnight (hourly re-check)',
+          'Each daily snapshot is copied to a user-visible Documents\\Manufacturing ERP Backups folder for easy USB/cloud copies',
+          '30-snapshot retention applied in both the app data folder and the visible Documents folder',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.35',
     date: '2026-09-16',
     title: 'AI Assistant: Voice & Typed Commands',
