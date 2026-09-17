@@ -20,6 +20,36 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.37',
+    date: '2026-09-17',
+    title: 'Quick Entry, Smarter Navigation & Record Stats',
+    sections: [
+      {
+        title: 'Dashboard — Quick Entry',
+        items: [
+          'Four new direct-entry cards: New Purchase, New Sale, Add Processor, and JV Entry — one click opens the ready-to-fill form.',
+        ],
+      },
+      {
+        title: 'Navigation & Routing',
+        items: [
+          'Bank Balance KPI now opens the General Ledger on the actual bank account instead of falling back to Cash in Hand.',
+          'Sidebar quick-create (+) buttons on Cash/Bank Payment, Cash/Bank Receipt, and Journal Voucher entries open the new-voucher form directly.',
+          'Processing and Ledgers sidebar items now show live action badges (open dispatches / parties with outstanding balance).',
+          'Deep links open the exact create form on Purchases, Sales, Processing (send/receive/bill), Processors, and all voucher pages.',
+        ],
+      },
+      {
+        title: 'Records Screens',
+        items: [
+          'Purchase Records: new live stats strip (record count, PCS added, total spend, this-month spend) and polished table cells.',
+          'Sales Records: live stats strip (record count, PCS sold, total revenue, this-month revenue) matching the Purchase design.',
+          'Processing records: stats strip (dispatches, PCS sent, PCS received, pending PCS) on the record tabs.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.36',
     date: '2026-09-17',
     title: 'Processor Delete & Daily Local Backups',
