@@ -1,6 +1,6 @@
-import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, Edit, Eye, Printer, Trash2 } from 'lucide-react';
-import { useMemo, useState } from "react";
-import { Link } from 'react-router-dom';
+import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, Edit, Eye, Package, PackageCheck, Printer, Send, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from 'react-router-dom';
 import { Column, DataTable } from "../components/DataTable";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
 import { CreateProcessorBillForm } from '../components/processing/CreateProcessorBillForm';
@@ -11,6 +11,7 @@ import { StageManagerPanel } from '../components/processing/StageManagerPanel';
 import { StageTimelinePanel } from '../components/processing/StageTimelinePanel';
 import { WipBoard } from '../components/processing/WipBoard';
 import { WipStageStrip } from '../components/processing/WipStageStrip';
+import { KpiCard } from "../components/ui/KpiCard";
 import { PageModal } from "../components/ui/PageModal";
 import { VoucherHistoryTab } from "../components/VoucherHistoryTab";
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
@@ -42,6 +43,18 @@ export function JobWork() {
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; type: 'send' | 'receipt' | 'bill'; id: string; no: string }>({ isOpen: false, type: 'send', id: '', no: '' });
   const [lossModal, setLossModal] = useState<{ isOpen: boolean; sendId: string; dispatchNo: string; pending: number }>({ isOpen: false, sendId: '', dispatchNo: '', pending: 0 });
   const [lossQty, setLossQty] = useState('');
+
+  // Deep links from Quick Entry / command surfaces: ?new=send|receive|bill
+  // opens the matching create form directly and switches to its records tab;
+  // the param is consumed by the tab writer below.
+  const [searchParams] = useSearchParams();
+  const newAction = searchParams.get('new');
+  useEffect(() => {
+    if (newAction === 'send') { setActiveTab('Send'); setEditSendId(undefined); setIsSendOpen(true); }
+    else if (newAction === 'receive') { setActiveTab('Receive'); setEditReceiveId(undefined); setIsReceiveOpen(true); }
+    else if (newAction === 'bill') { setActiveTab('Billing'); setEditBillId(undefined); setIsBillOpen(true); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newAction]);
 
   // ── Stage filters for tables ─────────────────────────────────────────────
   const [sendStageFilter, setSendStageFilter] = useState('');
@@ -83,6 +96,14 @@ export function JobWork() {
   const filteredSends = useMemo(() => sendStageFilter
     ? enrichedSends.filter(s => (s.stageId || '') === sendStageFilter)
     : enrichedSends, [enrichedSends, sendStageFilter]);
+
+  // Record totals for the stats strip (mirrors the tables below).
+  const jobStats = useMemo(() => ({
+    dispatches: enrichedSends.length,
+    pcsSent: enrichedSends.reduce((s, x) => s + (x.pcsSent || 0), 0),
+    pcsReceived: enrichedSends.reduce((s, x) => s + (x.pcsReceived || 0), 0),
+    pending: enrichedSends.reduce((s, x) => s + (x.pendingPcs || 0), 0),
+  }), [enrichedSends]);
 
   const enrichedReceipts = useMemo(() => processingReceipts.map(r => {
     const p = processors.find(pr => pr.id === r.processorId);
@@ -286,6 +307,16 @@ export function JobWork() {
           </button>
         ))}
       </div>
+
+      {/* Record totals strip — shown on the three record tabs (WIP Board has its own stage strip) */}
+      {(activeTab === 'Send' || activeTab === 'Receive' || activeTab === 'Billing') && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <KpiCard size="sm" icon={Send} label="Dispatches" value={String(jobStats.dispatches)} description={<span>Total sent orders</span>} />
+          <KpiCard size="sm" icon={Package} iconClassName="text-blue-500" label="PCS Sent" value={jobStats.pcsSent.toLocaleString()} description={<span>To all processors</span>} />
+          <KpiCard size="sm" icon={PackageCheck} iconClassName="text-success" label="PCS Received" value={jobStats.pcsReceived.toLocaleString()} description={<span>Back from processors</span>} />
+          <KpiCard size="sm" icon={AlertTriangle} iconClassName="text-destructive" label="Pending PCS" value={jobStats.pending.toLocaleString()} description={<span>Awaiting receipt or loss</span>} />
+        </div>
+      )}
 
       {activeTab === "Board" ? (
         <div className="space-y-5">

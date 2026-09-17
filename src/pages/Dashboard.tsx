@@ -3,6 +3,7 @@ import { AlertTriangle, ArrowDownCircle, ArrowLeftRight, ArrowRight, ArrowUpCirc
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { QuickEntryCards } from '../components/dashboard/QuickEntryCards';
 import { PositionSummary } from '../components/reports/financial/BalanceSheetStatement';
 import { DatePicker } from "../components/ui/date-picker";
 import { KpiCard } from "../components/ui/KpiCard";
@@ -30,6 +31,12 @@ export function Dashboard() {
   // not the first account in the chart (which is Cash in Hand).
   const arControlAccount = getSystemAccountBySubtype(accounts, accountSubtypes, 'Accounts Receivable');
   const apControlAccount = getSystemAccountBySubtype(accounts, accountSubtypes, 'Accounts Payable');
+
+  // First Bank-subtype account — the Bank Balance card opens the ledger on a real
+  // bank account instead of falling back to accounts[0] (Cash in Hand).
+  const firstBankAccount = accounts.find(
+    a => accountSubtypes.find(st => st.id === a.subtypeId)?.name === 'Bank'
+  );
 
   const secureSales = filterFinancialData(sales, profile, isAdmin, dataPolicies);
   const securePurchases = filterFinancialData(purchases, profile, isAdmin, dataPolicies);
@@ -180,6 +187,9 @@ export function Dashboard() {
         <span className="text-xs text-muted-foreground">Balances as of {asOfLabel} · Activity {periodLabel}</span>
       </div>
 
+      {/* ── Quick Entry: direct launch into the four daily forms ───────────── */}
+      <QuickEntryCards />
+
       {/* ── Financial & Inventory Position ─────────────────────────────────── */}
       <section>
         <div className="flex items-center justify-between mb-3">
@@ -201,7 +211,7 @@ export function Dashboard() {
             label="Bank Balance"
             value={formatCurrency(summary.bankTotal)}
             description={bankSub}
-            onClick={() => navigate('/accounting/general-ledger')}
+            onClick={() => navigate(firstBankAccount ? `/accounting/general-ledger?id=${firstBankAccount.id}` : '/accounting/general-ledger')}
           />
           <KpiCard
             icon={Users}

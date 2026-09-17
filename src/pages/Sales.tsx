@@ -1,4 +1,4 @@
-import { Edit, Eye, Plus, Printer, Trash2 } from 'lucide-react';
+import { Banknote, CalendarDays, Edit, Eye, Plus, Printer, ReceiptText, ShoppingBag, Trash2 } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -7,6 +7,7 @@ import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
 import { QuickAddCustomer, QuickAddProduct } from "../components/QuickAddModals";
 import { SearchableSelect } from "../components/SearchableSelect";
 import { DatePicker } from "../components/ui/date-picker";
+import { KpiCard } from "../components/ui/KpiCard";
 import { PageModal } from "../components/ui/PageModal";
 import { VoucherHistoryTab } from "../components/VoucherHistoryTab";
 import { generateInvoicePDF } from "../lib/documentGenerators";
@@ -23,10 +24,24 @@ export function Sales() {
   const [deleteModal, setDeleteModal] = useState<{isOpen: boolean, id: string, no: string}>({isOpen: false, id: '', no: ''});
   const [activeTab, setActiveTab] = useState<'data' | 'vouchers'>(() => (searchParams.get('tab') === 'vouchers' ? 'vouchers' : 'data'));
 
+  // Deep link: /sales?new=1 (Dashboard Quick Entry) opens the create form.
+  // The tab-sync effect below strips ?new from the URL on its mount pass.
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return;
+    setEditSaleId(undefined);
+    setCustomerId('');
+    setProductId('');
+    setPcsSold('');
+    setPricePerPiece('');
+    setIsModalOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Sync tab to URL (?tab=data|vouchers) so refresh/back preserves the view.
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
     params.set('tab', activeTab);
+    params.delete('new'); // consumed by the deep-link effect above
     setSearchParams(params, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
@@ -158,6 +173,19 @@ export function Sales() {
     }, 'Sales Delete');
   };
 
+  // Record totals for the stats strip (mirrors the table below).
+  const salesStats = useMemo(() => {
+    const monthPrefix = new Date().toISOString().slice(0, 7); // YYYY-MM
+    return {
+      count: enrichedSales.length,
+      pcs: enrichedSales.reduce((s, x) => s + (x.pcsSold || 0), 0),
+      revenue: enrichedSales.reduce((s, x) => s + (x.totalAmount || 0), 0),
+      monthRevenue: enrichedSales
+        .filter(x => (x.date || '').startsWith(monthPrefix))
+        .reduce((s, x) => s + (x.totalAmount || 0), 0),
+    };
+  }, [enrichedSales]);
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -173,9 +201,10 @@ export function Sales() {
       <div className="flex border-b border-border/50">
         <button
           onClick={() => setActiveTab('data')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'data' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+          className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'data' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
         >
           Sales Records
+          <span className="inline-flex min-w-[20px] items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground">{sales.length}</span>
         </button>
         <button
           onClick={() => setActiveTab('vouchers')}
@@ -186,14 +215,23 @@ export function Sales() {
       </div>
 
       {activeTab === 'data' ? (
-        <DataTable
-          data={enrichedSales}
-          columns={columns}
-          searchKeys={["invoiceNo", "customerName", "productName"]}
-          searchPlaceholder="Search sales by invoice, customer or product..."
-          persistKey="sales-table"
-          defaultSortKey="date"
-        />
+        <>
+          {/* Live totals strip — mirrors exactly what the table below shows */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <KpiCard size="sm" icon={ReceiptText} label="Total Sales" value={String(salesStats.count)} description={<span>Records in the register</span>} />
+            <KpiCard size="sm" icon={ShoppingBag} iconClassName="text-success" label="PCS Sold" value={salesStats.pcs.toLocaleString()} description={<span>Finished pieces billed</span>} />
+            <KpiCard size="sm" icon={Banknote} iconClassName="text-blue-500" label="Total Revenue" value={formatCurrency(salesStats.revenue)} description={<span>All recorded sales</span>} />
+            <KpiCard size="sm" icon={CalendarDays} iconClassName="text-violet-500" label="This Month" value={formatCurrency(salesStats.monthRevenue)} description={<span>Revenue in {new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>} />
+          </div>
+          <DataTable
+            data={enrichedSales}
+            columns={columns}
+            searchKeys={["invoiceNo", "customerName", "productName"]}
+            searchPlaceholder="Search sales by invoice, customer or product..."
+            persistKey="sales-table"
+            defaultSortKey="date"
+          />
+        </>
       ) : (
         <VoucherHistoryTab sourceModule="Sales" />
       )}

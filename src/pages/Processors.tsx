@@ -1,6 +1,6 @@
 import { CircleDollarSign, Pencil, Plus, Trash2, UserCog, Wallet } from "lucide-react";
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { SafeDeleteDialog } from "../components/common/SafeDeleteDialog";
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
@@ -13,6 +13,7 @@ import { useERPStore } from "../store/useERPStore";
 export function Processors() {
   const { processors, addProcessor, updateProcessor, deleteProcessor, processingStages, processingSends, processingReceipts, processorBills } = useERPStore();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [ledgerParty, setLedgerParty] = useState<{ id: string; name: string; kind: 'Processor' } | null>(null);
   const [editingProcessor, setEditingProcessor] = useState<any | null>(null);
@@ -99,6 +100,24 @@ export function Processors() {
     setNotes("");
     setWorkerStageId("");
   };
+
+  // Deep link: /processors?new=1 (Dashboard Quick Entry) opens the create form.
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return;
+    setEditingProcessor(null);
+    setName('');
+    setContactPerson('');
+    setPhone('');
+    setEmail('');
+    setAddress('');
+    setNotes('');
+    setWorkerStageId('');
+    setIsModalOpen(true);
+    const params = new URLSearchParams(searchParams);
+    params.delete('new');
+    setSearchParams(params, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

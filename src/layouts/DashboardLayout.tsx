@@ -1,4 +1,4 @@
-import { BarChart3, Bell, Briefcase, Calculator, ChevronDown, ChevronRight, Database, DollarSign, Factory, FileText, LayoutDashboard, LogOut, Menu, Monitor, Moon, PackageSearch, Search, Settings, ShoppingCart, Sun, Truck, UserCog, Users, Wallet, X } from "lucide-react";
+import { BarChart3, Bell, Briefcase, Calculator, ChevronDown, ChevronRight, Database, DollarSign, Factory, FileText, LayoutDashboard, LogOut, Menu, Monitor, Moon, PackageSearch, Plus, Search, Settings, ShoppingCart, Sun, Truck, UserCog, Users, Wallet, X } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { AiMicButton } from "../components/ai/AiMicButton";
@@ -10,6 +10,7 @@ import { useSettingsStore } from "../store/useSettingsStore";
 
 const NavAccordionItem: React.FC<{ item: any, onClose?: () => void }> = ({ item, onClose }) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const isActive = item.subItems 
     ? item.subItems.some((sub: any) => location.pathname === sub.path || location.pathname.startsWith(sub.path + '/'))
     : location.pathname === item.path;
@@ -36,9 +37,8 @@ const NavAccordionItem: React.FC<{ item: any, onClose?: () => void }> = ({ item,
           "h-4 w-4 shrink-0 transition-colors duration-200",
           location.pathname === item.path ? "text-primary" : "text-muted-foreground/80 group-hover:text-foreground"
         )} />
-        {item.label}
-        {item.badge != null && item.badge > 0 && (
-          <span className="ml-auto inline-flex min-w-[20px] items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
+        {item.label}        {item.badge != null && item.badge > 0 && (
+          <span className="ml-auto inline-flex min-w-[20px] items-center justify-center rounded-full bg-primary/10 text-primary px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
             {item.badge}
           </span>
         )}
@@ -79,17 +79,36 @@ const NavAccordionItem: React.FC<{ item: any, onClose?: () => void }> = ({ item,
               to={sub.path}
               onClick={onClose}
               className={({ isActive }) => cn(
-                "flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-200",
+                "group/sub relative flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-200",
                 isActive 
                   ? "bg-primary/10 text-primary font-medium" 
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
               )}
             >
+              <span className={cn(
+                "absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[2px] rounded-r-full transition-all duration-200",
+                isActive ? "bg-primary" : "bg-transparent"
+              )} />
               {sub.label}
               {sub.badge != null && sub.badge > 0 && (
                 <span className="ml-auto inline-flex min-w-[18px] items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground/80">
                   {sub.badge}
                 </span>
+              )}
+              {sub.quickCreate && sub.badge == null && (
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    navigate(`${sub.path}?new=1`);
+                    onClose?.();
+                  }}
+                  aria-label={`New ${sub.label}`}
+                  title={`New ${sub.label}`}
+                  className="ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 opacity-0 transition-all duration-150 hover:bg-primary/10 hover:text-primary group-hover/sub:opacity-100 focus-visible:opacity-100"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
               )}
             </NavLink>
           ))}
@@ -348,6 +367,13 @@ export function DashboardLayout() {
     processors: useERPStore(s => s.processors.length),
     purchases: useERPStore(s => s.purchases.length),
     sales: useERPStore(s => s.sales.length),
+    // Open processing jobs (still awaiting full receipt) — action-oriented count.
+    openJobs: useERPStore(s => s.processingSends.filter(j => j.status === 'Pending' || j.status === 'Partial').length),
+    // Parties with money on the street — customers owing us + suppliers we owe.
+    partiesWithBalance: useERPStore(s =>
+      s.customers.filter(c => (c.balanceReceivable || 0) > 0).length +
+      s.suppliers.filter(x => (x.balancePayable || 0) > 0).length
+    ),
   };
   const isDarkMode = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
@@ -385,9 +411,9 @@ export function DashboardLayout() {
       title: "Operations",
       items: [
         { icon: ShoppingCart, label: "Purchases", path: "/purchases", requiredModule: "Purchases", badge: badgeCounts.purchases },
-        { icon: Factory, label: "Processing", path: "/processing", requiredModule: "Processing" },
+        { icon: Factory, label: "Processing", path: "/processing", requiredModule: "Processing", badge: badgeCounts.openJobs },
         { icon: DollarSign, label: "Sales", path: "/sales", requiredModule: "Sales", badge: badgeCounts.sales },
-        { icon: Users, label: "Ledgers", path: "/ledgers", requiredModule: "Ledgers" },
+        { icon: Users, label: "Ledgers", path: "/ledgers", requiredModule: "Ledgers", badge: badgeCounts.partiesWithBalance },
       ]
     },
     {
@@ -400,11 +426,11 @@ export function DashboardLayout() {
           requiredModule: "Accounting",
           subItems: [
             { label: "Chart of Accounts", path: "/accounting/chart-of-accounts" },
-            { label: "Cash Payment Voucher", path: "/accounting/cash-payment" },
-            { label: "Bank Payment Voucher", path: "/accounting/bank-payment" },
-            { label: "Cash Receipt Voucher", path: "/accounting/cash-receipt" },
-            { label: "Bank Receipt Voucher", path: "/accounting/bank-receipt" },
-            { label: "Journal Voucher", path: "/accounting/journal-voucher" },
+            { label: "Cash Payment Voucher", path: "/accounting/cash-payment", quickCreate: true },
+            { label: "Bank Payment Voucher", path: "/accounting/bank-payment", quickCreate: true },
+            { label: "Cash Receipt Voucher", path: "/accounting/cash-receipt", quickCreate: true },
+            { label: "Bank Receipt Voucher", path: "/accounting/bank-receipt", quickCreate: true },
+            { label: "Journal Voucher", path: "/accounting/journal-voucher", quickCreate: true },
             { label: "Cash Book", path: "/accounting/cashbook" },
             { label: "General Ledger", path: "/accounting/general-ledger" },
             { label: "Trial Balance", path: "/accounting/trial-balance" },

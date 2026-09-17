@@ -1,6 +1,6 @@
 import { Calculator, Edit, Folder, FolderOpen, Plus, Printer, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { toast } from 'sonner';
 import { AddAccountModal } from "../components/AddAccountModal";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
@@ -10,7 +10,7 @@ import { SearchableSelect } from "../components/SearchableSelect";
 import { DatePicker } from "../components/ui/date-picker";
 import { SearchInput } from "../components/ui/SearchInput";
 import { AccountingEngine } from "../lib/accounting/AccountingEngine";
-import { getCashBankAccounts } from "../lib/accounting/accountClassification";
+import { getBankAccounts, getCashBankAccounts } from "../lib/accounting/accountClassification";
 import { accountMatchesSearch, filterAccountsWithAncestors } from "../lib/accounting/accountHierarchy";
 import { generateLedgerStatementPDF } from "../lib/documentGenerators";
 import { FinancialReportService } from "../lib/reporting/FinancialReportService";
@@ -63,15 +63,36 @@ export function Accounting() {
 
 function GeneralLedger() {
   const { accounts, vouchers, journalEntries, suppliers, customers, processors, accountSubtypes } = useERPStore();
-  const [selectedAccountId, setSelectedAccountId] = useState<string>(accounts[0]?.id || "");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [selectedAccountId, setSelectedAccountId] = useState<string>(() => searchParams.get('id') || "");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
-  const account = accounts.find(a => a.id === selectedAccountId);
+  // Resolve the displayed account: explicit selection → ?id= deep link → first
+  // Bank account → first account. Deep-link support lets the Dashboard Bank
+  // Balance KPI land on a real bank ledger instead of falling back to
+  // accounts[0] (Cash in Hand).
+  const resolvedAccountId = useMemo(() => {
+    if (selectedAccountId && accounts.some(a => a.id === selectedAccountId)) return selectedAccountId;
+    const fromUrl = searchParams.get('id');
+    if (fromUrl && accounts.some(a => a.id === fromUrl)) return fromUrl;
+    return getBankAccounts(accounts, accountSubtypes)[0]?.id || accounts[0]?.id || "";
+  }, [selectedAccountId, accounts, accountSubtypes, searchParams]);
+
+  // Keep the URL in sync so refresh / share preserves the account (?id=).
+  useEffect(() => {
+    if (!resolvedAccountId || searchParams.get('id') === resolvedAccountId) return;
+    const params = new URLSearchParams(searchParams);
+    params.set('id', resolvedAccountId);
+    setSearchParams(params, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedAccountId]);
+
+  const account = accounts.find(a => a.id === resolvedAccountId);
 
   // Single engine source for ledger rows + running balance (spec §24, §14)
   const { rows: processedEntries, openingBalance } = AccountingEngine.getLedger(
-    selectedAccountId,
+    resolvedAccountId,
     accounts,
     journalEntries,
     vouchers,
@@ -131,7 +152,7 @@ function GeneralLedger() {
                 searchValue: `${a.type} ${subtype} ${relatedParty}`
               };
             })}
-              value={selectedAccountId}
+              value={resolvedAccountId}
               onChange={val => setSelectedAccountId(val)}
               placeholder="Search account..."
             />

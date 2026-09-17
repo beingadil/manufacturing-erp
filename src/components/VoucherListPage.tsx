@@ -1,5 +1,6 @@
 import { ArrowDownLeft, ArrowUpRight, CheckCircle2, Eye, FileText, Pencil, Plus, Trash2, XCircle } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { AccountingEngine } from '../lib/accounting/AccountingEngine';
 import { cn, formatCurrency } from '../lib/utils';
@@ -36,6 +37,21 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
   const [viewVoucherId, setViewVoucherId] = useState<string | null>(null);
 
   const KindIcon = KIND_ICON[kind];
+
+  // Deep link: /accounting/journal-voucher?new=1 (Dashboard Quick Entry)
+  // opens the create editor directly. Keyed on the param itself so it also
+  // fires on same-route navigations; consumes the param when done.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const isNewParam = searchParams.get('new') === '1';
+  useEffect(() => {
+    if (!isNewParam) return;
+    setEditVoucherId(undefined);
+    setIsEditorOpen(true);
+    const params = new URLSearchParams(searchParams);
+    params.delete('new');
+    setSearchParams(params, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNewParam]);
 
   const matchedTypes = useMemo(() => {
     switch (kind) {
