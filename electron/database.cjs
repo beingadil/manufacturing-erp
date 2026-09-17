@@ -283,10 +283,18 @@ function closeDatabase() {
 function runIntegrityCheck() {
   try {
     const integrity = db.pragma('integrity_check');
-    const ok = integrity[0] && integrity[0].integrity_check === 'ok';
-    return { success: ok, details: ok ? [] : integrity };
+    // better-sqlite3 returns rows like [{ integrity_check: 'ok' }]; tolerate a bare value too.
+    const first = Array.isArray(integrity) ? integrity[0] : integrity;
+    const status = first && typeof first === 'object' ? first.integrity_check : first;
+    if (status === 'ok') return { success: true, status: 'ok', details: [] };
+    const problems = Array.isArray(integrity)
+      ? integrity.map((r) => r && r.integrity_check).filter(Boolean)
+      : [];
+    const summary = problems.length ? problems.join('; ') : String(status);
+    return { success: false, status: status || 'unknown', details: problems, error: 'SQLite integrity check reported: ' + summary };
   } catch (error) {
-    return { success: false, details: [error.message], error: error.message };
+    const message = String((error && error.message) || error);
+    return { success: false, details: [message], error: message };
   }
 }
 

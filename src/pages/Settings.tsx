@@ -12,6 +12,14 @@ import { AccessManagementPanel } from "@/components/access/AccessManagementPanel
 import { SystemMaintenancePanel } from "@/components/maintenance/SystemMaintenancePanel";
 import { AiAssistantTab } from "@/components/settings/AiAssistantTab";
 import { SeedChartOfAccountsButton } from "@/components/settings/SeedChartOfAccountsButton";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { CHANGELOG, type ChangelogEntry } from '../config/changelog';
 import { APP_VERSION, BUILD_NUMBER, DATABASE_SCHEMA_VERSION, RELEASE_DATE } from '../config/version';
 import { useAuth } from '../contexts/AuthContext';
@@ -52,19 +60,22 @@ export function Settings() {
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-8">
-        {/* Sidebar Navigation */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col md:flex-row gap-8">
+        {/* Sidebar Navigation — Radix Tabs: arrow keys rove focus, Home/End jump,
+            aria-selected/controls wired automatically. */}
         <aside className="w-full md:w-64 shrink-0">
-          <nav className="flex flex-row md:flex-col space-x-2 md:space-x-0 md:space-y-1 overflow-x-auto pb-2 md:pb-0">
+          <TabsList
+            aria-label="Settings sections"
+            className="flex h-auto flex-row md:flex-col space-x-2 md:space-x-0 md:space-y-1 w-full overflow-x-auto pb-2 md:pb-0 bg-transparent p-0 rounded-none justify-start"
+          >
             {tabs.map((tab) => (
-              <button
+              <TabsTrigger
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                value={tab.id}
                 className={cn(
-                  "relative flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors duration-150 whitespace-nowrap md:whitespace-normal",
-                  activeTab === tab.id 
-                    ? "bg-primary/10 text-primary" 
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  "relative flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors duration-150 whitespace-nowrap md:whitespace-normal justify-start shrink-0",
+                  "data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=inactive]:text-muted-foreground hover:data-[state=inactive]:bg-muted hover:data-[state=inactive]:text-foreground",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                 )}
               >
                 {activeTab === tab.id && (
@@ -72,24 +83,24 @@ export function Settings() {
                 )}
                 <tab.icon className={cn("h-4 w-4", activeTab === tab.id ? "text-primary" : "text-muted-foreground/80")} />
                 {tab.label}
-              </button>
+              </TabsTrigger>
             ))}
-          </nav>
+          </TabsList>
         </aside>
 
         {/* Main Content Area */}
         <div className="flex-1 min-w-0">
-          {activeTab === 'profile' && <ProfileTab onSave={handleSave} showSavedToast={showSavedToast} />}
-          {activeTab === 'branding' && <BrandingTab onSave={handleSave} showSavedToast={showSavedToast} />}
-          {activeTab === 'preferences' && <PreferencesTab onSave={handleSave} showSavedToast={showSavedToast} />}
-          {activeTab === 'access' && <AccessManagementPanel />}
-          {activeTab === 'maintenance' && <SystemMaintenancePanel />}
-          {activeTab === 'advanced' && <AdvancedTab />}
-          {activeTab === 'voucher' && <VoucherNumberingTab onSave={handleSave} showSavedToast={showSavedToast} />}
-          {activeTab === 'ai' && <AiAssistantTab showSavedToast={false} />}
-          {activeTab === 'about' && <AboutUpdatesTab />}
+          <TabsContent value="profile" className="mt-0"><ProfileTab onSave={handleSave} showSavedToast={showSavedToast} /></TabsContent>
+          <TabsContent value="branding" className="mt-0"><BrandingTab onSave={handleSave} showSavedToast={showSavedToast} /></TabsContent>
+          <TabsContent value="preferences" className="mt-0"><PreferencesTab /></TabsContent>
+          <TabsContent value="access" className="mt-0"><AccessManagementPanel /></TabsContent>
+          <TabsContent value="maintenance" className="mt-0"><SystemMaintenancePanel /></TabsContent>
+          <TabsContent value="advanced" className="mt-0"><AdvancedTab /></TabsContent>
+          <TabsContent value="voucher" className="mt-0"><VoucherNumberingTab onSave={handleSave} showSavedToast={showSavedToast} /></TabsContent>
+          <TabsContent value="ai" className="mt-0"><AiAssistantTab showSavedToast={false} /></TabsContent>
+          <TabsContent value="about" className="mt-0"><AboutUpdatesTab /></TabsContent>
         </div>
-      </div>
+      </Tabs>
     </div>
   );
 }
@@ -166,8 +177,9 @@ function ProfileTab({ onSave, showSavedToast }: { onSave: () => void, showSavedT
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-border/50">
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-foreground">Full Name</label>
+            <label htmlFor="profile-name" className="text-sm font-semibold text-foreground">Full Name</label>
             <input 
+              id="profile-name"
               type="text" 
               value={name}
               onChange={e => setName(e.target.value)}
@@ -175,8 +187,9 @@ function ProfileTab({ onSave, showSavedToast }: { onSave: () => void, showSavedT
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-foreground">Email Address</label>
+            <label htmlFor="profile-email" className="text-sm font-semibold text-foreground">Email Address</label>
             <input 
+              id="profile-email"
               type="email" 
               value={email}
               onChange={e => setEmail(e.target.value)}
@@ -393,13 +406,13 @@ function BrandingTab({ onSave, showSavedToast }: { onSave: () => void, showSaved
   );
 }
 
-function PreferencesTab({ onSave, showSavedToast }: { onSave: () => void, showSavedToast: boolean }) {
+function PreferencesTab() {
   const { theme, setTheme } = useSettingsStore();
 
-  const handleSave = () => {
-    onSave();
-  };
-
+  // Theme applies instantly on click (platform convention for appearance
+  // switches, same model as the AI tab) — so this tab deliberately has no
+  // Save footer. A draft-then-save footer here would imply the theme only
+  // changes on Save, which is misleading.
   return (
     <SettingsCard title="User Preferences" subtitle="Customize your appearance and theme." icon={Bell}>
       <div className="space-y-8">
@@ -416,6 +429,7 @@ function PreferencesTab({ onSave, showSavedToast }: { onSave: () => void, showSa
               <button
                 key={t.id}
                 onClick={() => setTheme(t.id as 'light' | 'dark' | 'system')}
+                aria-pressed={theme === t.id}
                 className={cn(
                   "flex items-center justify-center py-3 px-4 rounded-xl border-2 transition-all font-semibold text-sm",
                   theme === t.id 
@@ -428,8 +442,6 @@ function PreferencesTab({ onSave, showSavedToast }: { onSave: () => void, showSa
             ))}
           </div>
         </div>
-
-        <SaveFooter onSave={handleSave} showSavedToast={showSavedToast} />
       </div>
     </SettingsCard>
   );
@@ -440,6 +452,14 @@ function AdvancedTab() {
   const wipeAllData = useERPStore(state => state.wipeAllData);
   const wipeModules = useERPStore(state => state.wipeModules);
   const [selectedWipe, setSelectedWipe] = useState<Record<string, boolean>>({});
+  // Destructive wipes confirm through an AlertDialog (modal, requires explicit
+  // choice) instead of a transient toast action — a permanent action must not
+  // depend on catching a 10-second toast before it disappears.
+  const [wipeConfirm, setWipeConfirm] = useState<null | 'selected' | 'all'>(null);
+  // Typed-confirmation gate for the full wipe (SafeDeleteDialog pattern): the
+  // confirm button stays disabled until ERASE is typed exactly.
+  const [wipeAuthCode, setWipeAuthCode] = useState('');
+  const WIPE_AUTH_WORD = 'ERASE';
 
   const wipeCounts: Record<string, number> = {
     categories: useERPStore(s => s.categories.length),
@@ -459,23 +479,37 @@ function AdvancedTab() {
     .filter(([id, on]) => on && MODULE_WIPE_KEYS[id])
     .map(([id]) => id);
 
-  const handleWipeSelected = () => {
+  const requestWipeSelected = () => {
     if (!isAdmin) return toast.error('Only admins can wipe data');
     if (selectedIds.length === 0) return toast.error('Select at least one module to wipe.');
-    const labels = selectedIds.map(id => WIPE_MODULE_LABELS[id]).join('\n• ');
-    toast(`This will permanently erase:\n• ${labels}\n\nThis cannot be undone.`, {
-      action: {
-        label: 'Wipe',
-        onClick: () => {
-          wipeModules(selectedIds);
-          setSelectedWipe({});
-          toast.success('Selected module data wiped. Reloading...');
-          setTimeout(() => window.location.reload(), 1500);
-        },
-      },
-      cancel: { label: 'Cancel', onClick: () => {} },
-      duration: 10000,
-    });
+    setWipeConfirm('selected');
+  };
+
+  const executeWipeSelected = () => {
+    wipeModules(selectedIds);
+    setSelectedWipe({});
+    setWipeConfirm(null);
+    toast.success('Selected module data wiped. Reloading...');
+    setTimeout(() => window.location.reload(), 1500);
+  };
+
+  const requestWipeAll = () => {
+    if (!isAdmin) return toast.error('Only admins can wipe all data');
+    setWipeConfirm('all');
+  };
+
+  const executeWipeAll = () => {
+    wipeAllData();
+    setWipeConfirm(null);
+    toast.success('All ERP data wiped. Reloading...');
+    setTimeout(() => window.location.reload(), 1500);
+  };
+
+  const closeWipeDialog = (open: boolean) => {
+    if (!open) {
+      setWipeConfirm(null);
+      setWipeAuthCode('');
+    }
   };
 
   return (
@@ -579,7 +613,7 @@ function AdvancedTab() {
                   : `${selectedIds.length} module${selectedIds.length > 1 ? 's' : ''} selected — wipe ${selectedIds.map(id => WIPE_MODULE_LABELS[id]).join(', ')}.`}
               </p>
               <button
-                onClick={handleWipeSelected}
+                onClick={requestWipeSelected}
                 disabled={selectedIds.length === 0}
                 className="shrink-0 px-4 py-2 text-sm font-medium bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
@@ -598,21 +632,7 @@ function AdvancedTab() {
                 </p>
               </div>
               <button
-                onClick={() => {
-                  if (!isAdmin) return toast.error('Only admins can wipe all data');
-                  toast('This will permanently erase ALL ERP data. This cannot be undone.', {
-                    action: {
-                      label: 'Wipe All',
-                      onClick: () => {
-                        wipeAllData();
-                        toast.success('All ERP data wiped. Reloading...');
-                        setTimeout(() => window.location.reload(), 1500);
-                      },
-                    },
-                    cancel: { label: 'Cancel', onClick: () => {} },
-                    duration: 10000,
-                  });
-                }}
+                onClick={requestWipeAll}
                 className="shrink-0 px-4 py-2 text-sm font-medium bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors flex items-center justify-center gap-2"
               >
                 <Trash2 className="h-4 w-4" /> Wipe All Data
@@ -622,6 +642,58 @@ function AdvancedTab() {
         </div>
 
       </div>
+
+      {/* Destructive wipe confirmation — modal so the permanence of the action
+          is unmissable, listing exactly what will be erased. */}
+      <AlertDialog open={wipeConfirm !== null} onOpenChange={closeWipeDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {wipeConfirm === 'all' ? 'Erase ALL ERP data?' : `Wipe ${selectedIds.length} selected module${selectedIds.length === 1 ? '' : 's'}?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                {wipeConfirm === 'all' ? (
+                  <>All inventory, sales, purchases, accounting, and voucher records will be permanently deleted. This cannot be undone.</>
+                ) : (
+                  <>
+                    Permanently erase:
+                    <ul className="list-disc pl-5 mt-1 space-y-0.5">
+                      {selectedIds.map(id => <li key={id}>{WIPE_MODULE_LABELS[id]}</li>)}
+                    </ul>
+                    This cannot be undone.
+                  </>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {wipeConfirm === 'all' && (
+            <div className="space-y-2">
+              <label htmlFor="wipe-auth" className="text-sm font-medium text-foreground">
+                Type <strong>{WIPE_AUTH_WORD}</strong> to confirm:
+              </label>
+              <Input
+                id="wipe-auth"
+                value={wipeAuthCode}
+                onChange={(e) => setWipeAuthCode(e.target.value.toUpperCase())}
+                placeholder={`Type ${WIPE_AUTH_WORD}`}
+                autoComplete="off"
+                autoFocus
+              />
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => closeWipeDialog(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={wipeConfirm === 'all' ? executeWipeAll : executeWipeSelected}
+              disabled={wipeConfirm === 'all' && wipeAuthCode !== WIPE_AUTH_WORD}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:opacity-40 disabled:pointer-events-none"
+            >
+              Yes, erase permanently
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SettingsCard>
   );
 }
@@ -663,7 +735,7 @@ function VoucherNumberingTab({ onSave, showSavedToast }: { onSave: () => void, s
               (e.g. CP-0001 in 2027 despite 500 CPs in 2026).
             </p>
           </div>
-          <Toggle checked={localYearlyReset} onChange={setLocalYearlyReset} />
+          <ToggleSwitch checked={localYearlyReset} onChange={setLocalYearlyReset} />
         </div>
 
         {/* Prefix Editor */}
@@ -690,6 +762,7 @@ function VoucherNumberingTab({ onSave, showSavedToast }: { onSave: () => void, s
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
+                      aria-label={`${vt.type} prefix`}
                       value={localPrefixes[vt.type] ?? vt.default}
                       onChange={e => setLocalPrefixes(prev => ({ ...prev, [vt.type]: e.target.value.toUpperCase() }))}
                       className="w-20 rounded-lg border border-border bg-card px-2 py-1.5 text-sm font-mono font-bold text-foreground text-center focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors uppercase"
@@ -1042,26 +1115,7 @@ function SaveFooter({ onSave, showSavedToast }: { onSave: () => void, showSavedT
   );
 }
 
-function Toggle({ checked, onChange }: { checked: boolean, onChange: (c: boolean) => void }) {
-  return (
-    <button
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className={cn(
-        "w-11 h-6 rounded-full transition-colors duration-150 relative flex items-center px-1 shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-        checked ? "bg-primary" : "bg-muted-foreground/30"
-      )}
-    >
-      <div 
-        className={cn(
-          "w-4 h-4 rounded-full bg-background transition-transform transform shadow-sm",
-          checked ? "translate-x-5" : "translate-x-0"
-        )} 
-      />
-    </button>
-  );
-}
+// (Toggle control moved to the shared ui/toggle-switch.tsx)
 
 // Shared settings card — single chrome definition so every tab in Settings
 // renders the same card anatomy (per the component-system minimal pattern:

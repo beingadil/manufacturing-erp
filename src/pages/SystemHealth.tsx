@@ -25,6 +25,8 @@ export function SystemHealthDashboard() {
   const customers = useERPStore(s => s.customers);
   const journalEntries = useERPStore(s => s.journalEntries);
   const vouchers = useERPStore(s => s.vouchers);
+  const processingReceipts = useERPStore(s => s.processingReceipts);
+  const processingStages = useERPStore(s => s.processingStages);
   const companySettings = useERPStore(s => s.companySettings);
 
   const [healthStatus, setHealthStatus] = useState<Issue[]>([]);
@@ -51,12 +53,12 @@ export function SystemHealthDashboard() {
       if (electronDB()?.integrityCheck) {
         try {
           const r = await electronDB().integrityCheck();
-          if (r?.success && r?.details?.[0] === 'ok')
+          if (r?.success)
             addIssue('Database', 'SQLite Integrity', 'pass', 'SQLite integrity check passed - no corruption detected.');
-          else if (r?.success)
-            addIssue('Database', 'SQLite Integrity', 'warn', 'Integrity check returned: ' + JSON.stringify(r.details));
-          else
-            addIssue('Database', 'SQLite Integrity', 'fail', 'Integrity check failed: ' + (r?.error || 'unknown error'));
+          else {
+            const detail = r?.error || (Array.isArray(r?.details) && r.details.length ? r.details.join('; ') : 'unknown error');
+            addIssue('Database', 'SQLite Integrity', 'fail', 'Integrity check failed: ' + detail);
+          }
         } catch {
           addIssue('Database', 'SQLite Integrity', 'warn', 'Could not reach SQLite integrity check.');
         }
@@ -98,15 +100,23 @@ export function SystemHealthDashboard() {
       }
 
       // ── Unbilled Final-Stage Processing ──────────────────────────
-      const unbilledFinal = processingSends?.filter((ps: any) => {
-        if (ps.status === 'Completed' || ps.status === 'Billed') return false;
-        if (ps.isFinalStage && (ps.receivedPcs || 0) > 0) return true;
-        return false;
-      }) || [];
+      // A receipt is "unbilled final-stage" when it produced saleable finished
+      // goods (its stage isFinalStage) but billedStatus is not 'Billed'.
+      // Stage resolution: the receipt's own stageId, falling back to its
+      // dispatch's stageId (legacy receipts may predate receipt.stageId).
+      const sendsById = new Map((processingSends || []).map((ps: any) => [ps.id, ps]));
+      const isFinalStage = (stageId?: string) =>
+        !!processingStages?.find((s: any) => s.id === stageId)?.isFinalStage;
+      const unbilledFinal = (processingReceipts || []).filter((r: any) => {
+        if ((r.pcsReceived || 0) <= 0) return false;
+        if (r.billedStatus === 'Billed') return false;
+        const send = sendsById.get(r.sendId);
+        return isFinalStage(r.stageId) || (!!send && isFinalStage(send.stageId));
+      });
       if (unbilledFinal.length > 0) {
-        addIssue('Processing', 'Unbilled Final Stage', 'warn', unbilledFinal.length + ' final-stage sends without bill.');
+        addIssue('Processing', 'Unbilled Final Stage', 'warn', unbilledFinal.length + ' final-stage receipt(s) not yet billed.');
       } else {
-        addIssue('Processing', 'Unbilled Final Stage', 'pass', 'No unbilled final-stage sends.');
+        addIssue('Processing', 'Unbilled Final Stage', 'pass', 'No unbilled final-stage receipts.');
       }
 
       // ── Chart of Accounts Seeded ─────────────────────────────────
@@ -155,8 +165,9 @@ export function SystemHealthDashboard() {
           addIssue('Financial', 'Trial Balance Match', 'pass', `Books are balanced. Total: ${formatCurrency(totalDebit)}`);
         }
 
-        // 4. Voucher Integrity
-        const invalidVouchers = vouchers?.filter((v: any) => v.totalDebit !== v.totalCredit) || [];
+        // 4. Voucher Integrity (0.01 tolerance — float-exact comparison
+        // false-fails on accumulated drift like 100.30000000000004)
+        const invalidVouchers = vouchers?.filter((v: any) => Math.abs((v.totalDebit || 0) - (v.totalCredit || 0)) > 0.01) || [];
         if (invalidVouchers.length > 0) {
           addIssue('Financial', 'Voucher Balancing', 'fail', `${invalidVouchers.length} vouchers have mismatched Dr/Cr.`);
         } else {
@@ -185,7 +196,7 @@ export function SystemHealthDashboard() {
       setHealthStatus(issues);
       setLastScan(new Date());
       setIsScanning(false);
-  }, [processingSends, materials, batches, accounts, purchases, suppliers, sales, customers, journalEntries, vouchers, companySettings]);
+  }, [processingSends, materials, batches, accounts, purchases, suppliers, sales, customers, journalEntries, vouchers, processingReceipts, processingStages, companySettings]);
 
   useEffect(() => { runHealthCheck(); }, [runHealthCheck]);
 

@@ -11,7 +11,7 @@ declare global {
       execute: (req: DBRequest) => Promise<DBResponse<ExecuteResult>>;
       transaction: (req: TransactionRequest) => Promise<DBResponse>;
       close: () => Promise<{ success: boolean }>;
-      integrityCheck: () => Promise<{ success: boolean; details?: any[]; error?: string }>;
+      integrityCheck: () => Promise<{ success: boolean; status?: string; details?: any[]; error?: string }>;
       backup: () => Promise<{ success: boolean; path?: string; error?: string; size?: number }>;
       restore: (backupPath: string) => Promise<{ success: boolean; error?: string }>;
       listBackups: () => Promise<{ success: boolean; data?: any[]; error?: string }>;

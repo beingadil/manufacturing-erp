@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { aiClient, FALLBACK_MODELS } from '../../lib/ai/aiClient';
 import { cn } from '../../lib/utils';
 import { useSettingsStore } from '../../store/useSettingsStore';
+import { ToggleSwitch } from '../ui/toggle-switch';
 
 function SettingsCard({ title, subtitle, icon: Icon, children }: {
   title: string;
@@ -29,43 +30,6 @@ function SettingsCard({ title, subtitle, icon: Icon, children }: {
         </div>
       </div>
       {children}
-    </div>
-  );
-}
-
-function Toggle({ checked, onChange, label, description, disabled }: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
-  description: string;
-  disabled?: boolean;
-}) {
-  return (
-    <div className={cn('flex items-start justify-between gap-4 py-2', disabled && 'opacity-50')}>
-      <div>
-        <p className="text-sm font-medium text-foreground">{label}</p>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-label={label}
-        disabled={disabled}
-        onClick={() => onChange(!checked)}
-        className={cn(
-          'w-11 h-6 rounded-full transition-colors duration-150 relative flex items-center px-1 shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-          checked ? 'bg-primary' : 'bg-muted-foreground/30',
-          disabled && 'opacity-50'
-        )}
-      >
-        <div
-          className={cn(
-            'w-4 h-4 rounded-full bg-background transition-transform transform shadow-sm',
-            checked ? 'translate-x-5' : 'translate-x-0'
-          )}
-        />
-      </button>
     </div>
   );
 }
@@ -155,29 +119,39 @@ export function AiAssistantTab({ showSavedToast }: { showSavedToast: boolean }) 
         icon={Bot}
       >
         <div className="space-y-1 divide-y divide-border/50">
-          <Toggle
-            checked={aiAssistantEnabled}
-            onChange={(v) => {
-              setAiAssistantEnabled(v);
-              // Mirror into the gateway so ai:chat/transcribe honor it too.
-              void aiClient.setConfig({ enabled: v });
-              if (v && !hasKey) {
-                toast.info('Enabled — now add your Groq API key below.');
-              }
-            }}
-            label="Enable AI Assistant"
-            description="Master switch for all AI features."
-          />
-          <Toggle
-            checked={aiVoiceEnabled}
-            onChange={(v) => {
-              setAiVoiceEnabled(v);
-              void aiClient.setConfig({ voiceEnabled: v });
-            }}
-            label="Voice input"
-            description="Push-to-talk microphone button in the header."
-            disabled={!aiAssistantEnabled}
-          />
+          <div className="flex items-start justify-between gap-4 py-2">
+            <div>
+              <p className="text-sm font-medium text-foreground">Enable AI Assistant</p>
+              <p className="text-xs text-muted-foreground">Master switch for all AI features.</p>
+            </div>
+            <ToggleSwitch
+              checked={aiAssistantEnabled}
+              onChange={(v) => {
+                setAiAssistantEnabled(v);
+                // Mirror into the gateway so ai:chat/transcribe honor it too.
+                void aiClient.setConfig({ enabled: v });
+                if (v && !hasKey) {
+                  toast.info('Enabled — now add your Groq API key below.');
+                }
+              }}
+              aria-label="Enable AI Assistant"
+            />
+          </div>
+          <div className={cn('flex items-start justify-between gap-4 py-2', !aiAssistantEnabled && 'opacity-50')}>
+            <div>
+              <p className="text-sm font-medium text-foreground">Voice input</p>
+              <p className="text-xs text-muted-foreground">Push-to-talk microphone button in the header.</p>
+            </div>
+            <ToggleSwitch
+              checked={aiVoiceEnabled}
+              onChange={(v) => {
+                setAiVoiceEnabled(v);
+                void aiClient.setConfig({ voiceEnabled: v });
+              }}
+              aria-label="Voice input"
+              disabled={!aiAssistantEnabled}
+            />
+          </div>
         </div>
 
         {/* API key */}
