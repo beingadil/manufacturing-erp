@@ -20,6 +20,37 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.38',
+    date: '2026-09-17',
+    title: 'Settings & Dashboard Quality Pass',
+    sections: [
+      {
+        title: 'Safety',
+        items: [
+          'Wiping module or all ERP data now confirms through a modal dialog that lists exactly what will be erased — no more 10-second toast to catch.',
+          'Wipe All Data requires typing ERASE to enable the confirm button.',
+          'Database Health no longer shows a false corruption warning on a healthy database; real corruption now reports its actual cause.',
+          'Unbilled final-stage processing check now inspects the correct records (it previously could never fire).',
+        ],
+      },
+      {
+        title: 'Accessibility',
+        items: [
+          'Settings tabs support full keyboard navigation — arrow keys move between tabs, state is announced to screen readers.',
+          'Profile fields, voucher prefixes, and theme options are properly labeled for assistive technology.',
+          'Dashboard date presets meet the 40px touch-target floor.',
+        ],
+      },
+      {
+        title: 'Polish',
+        items: [
+          'Transaction amounts align in tabular numerals; themed slim scrollbar on the alerts panel.',
+          'Theme selection applies instantly (the redundant Save button was removed from that panel).',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.37',
     date: '2026-09-17',
     title: 'Quick Entry, Smarter Navigation & Record Stats',
