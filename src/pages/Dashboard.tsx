@@ -168,8 +168,9 @@ export function Dashboard() {
             <button
               key={p.key}
               onClick={() => setPreset(p.key)}
+              aria-pressed={preset === p.key}
               className={cn(
-                "px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+                "min-h-[40px] px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
                 preset === p.key ? "bg-card text-foreground shadow-sm border border-border" : "text-muted-foreground hover:text-foreground"
               )}
             >
@@ -462,7 +463,7 @@ export function Dashboard() {
               <AlertTriangle className="h-4 w-4 text-amber-500" /> Alerts & Notifications
             </h3>
           </div>
-          <div className="p-0 max-h-[300px] overflow-y-auto">
+          <div className="p-0 max-h-[300px] overflow-y-auto scroll-thin">
             <ul className="divide-y divide-border/50">
               {outOfStockMaterials.map(m => (
                 <li key={m.id} className="p-4 flex items-start gap-3 hover:bg-muted/40">
@@ -492,7 +493,7 @@ export function Dashboard() {
         <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col">
           <div className="p-5 border-b border-border/50 flex items-center justify-between bg-muted/40">
             <h3 className="font-semibold text-foreground">Recent Transactions</h3>
-            <button onClick={() => navigate('/sales')} className="text-sm font-medium text-info hover:text-info">View All Sales</button>
+            <button onClick={() => navigate('/sales')} className="text-sm font-medium text-primary hover:underline">View All Sales</button>
           </div>
           <div className="p-0">
             <table className="w-full text-sm text-left">
@@ -501,7 +502,7 @@ export function Dashboard() {
                   <tr key={s.id} className="hover:bg-muted/40">
                     <td className="px-5 py-4"><span className="text-xs text-muted-foreground">{new Date(s.date).toLocaleDateString()}</span></td>
                     <td className="px-5 py-4 font-medium">{s.invoiceNo}</td>
-                    <td className="px-5 py-4 text-right font-bold text-success">+{formatCurrency(s.totalAmount)}</td>
+                    <td className="px-5 py-4 text-right font-bold text-success tabular-nums">+{formatCurrency(s.totalAmount)}</td>
                   </tr>
                 ))}
                 {sales.length === 0 && (

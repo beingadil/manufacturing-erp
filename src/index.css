@@ -161,6 +161,27 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* Thin themed scroller for card body areas (alerts lists, side panels).
+     Same visual language as .dropdown-scroll, without the dropdown semantics. */
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .scroll-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 9999px;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.4);
+  }
+  .scroll-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
   /* Dropdown list scrollers — thin, unobtrusive scrollbar; never a horizontal
      one (rows truncate instead of overflowing). Used by SearchableSelect and
      SearchableAccountTree result lists. */
