@@ -12,6 +12,7 @@ import { InventoryCalculationService } from '../lib/business/InventoryCalculatio
 import { cn, formatCurrency, formatNumber } from "../lib/utils";
 import { MaterialService } from '../services/MaterialService';
 import { useERPStore } from "../store/useERPStore";
+import type { ProcessingPath } from '../types/erp';
 
 export function RawMaterials() {
   const { materials, categories, purchases, processingSends, processingReceipts, batches } = useERPStore();
@@ -92,6 +93,20 @@ export function RawMaterials() {
   const [categoryId, setCategoryId] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<'Active' | 'Inactive'>("Active");
+  const { processingStages } = useERPStore();
+  const sortedStagesForForm = useMemo(() =>
+    [...(processingStages || [])].sort((a, b) => a.sequence - b.sequence),
+    [processingStages]
+  );
+  const [processingPath, setProcessingPath] = useState<ProcessingPath>('full_chain');
+  const [fixedStageId, setFixedStageId] = useState('');
+
+  // Category prefill: a category with a defaultProcessingPath seeds the selector.
+  const handleCategoryChange = (id: string) => {
+    setCategoryId(id);
+    const catDefault = categories.find(c => c.id === id)?.defaultProcessingPath;
+    if (catDefault) setProcessingPath(catDefault);
+  };
 
   const openEditModal = (material: any) => {
     setEditingMaterial(material);
@@ -99,6 +114,8 @@ export function RawMaterials() {
     setCategoryId(material.categoryId);
     setDescription(material.description || '');
     setStatus(material.status === 'Inactive' ? 'Inactive' : 'Active');
+    setProcessingPath(material.processingPath ?? 'full_chain');
+    setFixedStageId(material.fixedStageId || '');
     setIsModalOpen(true);
   };
 
@@ -109,18 +126,23 @@ export function RawMaterials() {
     setCategoryId("");
     setDescription("");
     setStatus("Active");
+    setProcessingPath('full_chain');
+    setFixedStageId('');
   };
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !categoryId) return;
+    if (processingPath === 'single_stage' && !fixedStageId) return;
 
     try {
       MaterialService.create({
         name,
         categoryId,
         description,
-        status
+        status,
+        processingPath,
+        fixedStageId: processingPath === 'single_stage' ? fixedStageId : undefined
       });
       toast.success('Material created successfully');
       closeModal();
@@ -132,13 +154,16 @@ export function RawMaterials() {
   const handleEdit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingMaterial || !name.trim() || !categoryId) return;
+    if (processingPath === 'single_stage' && !fixedStageId) return;
 
     try {
       MaterialService.update(editingMaterial.id, {
         name,
         categoryId,
         description,
-        status
+        status,
+        processingPath,
+        fixedStageId: processingPath === 'single_stage' ? fixedStageId : undefined
       });
       toast.success('Material updated successfully');
       closeModal();
@@ -344,11 +369,47 @@ export function RawMaterials() {
             <SearchableSelect
               options={categories.map(c => ({ id: c.id, label: c.name }))}
               value={categoryId}
-              onChange={setCategoryId}
+              onChange={handleCategoryChange}
               placeholder="Select Category..."
               required
             />
           </div>
+          <div className="space-y-2">
+            <label htmlFor="material-path" className="text-sm font-semibold text-foreground">Processing Path *</label>
+            <select
+              id="material-path"
+              required
+              value={processingPath}
+              onChange={e => setProcessingPath(e.target.value as ProcessingPath)}
+              className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors bg-card"
+            >
+              <option value="full_chain">Through all processors ({sortedStagesForForm.length || 5} stages)</option>
+              <option value="single_stage">One processor only — becomes final product</option>
+              <option value="ready_made">Ready-made — no processing, straight to stock</option>
+            </select>
+            <p className="text-xs text-muted-foreground">
+              {processingPath === 'full_chain' && 'Material goes through every processor in sequence before becoming a final product.'}
+              {processingPath === 'single_stage' && 'Material is sent to exactly one processor below; what comes back is the final product.'}
+              {processingPath === 'ready_made' && 'Purchased already finished (e.g. lids, handles) — enters sellable stock directly, never dispatched.'}
+            </p>
+          </div>
+          {processingPath === 'single_stage' && (
+            <div className="space-y-2">
+              <label htmlFor="material-fixed-stage" className="text-sm font-semibold text-foreground">The One Processor *</label>
+              <select
+                id="material-fixed-stage"
+                required
+                value={fixedStageId}
+                onChange={e => setFixedStageId(e.target.value)}
+                className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors bg-card"
+              >
+                <option value="">Select the processor stage...</option>
+                {sortedStagesForForm.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}{s.isFinalStage ? ' (Final)' : ''}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="space-y-2">
             <label htmlFor="material-description" className="text-sm font-semibold text-foreground">Description</label>
             <textarea id="material-description" name="material-description" value={description} onChange={e => setDescription(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors" placeholder="Optional notes" rows={2} />

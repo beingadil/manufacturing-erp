@@ -15,19 +15,31 @@ export interface PurchaseDTO {
   weightUnit: 'KGs' | 'Tons';
   ratePerUnit: number;
   weightPerPiece: number;
+  /** Ready-made purchases are counted in pieces directly — no weight math. */
+  directPcs?: number;
 }
 
 export class PurchaseValidator implements IValidator<PurchaseDTO> {
   validate(data: PurchaseDTO): ValidationResult {
     const result = new ValidationResult();
 
+    // Ready-made goods are bought already finished, so they carry pieces and a
+    // per-piece rate instead of weight. Demanding the weight math here would
+    // reject every ready-made purchase before it could reach the store.
+    const material = (useERPStore.getState().materials || []).find(m => m.id === data.materialId);
+    const isReadyMade = (material?.processingPath ?? 'full_chain') === 'ready_made';
+
     // Field Validations
     FieldValidators.required(data.supplierId, 'Supplier', result);
     FieldValidators.required(data.materialId, 'Material', result);
     FieldValidators.required(data.date, 'Date', result);
-    FieldValidators.positive(data.weight, 'Weight', result);
     FieldValidators.positive(data.ratePerUnit, 'Rate per Unit', result);
-    FieldValidators.positive(data.weightPerPiece, 'Weight per Piece', result);
+    if (isReadyMade) {
+      FieldValidators.positive(data.directPcs ?? 0, 'Pieces', result);
+    } else {
+      FieldValidators.positive(data.weight, 'Weight', result);
+      FieldValidators.positive(data.weightPerPiece, 'Weight per Piece', result);
+    }
 
     if (result.isValid) {
       // Business Validations
@@ -36,8 +48,10 @@ export class PurchaseValidator implements IValidator<PurchaseDTO> {
       BusinessValidators.mustExist('materials', data.materialId, 'Raw Material', result);
       BusinessValidators.mustBeActive('materials', data.materialId, 'Raw Material', result);
 
-      const calculatedPcs = UnitConversionService.calculatePcsFromWeight(data.weight, data.weightUnit as any, data.weightPerPiece);
-      FieldValidators.positive(calculatedPcs, 'Calculated Pieces', result);
+      if (!isReadyMade) {
+        const calculatedPcs = UnitConversionService.calculatePcsFromWeight(data.weight, data.weightUnit as any, data.weightPerPiece);
+        FieldValidators.positive(calculatedPcs, 'Calculated Pieces', result);
+      }
     }
 
     return result;

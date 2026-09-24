@@ -80,6 +80,23 @@ export function SendToProcessorForm({
 
   const sortedStages = useMemo(() => getSortedStages(processingStages || []), [processingStages]);
 
+  // Processing-path gating: ready-made materials never dispatch; single-stage
+  // materials only send to their one fixed stage. The stage dropdown and the
+  // auto-stage resolver both follow the selected material's path.
+  const selectedMaterial = materials.find(m => m.id === materialId);
+  const materialPath = selectedMaterial?.processingPath ?? 'full_chain';
+  const isSingleStage = materialPath === 'single_stage';
+  const fixedStage = isSingleStage && selectedMaterial?.fixedStageId
+    ? sortedStages.find(s => s.id === selectedMaterial.fixedStageId) || null
+    : null;
+
+  // Materials offered in the dropdown: ready-made items are excluded (nothing
+  // to process), with their available buckets still shown for the rest.
+  const dispatchableMaterials = useMemo(
+    () => materials.filter(m => (m.processingPath ?? 'full_chain') !== 'ready_made'),
+    [materials]
+  );
+
   // Auto stage resolution: the material's pcs sit at MULTIPLE stages at once
   // (1100 purchased → 1000 at Machine, 100 still raw). AUTO therefore picks
   // the EARLIEST stage with pcs waiting — raw goes to stage 1 first; only
@@ -119,13 +136,15 @@ export function SendToProcessorForm({
   // Resolve the effective stage: explicit selection > selected batch's next > material auto.
   const effectiveStageId = useMemo(() => {
     if (editSendId) return stageId;
+    // Single-stage materials are locked to their one fixed stage.
+    if (isSingleStage && fixedStage) return fixedStage.id;
     if (stageId) return stageId;
     if (batchId) {
       const prog = batchProgress.find(p => p.batch.id === batchId);
       if (prog?.nextStage) return prog.nextStage.id;
     }
     return materialProgress?.nextStage?.id || '';
-  }, [editSendId, stageId, batchId, batchProgress, materialProgress]);
+  }, [editSendId, stageId, batchId, batchProgress, materialProgress, isSingleStage, fixedStage]);
 
   const effectiveStage = sortedStages.find(s => s.id === effectiveStageId);
   const rateMethod = effectiveStage?.rateMethod || 'per_piece';
@@ -133,8 +152,12 @@ export function SendToProcessorForm({
   // Batches that can be sent to the effective stage.
   const sendableBatches = useMemo(() => {
     if (!materialId) return [];
+    // Single-stage: any batch with raw pcs can go to the fixed stage.
+    if (isSingleStage && fixedStage) {
+      return (batches || []).filter(b => b.materialId === materialId && batchRawAvailableOf(b) > 0);
+    }
     return (batches || []).filter(b => b.materialId === materialId && batchCanSendToStage(b, effectiveStageId, sortedStages));
-  }, [materialId, batches, effectiveStageId, sortedStages]);
+  }, [materialId, batches, effectiveStageId, sortedStages, isSingleStage, fixedStage]);
 
   // All target stages the user can send to right now, with the pcs available at
   // each — raw pcs go to stage 1, received pcs go to the NEXT stage after the
@@ -142,6 +165,12 @@ export function SendToProcessorForm({
   // 3700 received pcs to Machine Man even while 93 are still raw.
   const stageOptions = useMemo(() => {
     if (!materialId || sortedStages.length === 0) return [];
+    // Single-stage: one option — the fixed stage drawing raw pcs.
+    if (isSingleStage && fixedStage) {
+      const rawTotal = (batches || []).filter(b => b.materialId === materialId)
+        .reduce((sum, b) => sum + batchRawAvailableOf(b), 0);
+      return rawTotal > 0 ? [{ stageId: fixedStage.id, availablePcs: rawTotal }] : [];
+    }
     const opts: { stageId: string; availablePcs: number; fromStageName?: string }[] = [];
     const rawTotal = (batches || []).filter(b => b.materialId === materialId)
       .reduce((sum, b) => sum + batchRawAvailableOf(b), 0);
@@ -158,7 +187,7 @@ export function SendToProcessorForm({
       if (next) opts.push({ stageId: next.id, availablePcs: avail, fromStageName: stage.name });
     }
     return opts;
-  }, [materialId, batches, sortedStages]);
+  }, [materialId, batches, sortedStages, isSingleStage, fixedStage]);
 
   // Total pcs available for this material at the effective stage.
   // Multi-position aware: stage 1 draws raw pcs (never-dispatched remainder);
@@ -167,6 +196,13 @@ export function SendToProcessorForm({
   // currentStageId without consuming other batches' availability).
   const totalAvailable = useMemo(() => {
     if (!effectiveStage) return 0;
+    // Single-stage materials always draw RAW at their fixed stage, even when
+    // that stage sits mid-chain (their receipt finishes the pcs).
+    if (isSingleStage && fixedStage) {
+      return (batches || [])
+        .filter(b => b.materialId === materialId)
+        .reduce((sum, b) => sum + batchRawAvailableOf(b), 0);
+    }
     if (effectiveStage.sequence <= 1) {
       return (batches || [])
         .filter(b => b.materialId === materialId)
@@ -177,7 +213,7 @@ export function SendToProcessorForm({
     if (requiredSource === 'raw') return 0;
     return (batches || []).filter(b => b.materialId === materialId)
       .reduce((sum, b) => sum + batchAvailableAtSource(b, requiredSource), 0);
-  }, [effectiveStage, effectiveStageId, materialId, batches, sortedStages]);
+  }, [effectiveStage, effectiveStageId, materialId, batches, sortedStages, isSingleStage, fixedStage]);
 
   const previousPendingSends = useMemo(() => {
     if (!processorId) return [];
@@ -302,7 +338,7 @@ export function SendToProcessorForm({
         <div>
           <label className="block text-sm font-medium text-foreground/80 mb-1">Material</label>
           <SearchableSelect
-            options={materials.map(m => {
+            options={dispatchableMaterials.map(m => {
               const matBatches = (batches || []).filter(b => b.materialId === m.id);
               const rawTotal = matBatches.reduce((s, b) => s + batchRawAvailableOf(b), 0);
               const parts: string[] = [];
@@ -378,12 +414,15 @@ export function SendToProcessorForm({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-foreground/80 mb-1">Processing Stage</label>
+          <label className="block text-sm font-medium text-foreground/80 mb-1">
+            Processing Stage
+            {isSingleStage && fixedStage && <span className="ml-1.5 text-xs text-muted-foreground font-normal">(locked — {selectedMaterial?.name} processes here only)</span>}
+          </label>
           <select
             value={editSendId ? stageId : (effectiveStageId || '')}
             onChange={e => { setStageId(e.target.value); setBatchId(''); setError(null); }}
             className="w-full rounded-xl border border-border bg-background p-3 text-sm"
-            disabled={!materialId}
+            disabled={!materialId || (isSingleStage && !!fixedStage && !editSendId)}
           >
             {!materialId && <option value="">Select material first</option>}
             {editSendId
@@ -415,9 +454,11 @@ export function SendToProcessorForm({
         {materialId && effectiveStage && totalAvailable > 0 && (
           <p className="text-xs text-muted-foreground -mt-1">
             Available: {formatNumber(totalAvailable)} PCS
-            {effectiveStage.sequence > 1
-              ? ` from ${sortedStages.find(s => s.sequence === effectiveStage.sequence - 1)?.name || ''}`
-              : ' raw'}
+            {isSingleStage && fixedStage
+              ? ' raw'
+              : effectiveStage.sequence > 1
+                ? ` from ${sortedStages.find(s => s.sequence === effectiveStage.sequence - 1)?.name || ''}`
+                : ' raw'}
           </p>
         )}
         <input

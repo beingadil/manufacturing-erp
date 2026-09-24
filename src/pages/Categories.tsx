@@ -10,7 +10,7 @@ import { ModalOverlay } from '../components/ui/ModalOverlay';
 import { formatNumber } from '../lib/utils';
 import { CategoryService } from '../services/CategoryService';
 import { useERPStore } from '../store/useERPStore';
-import { MaterialCategory } from '../types/erp';
+import { MaterialCategory, ProcessingPath } from '../types/erp';
 
 export default function Categories() {
   const { categories, materials, addCategory, updateCategory } = useERPStore();
@@ -19,9 +19,10 @@ export default function Categories() {
   const [editingCategory, setEditingCategory] = useState<MaterialCategory | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<{ isOpen: boolean; id: string; name: string; impactDetails: string[] }>({ isOpen: false, id: '', name: '', impactDetails: [] });
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{ name: string; description: string; defaultProcessingPath: ProcessingPath }>({
     name: '',
-    description: ''
+    description: '',
+    defaultProcessingPath: 'full_chain'
   });
 
   // Escape closes the modal
@@ -85,14 +86,15 @@ export default function Categories() {
   const closeForm = () => {
     setIsFormOpen(false);
     setEditingCategory(null);
-    setFormData({ name: '', description: '' });
+    setFormData({ name: '', description: '', defaultProcessingPath: 'full_chain' });
   };
 
   const editCategory = (category: MaterialCategory) => {
     setEditingCategory(category);
     setFormData({
       name: category.name,
-      description: category.description || ''
+      description: category.description || '',
+      defaultProcessingPath: category.defaultProcessingPath ?? 'full_chain'
     });
     setIsFormOpen(true);
   };
@@ -304,6 +306,19 @@ export default function Categories() {
                   placeholder="Additional details about this category..."
                   rows={3}
                 />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-foreground">Default Processing Path</label>
+                <select
+                  value={formData.defaultProcessingPath}
+                  onChange={(e) => setFormData({ ...formData, defaultProcessingPath: e.target.value as ProcessingPath })}
+                  className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors bg-card"
+                >
+                  <option value="full_chain">Through all processors</option>
+                  <option value="single_stage">One processor only</option>
+                  <option value="ready_made">Ready-made (no processing)</option>
+                </select>
+                <p className="text-xs text-muted-foreground">Pre-selected when creating a material in this category.</p>
               </div>
               <div className="flex gap-3 pt-2">
                 <button
