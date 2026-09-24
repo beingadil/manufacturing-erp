@@ -20,6 +20,41 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.39',
+    date: '2026-09-24',
+    title: 'Processing Paths — Full Chain, Single Stage & Ready-Made',
+    sections: [
+      {
+        title: 'Processing Paths',
+        items: [
+          'Every raw material now declares how it becomes a finished product: Full Chain (through every processor in sequence — the existing behaviour), Single Stage (one chosen processor turns it into the final product), or Ready-Made (bought already finished).',
+          'The path is chosen when the material is created, and a category can carry a default path that pre-fills new materials.',
+        ],
+      },
+      {
+        title: 'Purchases',
+        items: [
+          'Ready-made materials are bought by piece count and per-piece rate — no weight conversion. The pieces go straight to sellable finished stock and the purchase debits Finished Goods Inventory instead of Raw Material Inventory.',
+          'Each purchase records the path it was bought under, so editing a material later never rewrites history.',
+        ],
+      },
+      {
+        title: 'Processing',
+        items: [
+          'A Single Stage material is sent only to its designated processor, and what comes back is the finished product.',
+          'Ready-made materials never appear in a dispatch, and the engine rejects any attempt to send them.',
+        ],
+      },
+      {
+        title: 'Fixes',
+        items: [
+          'Ready-made purchases could not be saved at all — purchase validation still demanded weight and weight-per-piece. It now checks pieces for ready-made goods and weight for every other path.',
+          'Quick-adding a material into a category whose default path is Single Stage left it unprocessable (no designated stage); quick-add now leaves it on the full chain so the stage is chosen on the material form.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.38',
     date: '2026-09-17',
     title: 'Settings & Dashboard Quality Pass',
