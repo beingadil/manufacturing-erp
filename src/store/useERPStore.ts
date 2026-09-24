@@ -625,8 +625,16 @@ export const useERPStore = create<ERPState>()(
       addPurchase: (data) => {
         set((state) => {
         const purchaseNo = DocumentNumberingService.nextDocumentNumber(state.purchases, 'purchaseNo', 'PO', data.date);
-        const calculatedPcs = UnitConversionService.calculatePcsFromWeight(data.weight, data.weightUnit, data.weightPerPiece);
-        const amount = data.weight * data.ratePerUnit;
+        // Ready-made purchases enter pcs DIRECTLY (directPcs mode — no weight math);
+        // every other purchase derives pcs from weight ÷ weightPerPiece.
+        const material = state.materials.find(m => m.id === data.materialId);
+        const isReadyMade = (material?.processingPath ?? 'full_chain') === 'ready_made';
+        const calculatedPcs = isReadyMade && data.directPcs
+          ? Math.max(0, Math.round(data.directPcs))
+          : UnitConversionService.calculatePcsFromWeight(data.weight, data.weightUnit, data.weightPerPiece);
+        const amount = isReadyMade && data.directPcs
+          ? Math.round(data.directPcs) * data.ratePerUnit
+          : data.weight * data.ratePerUnit;
 
         const purchaseId = uuidv4();
         const newPurchase: Purchase = {
@@ -653,15 +661,25 @@ export const useERPStore = create<ERPState>()(
           initialPcs: calculatedPcs,
           remainingPcs: calculatedPcs,
           amount,
-          status: "Active"
+          status: "Active",
+          // Path snapshot: the trail must replay under the path pcs were BOUGHT
+          // under, even if the material's path is edited later.
+          processingPath: material?.processingPath ?? 'full_chain',
+          fixedStageId: material?.fixedStageId,
         };
 
         const currentMaterial = state.materials.find(m => m.id === data.materialId);
         const currentStock = currentMaterial?.stockPcs || 0;
         const newStock = currentStock + calculatedPcs;
 
+        // Ready-made pcs are ALREADY finished — they land in the sellable
+        // finished pool (processedStockPcs), never in raw stock.
         const updatedMaterials = state.materials.map(m =>
-          m.id === data.materialId ? { ...m, stockPcs: newStock } : m
+          m.id === data.materialId
+            ? isReadyMade
+              ? { ...m, processedStockPcs: (m.processedStockPcs || 0) + calculatedPcs }
+              : { ...m, stockPcs: newStock }
+            : m
         );
 
         const movement: InventoryMovement = {
@@ -673,7 +691,8 @@ export const useERPStore = create<ERPState>()(
           module: "Purchase",
           transactionType: "IN",
           quantity: calculatedPcs,
-          runningBalance: newStock,
+          // Ready-made purchases raise the finished counter, not raw.
+          runningBalance: isReadyMade ? (currentMaterial?.processedStockPcs || 0) + calculatedPcs : newStock,
           remarks: data.remarks
         };
 
@@ -683,10 +702,14 @@ export const useERPStore = create<ERPState>()(
         // listing balance can never drift from the ledger closing balance.
 
         // Automatic Voucher Generation (spec §25 — resolve accounts by subtype, never by name)
-        // Purchases increase raw-material INVENTORY (an asset) — the purchase is
-        // NOT an expense yet. Cost of goods sold is recognized only when the
-        // goods are actually sold, so the Balance Sheet shows the stock we hold.
-        const purchaseAccount = getSystemInventoryAccount(state.accounts, state.accountSubtypes, 'Raw Material Inventory');
+        // Purchases increase INVENTORY (an asset) — the purchase is NOT an
+        // expense yet. Ready-made goods are already finished, so they debit
+        // Finished Goods; everything else debits Raw Material Inventory.
+        const purchaseAccount = getSystemInventoryAccount(
+          state.accounts,
+          state.accountSubtypes,
+          isReadyMade ? 'Finished Goods Inventory' : 'Raw Material Inventory'
+        );
         const payableAccount = state.accounts.find(a => a.linkedEntityId === data.supplierId) 
           || getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Accounts Payable');
         
@@ -705,7 +728,9 @@ export const useERPStore = create<ERPState>()(
             referenceNo: purchaseNo,
             sourceModule: 'Purchase',
             sourceId: purchaseId,
-            narration: `Purchase of ${data.weight} ${data.weightUnit} from Supplier`,
+            narration: isReadyMade
+              ? `Ready-made purchase: ${calculatedPcs} PCS from Supplier`
+              : `Purchase of ${data.weight} ${data.weightUnit} from Supplier`,
             totalDebit: amount,
             totalCredit: amount,
             createdAt: new Date().toISOString(),
@@ -754,6 +779,19 @@ export const useERPStore = create<ERPState>()(
         let failure: AppError | null = null;
         set((state) => {
           try {
+            // ── Processing-path guards (BEFORE the worker guard: a single-stage
+            // material's designated stage must not be masked by a worker-binding
+            // error — the material's path is the primary constraint).
+            const sendMaterial = state.materials.find(m => m.id === data.materialId);
+            const sendPath = sendMaterial?.processingPath ?? 'full_chain';
+            if (sendPath === 'ready_made') {
+              throw new AppError(`"${sendMaterial?.name || 'This material'}" is a ready-made product — it needs no processing.`);
+            }
+            if (sendPath === 'single_stage' && data.stageId !== sendMaterial?.fixedStageId) {
+              const fixedStage = state.processingStages.find(s => s.id === sendMaterial?.fixedStageId);
+              throw new AppError(`"${sendMaterial?.name || 'This material'}" only processes at ${fixedStage?.name || 'its designated stage'}.`);
+            }
+
             // ── Stage-worker guard: a processor assigned to a stage can only
             // work that stage (general workers can work any).
             const worker = state.processors.find(p => p.id === data.processorId);
@@ -776,7 +814,9 @@ export const useERPStore = create<ERPState>()(
             };
 
             const stages = state.processingStages || [];
-            const consumesRaw = InventoryCalculationService.sendConsumesRaw(data.stageId, stages);
+            // Path-aware: a single_stage material draws RAW at its fixed stage
+            // (wherever it sits in the chain); full_chain follows the sequence map.
+            const consumesRaw = InventoryCalculationService.sendConsumesRaw(data.stageId, stages, sendMaterial);
             // ══ MOVEMENT MAP: the ONLY legal source bucket for this target ══
             // Stage 1 draws RAW; stage N draws the availability produced by
             // stage N−1. Anything else is rejected — stage-skipping and
@@ -893,7 +933,10 @@ export const useERPStore = create<ERPState>()(
 
             const stageId = data.stageId ?? send.stageId;
             const stages = state.processingStages || [];
-            const producesFinished = InventoryCalculationService.receiptProducesFinished(stageId, stages);
+            // Path-aware: single-stage materials finish at their ONE fixed stage
+            // regardless of where it sits in the chain.
+            const receiveMaterial = state.materials.find(m => m.id === data.materialId);
+            const producesFinished = InventoryCalculationService.receiptProducesFinished(stageId, stages, receiveMaterial);
 
             // Per-stage billing: per_piece = qty × rate; per_kg = qty × weightPerPiece(kg) × rate.
             const stage = stages.find(s => s.id === stageId);

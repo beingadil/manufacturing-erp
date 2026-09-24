@@ -55,12 +55,16 @@ export const createCRUDActions = (
       const batch = state.batches.find(b => b.purchaseId === id);
       const batchId = batch?.id;
       
-      // 2. Reduce material stock
+      // 2. Reduce material stock — ready-made purchases landed in the
+      // FINISHED pool, so the reversal must come from the same pool.
+      const wasReadyMade = (batch?.processingPath ?? 'full_chain') === 'ready_made';
       let updatedMaterials = state.materials;
       if (batch) {
         updatedMaterials = state.materials.map(m => 
           m.id === purchase.materialId 
-            ? { ...m, stockPcs: m.stockPcs - batch.initialPcs }
+            ? wasReadyMade
+              ? { ...m, processedStockPcs: Math.max(0, (m.processedStockPcs || 0) - batch.initialPcs) }
+              : { ...m, stockPcs: m.stockPcs - batch.initialPcs }
             : m
         );
       }
@@ -106,8 +110,16 @@ export const createCRUDActions = (
       const oldPurchase = state.purchases.find(p => p.id === id);
       if (!oldPurchase) return state;
 
-      const newCalculatedPcs = UnitConversionService.calculatePcsFromWeight(data.weight, data.weightUnit, data.weightPerPiece);
-      const newAmount = data.weight * data.ratePerUnit;
+      // Ready-made purchases keep their direct-pcs entry mode (pcs × rate/pc);
+      // everything else derives pcs from weight ÷ weightPerPiece.
+      const oldBatch = state.batches.find(b => b.purchaseId === id);
+      const wasReadyMade = (oldBatch?.processingPath ?? 'full_chain') === 'ready_made';
+      const newCalculatedPcs = wasReadyMade && data.directPcs
+        ? Math.max(0, Math.round(data.directPcs))
+        : UnitConversionService.calculatePcsFromWeight(data.weight, data.weightUnit, data.weightPerPiece);
+      const newAmount = wasReadyMade && data.directPcs
+        ? Math.round(data.directPcs) * data.ratePerUnit
+        : data.weight * data.ratePerUnit;
 
       const diffPcs = newCalculatedPcs - oldPurchase.calculatedPcs;
 
@@ -117,7 +129,6 @@ export const createCRUDActions = (
       );
 
       // Update Batch
-      const oldBatch = state.batches.find(b => b.purchaseId === id);
       let updatedBatches = state.batches;
       if (oldBatch) {
         updatedBatches = state.batches.map(b => 
@@ -127,10 +138,12 @@ export const createCRUDActions = (
         );
       }
 
-      // Update Material stock
+      // Update Material stock — ready-made pcs live in the FINISHED pool.
       const updatedMaterials = state.materials.map(m => 
         m.id === oldPurchase.materialId 
-          ? { ...m, stockPcs: m.stockPcs + diffPcs }
+          ? wasReadyMade
+            ? { ...m, processedStockPcs: Math.max(0, (m.processedStockPcs || 0) + diffPcs) }
+            : { ...m, stockPcs: m.stockPcs + diffPcs }
           : m
       );
 
@@ -143,7 +156,16 @@ export const createCRUDActions = (
       let updatedJournalEntries = state.journalEntries;
       if (voucher) {
         updatedVouchers = state.vouchers.map(v => 
-          v.id === voucher.id ? { ...v, totalDebit: newAmount, totalCredit: newAmount, narration: `Purchase of ${data.weight} ${data.weightUnit} from Supplier` } : v
+          v.id === voucher.id
+            ? {
+                ...v,
+                totalDebit: newAmount,
+                totalCredit: newAmount,
+                narration: wasReadyMade
+                  ? `Ready-made purchase: ${newCalculatedPcs} PCS from Supplier`
+                  : `Purchase of ${data.weight} ${data.weightUnit} from Supplier`,
+              }
+            : v
         );
         updatedJournalEntries = state.journalEntries.map(je => 
           je.voucherId === voucher.id 

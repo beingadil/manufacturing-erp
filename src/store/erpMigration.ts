@@ -179,7 +179,11 @@ export function migrateERPState(state: any): any {
     // edits, and deletes — replay is consistent by construction.
     let trail: any[] = batches;
     const materialIds = [...new Set(batches.map((b: any) => String(b.materialId)))];
+    const materialsArr = Array.isArray(state.materials) ? state.materials : [];
     for (const mid of materialIds as string[]) {
+      // Pass the material's path config so single_stage/ready_made trails replay
+      // under their own rules (batch path snapshots take precedence inside).
+      const mat = materialsArr.find((m: any) => m.id === mid);
       trail = InventoryCalculationService.recomputeFinishedPcsForMaterial(
         String(mid),
         trail,
@@ -188,7 +192,8 @@ export function migrateERPState(state: any): any {
         salesArr,
         products,
         undefined,
-        processingStages
+        processingStages,
+        mat ? { processingPath: mat.processingPath, fixedStageId: mat.fixedStageId } : undefined
       );
     }
     // Scrub the legacy scalar availability fields — the per-source map

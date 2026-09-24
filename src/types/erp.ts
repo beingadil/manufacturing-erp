@@ -1,8 +1,18 @@
+/**
+ * How a material flows through manufacturing:
+ *  - full_chain   → through EVERY configured processor in sequence (default; existing data)
+ *  - single_stage → through exactly ONE fixed processor; its receipt makes it a final product
+ *  - ready_made   → purchased finished (lids, handles); lands directly in the sellable finished pool
+ */
+export type ProcessingPath = 'full_chain' | 'single_stage' | 'ready_made';
+
 export interface MaterialCategory {
   id: string;
   name: string;
   type?: string;
   description?: string;
+  /** Default processing path offered when a material is created in this category. */
+  defaultProcessingPath?: ProcessingPath;
   status: 'Active' | 'Inactive';
 }
 
@@ -21,6 +31,10 @@ export interface RawMaterial {
   // New fields for traceability
   reservedStockPcs?: number; 
   atProcessorPcs?: number;
+  /** Manufacturing flow for this material. Undefined = full_chain (existing data). */
+  processingPath?: ProcessingPath;
+  /** The ONE processor stage a single_stage material passes through. */
+  fixedStageId?: string;
 }
 
 export interface Batch {
@@ -53,6 +67,10 @@ export interface Batch {
    * availableFromStageId pair.
    */
   stageAvailableBySource?: Record<string, number>;
+  /** Path snapshot from the material at purchase time (traceability/reporting). */
+  processingPath?: ProcessingPath;
+  /** For single_stage batches: the one stage their pcs pass through. */
+  fixedStageId?: string;
 }
 
 export type ProcessingRateMethod = "per_piece" | "per_kg";
@@ -161,6 +179,8 @@ export interface Purchase {
   calculatedPcs: number;
   amount: number;
   remarks?: string;
+  /** Ready-made entry mode: pcs bought directly (no weight math), landed in finished stock. */
+  directPcs?: number;
 }
 
 export interface ProcessingSend {

@@ -539,7 +539,12 @@ export class InventoryCalculationService {
    * Consume from RAW (stage-1 / legacy dispatch). Unknown stage ids default to
    * raw-consuming so the trail can never lose pcs.
    */
-  static sendConsumesRaw(stageId: string | undefined, stages: ProcessingStage[]): boolean {
+  static sendConsumesRaw(stageId: string | undefined, stages: ProcessingStage[], material?: Pick<RawMaterial, 'processingPath' | 'fixedStageId'>): boolean {
+    // Path-aware overrides: a single_stage material draws raw ONLY at its fixed
+    // stage (its receipt then finishes the pcs); ready-made materials are never
+    // dispatched at all. Everything else follows the full-chain map.
+    if (material?.processingPath === 'single_stage') return !!material.fixedStageId && stageId === material.fixedStageId;
+    if (material?.processingPath === 'ready_made') return false;
     if (!stageId) return true;
     const stage = stages.find(s => s.id === stageId);
     if (!stage) return true;
@@ -550,7 +555,10 @@ export class InventoryCalculationService {
    * Final-stage (or legacy stage-less) receipts produce FINISHED goods.
    * Unknown stage ids default to finished-producing so legacy data never strands.
    */
-  static receiptProducesFinished(stageId: string | undefined, stages: ProcessingStage[]): boolean {
+  static receiptProducesFinished(stageId: string | undefined, stages: ProcessingStage[], material?: Pick<RawMaterial, 'processingPath' | 'fixedStageId'>): boolean {
+    // Single-stage materials finish at their ONE fixed stage — the receipt IS
+    // the final product regardless of where that stage sits in the chain.
+    if (material?.processingPath === 'single_stage') return !!material.fixedStageId && stageId === material.fixedStageId;
     if (!stageId) return true;
     const stage = stages.find(s => s.id === stageId);
     if (!stage) return true;
@@ -649,8 +657,13 @@ export class InventoryCalculationService {
     sales: Sale[],
     products: Product[],
     excludeSaleId?: string,
-    stages: ProcessingStage[] = []
+    stages: ProcessingStage[] = [],
+    material?: Pick<RawMaterial, 'processingPath' | 'fixedStageId'>
   ): Batch[] {
+    // Batch-carried path snapshot wins: the trail must replay under the path
+    // the pcs were BOUGHT under, even if the material's path was edited later.
+    const pathSource = (batches.find(b => b.materialId === materialId && b.processingPath)) || material;
+    const pathMaterial = pathSource ? { processingPath: pathSource.processingPath, fixedStageId: pathSource.fixedStageId } : undefined;
     // 1. Reset this material's batches to the purchase baseline (all raw).
     let trail: Batch[] = batches.map(b =>
       b.materialId === materialId
@@ -671,7 +684,7 @@ export class InventoryCalculationService {
       .filter(s => s.materialId === materialId && s.status !== 'Adjusted' && (s.pcsSent || 0) > 0)
       .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     for (const s of orderedSends) {
-      if (!this.sendConsumesRaw(s.stageId, stages)) continue;
+      if (!this.sendConsumesRaw(s.stageId, stages, pathMaterial)) continue;
       try {
         const res = this.moveRawToProcessor(materialId, s.pcsSent || 0, trail, s.batchId || undefined);
         trail = res.batches;
@@ -705,7 +718,7 @@ export class InventoryCalculationService {
     //      stream so per-source availability forms exactly as it did live.
     const stageEvents = [
       ...orderedSends
-        .filter(s => !this.sendConsumesRaw(s.stageId, stages))
+        .filter(s => !this.sendConsumesRaw(s.stageId, stages, pathMaterial))
         .map(s => ({ kind: 'send' as const, date: s.date || '', s })),
       ...[...processingReceipts]
         .filter(r => r.materialId === materialId && (r.pcsReceived || 0) > 0)
@@ -748,7 +761,7 @@ export class InventoryCalculationService {
       } else {
         const { r, send } = ev;
         const stageId = r.stageId ?? send?.stageId;
-        if (this.receiptProducesFinished(stageId, stages)) {
+        if (this.receiptProducesFinished(stageId, stages, pathMaterial)) {
           trail = this.attributeReceiptFIFO(materialId, r.pcsReceived, trail, send?.batchId || undefined);
         } else {
           trail = this.moveProcessorToAvailable(materialId, stageId || 'legacy', r.pcsReceived, trail, send?.batchId || undefined).batches;
