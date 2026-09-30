@@ -30,7 +30,7 @@
     --border: 240 5.9% 90%;
     --input: 240 5.9% 90%;
     --ring: 240 5.9% 10%;
-    --radius: 0.5rem;
+    --radius: 0.75rem;
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
     --sidebar-primary: 240 5.9% 10%;
@@ -51,6 +51,14 @@
     --shadow-hover: 0 8px 24px -4px rgb(0 0 0 / 0.12), 0 4px 12px -4px rgb(0 0 0 / 0.06);
     --education-blue: 217 91% 60%;
     --education-green: 142 71% 45%;
+
+    /* Floating glass surfaces (light): translucent card + blur + hairline
+       border + soft diffuse shadow. Used by top bar, sidebar, popovers. */
+    --glass-bg: hsl(var(--card) / 0.55);
+    --glass-border: 240 5.9% 90%;
+    --glass-highlight: rgb(255 255 255 / 0.4);
+    --glass-blur: 14px;
+    --shadow-float: 0 1px 2px 0 rgb(0 0 0 / 0.03), 0 6px 20px -6px rgb(0 0 0 / 0.07), 0 12px 40px -12px rgb(0 0 0 / 0.04);
   }
  
   .dark {
@@ -99,6 +107,14 @@
     --shadow-hover: 0 8px 24px -4px rgb(0 0 0 / 0.6), 0 4px 12px -4px rgb(0 0 0 / 0.3);
     --education-blue: 217 91% 65%;
     --education-green: 142 71% 50%;
+
+    /* Floating glass surfaces (dark): slightly denser translucency so text
+       stays readable over the muted app canvas. */
+    --glass-bg: hsl(var(--card) / 0.62);
+    --glass-border: 240 3.7% 15.9%;
+    --glass-highlight: rgb(255 255 255 / 0.06);
+    --glass-blur: 14px;
+    --shadow-float: 0 1px 2px 0 rgb(0 0 0 / 0.25), 0 6px 20px -6px rgb(0 0 0 / 0.4), 0 12px 40px -12px rgb(0 0 0 / 0.28);
   }
 }
 
@@ -123,7 +139,9 @@
   input:not([type="checkbox"]):not([type="radio"]), 
   select, 
   textarea {
-    @apply bg-background border-border text-foreground focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-colors;
+    @apply bg-background border-border text-foreground outline-none transition-colors;
+    /* No focus border/ring here on purpose: focusable surfaces are styled by
+       their own components; a global ring fights them and reads as a box. */
   }
 
   /* Bare inputs embedded in dropdown search rows: the panel owns the chrome.
@@ -136,6 +154,34 @@
     box-shadow: none !important;
     border-color: transparent;
     outline: none;
+  }
+}
+
+/* ─── Premium glass surfaces ───────────────────────────────────────────
+   Floating, translucent chrome for the app shell: top bar, sidebar,
+   notifications popover. backdrop-blur comes from --glass-blur so the
+   intensity is tunable in one place per theme. */
+@layer components {
+  .glass-panel {
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+    border: 1px solid hsl(var(--glass-border) / 0.6);
+    box-shadow: var(--shadow-float), inset 0 1px 0 0 var(--glass-highlight);
+  }
+
+  /* Icon buttons (theme toggle, bell, mic, sign out): consistent 40px hit
+     target, hairline ring on hover, spring-fast transition. */
+  .btn-icon {
+    @apply inline-flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-all duration-200;
+    transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .btn-icon:hover {
+    @apply bg-muted/60 text-foreground;
+    box-shadow: inset 0 0 0 1px hsl(var(--border) / 0.8), 0 2px 8px -2px rgb(0 0 0 / 0.06);
+  }
+  .btn-icon:active {
+    transform: scale(0.96);
   }
 }
 

@@ -29,7 +29,7 @@ export function AiMicButton() {
         onClick={() => setOpen(true)}
         aria-label="Open AI voice assistant"
         title="AI Voice Assistant"
-        className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+        className="btn-icon relative hover:text-primary"
       >
         <Mic className="h-5 w-5" />
       </button>

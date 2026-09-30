@@ -1,5 +1,6 @@
-import { BarChart3, Bell, Briefcase, Calculator, ChevronDown, ChevronRight, Database, DollarSign, Factory, FileText, LayoutDashboard, LogOut, Menu, Monitor, Moon, PackageSearch, Plus, Search, Settings, ShoppingCart, Sun, Truck, UserCog, Users, Wallet, X } from "lucide-react";
+import { BarChart3, Bell, Briefcase, Calculator, ChevronDown, ChevronRight, Database, DollarSign, Factory, FileText, LayoutDashboard, LogOut, Menu, Monitor, Moon, PackageSearch, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings, ShoppingCart, Sun, Truck, UserCog, Users, Wallet, X } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { AiMicButton } from "../components/ai/AiMicButton";
 import { useAuth } from "../contexts/AuthContext";
@@ -47,7 +48,10 @@ const NavAccordionItem: React.FC<{ item: any, onClose?: () => void }> = ({ item,
   }
 
   return (
-    <div className="space-y-1">
+    <div
+      className="space-y-1"
+      onMouseEnter={() => setIsOpen(true)}
+    >
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
@@ -71,8 +75,15 @@ const NavAccordionItem: React.FC<{ item: any, onClose?: () => void }> = ({ item,
         )}
       </button>
       
-      {isOpen && (
-        <div className="pl-9 pr-2 space-y-1 mt-1 pb-1">
+      {/* Expand on hover — the handler sits on the SECTION wrapper so hovering
+          the header itself opens it. Click still pins/collapses. */}
+      <div
+        className={cn(
+          "pl-9 pr-2 space-y-1 mt-1 pb-1 grid transition-all duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]",
+          isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+        )}
+      >
+        <div className="overflow-hidden min-h-0">
           {item.subItems.map((sub: any) => (
             <NavLink
               key={sub.label}
@@ -113,8 +124,113 @@ const NavAccordionItem: React.FC<{ item: any, onClose?: () => void }> = ({ item,
             </NavLink>
           ))}
         </div>
-      )}
+      </div>
     </div>
+  );
+}
+
+/**
+ * Hover flyout for rail section buttons. Portalled to <body> with fixed
+ * positioning anchored to the trigger icon: the aside clips absolutely
+ * positioned children (overflow-y-auto), so the flyout must live outside it.
+ * Hover bridging: the trigger wrapper's ::after extends 12px right so the
+ * pointer can travel to the panel without leaving group-hover/railsec.
+ */
+function RailFlyout({ label, subItems }: { label: string; subItems: any[] }) {
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  useEffect(() => {
+    const update = () => {
+      const r = triggerRef.current?.getBoundingClientRect();
+      if (r) setPos({ top: r.top, left: r.right + 12 });
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
+  return (
+    <>
+      <div ref={triggerRef} className="absolute inset-0" />
+      {pos && createPortal(
+        <div
+          style={{ top: pos.top, left: pos.left }}
+          className="pointer-events-none fixed z-[60] w-52 origin-left scale-95 opacity-0 rounded-xl glass-panel p-1.5 transition-all duration-200 group-hover/railsec:pointer-events-auto group-hover/railsec:scale-100 group-hover/railsec:opacity-100"
+        >
+          <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">{label}</p>
+          {subItems.map((sub: any) => (
+            <NavLink
+              key={sub.label}
+              to={sub.path}
+              className={({ isActive: subActive }) => cn(
+                "block rounded-lg px-2.5 py-1.5 text-sm transition-colors",
+                subActive ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+              )}
+            >
+              {sub.label}
+            </NavLink>
+          ))}
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+/** Icon-only nav button for the collapsed sidebar rail. */
+function RailNavItem({ item }: { item: any }) {
+  /* eslint-disable-next-line */
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isActive = item.subItems
+    ? item.subItems.some((sub: any) => location.pathname === sub.path || location.pathname.startsWith(sub.path + '/'))
+    : location.pathname === item.path;
+
+  if (item.subItems) {
+    // Sections with children: hovering shows a glass flyout of the sub-items;
+    // clicking jumps to the first sub-page and expands the full sidebar.
+    return (
+      <div className="group/railsec relative">
+        <button
+          onClick={() => { localStorage.setItem('sidebar-rail', '0'); navigate(item.subItems[0].path); window.dispatchEvent(new CustomEvent('sidebar-expand')); }}
+          aria-label={item.label}
+          title={item.label}
+          className={cn(
+            "relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200",
+            isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+          )}
+        >
+          <item.icon className="h-4 w-4" />
+          {isActive && <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary" />}
+        </button>
+        <RailFlyout label={item.label} subItems={item.subItems} />
+      </div>
+    );
+  }
+
+  return (
+    <NavLink
+      to={item.path}
+      aria-label={item.label}
+      title={item.label}
+      className={({ isActive }) => cn(
+        "group/rail relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200",
+        isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+      )}
+    >
+      {({ isActive }) => (
+        <>
+          <item.icon className="h-4 w-4" />
+          {isActive && <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary" />}
+          {item.badge != null && item.badge > 0 && (
+            <span className="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold leading-none text-primary-foreground">
+              {item.badge > 99 ? '99+' : item.badge}
+            </span>
+          )}
+        </>
+      )}
+    </NavLink>
   );
 }
 
@@ -287,7 +403,7 @@ function NotificationBell() {
       <button 
         onClick={() => setIsOpen(!isOpen)}
         aria-label={isOpen ? 'Close notifications' : 'Open notifications'}
-        className="relative p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+        className="btn-icon relative"
       >
         <Bell className="h-5 w-5" />
         {unreadCount > 0 && (
@@ -355,7 +471,17 @@ export function DashboardLayout() {
   const { user, profile, hasPermission, signOut } = useAuth();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  // Icon-rail collapse (desktop): sidebar shrinks to a 68px glass rail;
+  // expanding it to full width shows labels. Persisted per user.
+  const [isRailMode, setIsRailMode] = useState(() => localStorage.getItem('sidebar-rail') === '1');
   const { dashboardName, tagline, logo, profilePhoto, theme, setTheme } = useSettingsStore();
+
+  const toggleRail = () => {
+    setIsRailMode(prev => {
+      localStorage.setItem('sidebar-rail', prev ? '0' : '1');
+      return !prev;
+    });
+  };
 
   // Live record counts for the nav badges (data-dense sidebar)
   const badgeCounts = {
@@ -448,16 +574,23 @@ export function DashboardLayout() {
     setIsMobileMenuOpen(false);
   }, [location.pathname]);
 
+  // Rail nav item for a section clicked its child — expand the sidebar.
+  useEffect(() => {
+    const expand = () => setIsRailMode(false);
+    window.addEventListener('sidebar-expand', expand);
+    return () => window.removeEventListener('sidebar-expand', expand);
+  }, []);
+
   return (
     <div className="min-h-screen bg-muted/40 font-sans selection:bg-muted-foreground/20">
       <CommandPalette />
       
-      <div className="fixed top-0 left-0 right-0 h-16 bg-card border-b border-border z-40 flex items-center justify-between px-4 sm:px-6">
+      <div className="fixed top-3 left-3 right-3 h-14 glass-panel rounded-2xl z-40 flex items-center justify-between px-4 sm:px-5">
         <div className="flex items-center gap-4">
           <button 
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
-            className="p-2 -ml-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg lg:hidden"
+            className="btn-icon -ml-2 lg:hidden"
           >
             {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
@@ -480,7 +613,7 @@ export function DashboardLayout() {
         <div className="hidden md:flex flex-1 max-w-md mx-4">
           <button 
             onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))}
-            className="w-full flex items-center gap-2 h-10 px-4 bg-muted/50 hover:bg-muted border border-transparent hover:border-border rounded-lg text-sm text-muted-foreground transition-all"
+            className="w-full flex items-center gap-2 h-10 px-4 bg-muted/50 hover:bg-muted border border-transparent hover:border-border rounded-xl text-sm text-muted-foreground transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-0"
           >
             <Search className="h-4 w-4" />
             <span className="flex-1 text-left">Search anything...</span>
@@ -495,7 +628,7 @@ export function DashboardLayout() {
           <button 
             onClick={() => setTheme(isDarkMode ? 'light' : 'dark')}
             aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-            className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+            className="btn-icon"
             title="Toggle Theme"
           >
             {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
@@ -515,7 +648,7 @@ export function DashboardLayout() {
           <button 
             onClick={signOut}
             aria-label="Sign out"
-            className="p-2 ml-2 text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+            className="btn-icon relative text-destructive"
             title="Sign Out"
           >
             <LogOut className="h-5 w-5" />
@@ -527,11 +660,12 @@ export function DashboardLayout() {
       )}
 
       <aside className={cn(
-        "fixed top-16 left-0 bottom-0 w-64 bg-card border-r border-border overflow-y-auto z-30 transition-transform duration-300 ease-in-out lg:translate-x-0 scrollbar-hide",
+        "fixed top-[76px] bottom-3 left-3 z-30 rounded-2xl glass-panel overflow-y-auto scrollbar-hide transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] lg:translate-x-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        isRailMode ? "w-[68px]" : "w-64",
         isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
       )}>
-        <nav className="p-4 space-y-4">
-          {navGroups.map((group, idx) => (
+        <nav className={cn("py-4 space-y-4", isRailMode ? "px-2.5" : "px-3")}>
+          {!isRailMode && navGroups.map((group, idx) => (
             <div key={idx} className="space-y-1">
               {idx > 0 && <div className="h-px bg-border/60 my-3" />}
               <h4 className="px-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70 mb-2">
@@ -542,22 +676,55 @@ export function DashboardLayout() {
               ))}
             </div>
           ))}
+          {isRailMode && (
+            <>
+              {(navGroups as any[]).flatMap(g => g.items as any[])
+                .filter((item: any) => !item.requiredModule || hasPermission(item.requiredModule, 'View'))
+                .map((item: any) => <RailNavItem key={item.label} item={item} />)}
+            </>
+          )}
         </nav>
         
-        <div className="p-4 mt-auto border-t border-border/50">
-          <NavLink
-            to="/settings"
-            onClick={() => setIsMobileMenuOpen(false)}
-            className={({ isActive }) => cn(
-              "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors group",
-              isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
-            )}
-          >
-            <Settings className="h-4 w-4 shrink-0 transition-colors duration-200" />
-            Settings
-          </NavLink>
+        <div className={cn("px-3 pb-4 mt-4 pt-3 border-t border-border/50", isRailMode && "px-2.5 flex justify-center")}>
+          {isRailMode ? (
+            <NavLink
+              to="/settings"
+              aria-label="Settings"
+              title="Settings"
+              className={({ isActive }) => cn(
+                "btn-icon",
+                isActive && "bg-primary/10 text-primary"
+              )}
+            >
+              <Settings className="h-4 w-4" />
+            </NavLink>
+          ) : (
+            <NavLink
+              to="/settings"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className={({ isActive }) => cn(
+                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors group",
+                isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+              )}
+            >
+              <Settings className="h-4 w-4 shrink-0 transition-colors duration-200" />
+              Settings
+            </NavLink>
+          )}
         </div>
       </aside>
+
+      {/* Rail toggle floats just outside the sidebar edge — inside the aside it
+          would be clipped by the panel's overflow scrolling. */}
+      <button
+        onClick={toggleRail}
+        aria-label={isRailMode ? 'Expand sidebar' : 'Collapse sidebar'}
+        title={isRailMode ? 'Expand sidebar' : 'Collapse sidebar'}
+        className="hidden lg:flex fixed top-[100px] z-40 h-6 w-6 items-center justify-center rounded-full glass-panel text-muted-foreground hover:text-foreground hover:scale-110 transition-all duration-200"
+        style={{ left: isRailMode ? 68 : 256 }}
+      >
+        {isRailMode ? <PanelLeftOpen className="h-3.5 w-3.5" /> : <PanelLeftClose className="h-3.5 w-3.5" />}
+      </button>
 
       <a
         href="#main-content"
@@ -567,8 +734,8 @@ export function DashboardLayout() {
       </a>
 
       <main id="main-content" className={cn(
-        "pt-16 min-h-screen transition-all duration-300",
-        "lg:pl-64"
+        "pt-16 min-h-screen transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+        isRailMode ? "lg:pl-[92px]" : "lg:pl-[268px]"
       )}>
         <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
           <Outlet />
