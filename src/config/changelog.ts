@@ -20,6 +20,21 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.42',
+    date: '2026-09-30',
+    title: 'Premium Glass App Shell',
+    sections: [
+      {
+        title: 'Navigation & Design',
+        items: [
+          'Floating glass top bar and sidebar with subtle translucency, hairline borders and soft layered shadows — light and dark.',
+          'Sidebar collapses to an icon rail with hover flyouts showing each section\'s sub-pages; the full sidebar now expands sections on hover, not just click.',
+          'All buttons app-wide upgraded: layered diffuse shadows, gentle hover lift, spring press feedback. Cleaner focus styles on inputs and the header search.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.41',
     date: '2026-09-30',
     title: 'Stage Master Reordering',
