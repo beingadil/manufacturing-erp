@@ -539,12 +539,17 @@ export class InventoryCalculationService {
    * Consume from RAW (stage-1 / legacy dispatch). Unknown stage ids default to
    * raw-consuming so the trail can never lose pcs.
    */
-  static sendConsumesRaw(stageId: string | undefined, stages: ProcessingStage[], material?: Pick<RawMaterial, 'processingPath' | 'fixedStageId'>): boolean {
+  static sendConsumesRaw(stageId: string | undefined, stages: ProcessingStage[], material?: Pick<RawMaterial, 'processingPath' | 'fixedStageId' | 'allowedStageIds'>): boolean {
     // Path-aware overrides: a single_stage material draws raw ONLY at its fixed
     // stage (its receipt then finishes the pcs); ready-made materials are never
-    // dispatched at all. Everything else follows the full-chain map.
+    // dispatched at all; custom_stages draws raw at the FIRST selected stage.
+    // Everything else follows the full-chain map.
     if (material?.processingPath === 'single_stage') return !!material.fixedStageId && stageId === material.fixedStageId;
     if (material?.processingPath === 'ready_made') return false;
+    if (material?.processingPath === 'custom_stages') {
+      const first = (material.allowedStageIds || [])[0];
+      return !!first && stageId === first;
+    }
     if (!stageId) return true;
     const stage = stages.find(s => s.id === stageId);
     if (!stage) return true;
@@ -555,10 +560,15 @@ export class InventoryCalculationService {
    * Final-stage (or legacy stage-less) receipts produce FINISHED goods.
    * Unknown stage ids default to finished-producing so legacy data never strands.
    */
-  static receiptProducesFinished(stageId: string | undefined, stages: ProcessingStage[], material?: Pick<RawMaterial, 'processingPath' | 'fixedStageId'>): boolean {
+  static receiptProducesFinished(stageId: string | undefined, stages: ProcessingStage[], material?: Pick<RawMaterial, 'processingPath' | 'fixedStageId' | 'allowedStageIds'>): boolean {
     // Single-stage materials finish at their ONE fixed stage — the receipt IS
     // the final product regardless of where that stage sits in the chain.
     if (material?.processingPath === 'single_stage') return !!material.fixedStageId && stageId === material.fixedStageId;
+    // Custom-stages materials finish at the LAST selected stage (chain order).
+    if (material?.processingPath === 'custom_stages') {
+      const selected = material.allowedStageIds || [];
+      return selected.length > 0 && stageId === selected[selected.length - 1];
+    }
     if (!stageId) return true;
     const stage = stages.find(s => s.id === stageId);
     if (!stage) return true;
@@ -583,6 +593,29 @@ export class InventoryCalculationService {
       );
     }
     return source.id;
+  }
+
+  /**
+   * Path-aware movement map: which source bucket may feed `targetStageId`?
+   * custom_stages draws RAW at the FIRST selected stage and every later
+   * selected stage draws the availability produced by the previous SELECTED
+   * stage (skipping unselected chain stages). All other paths fall through to
+   * the full-chain map.
+   */
+  static requiredSourceForTargetForPath(targetStageId: string, stages: ProcessingStage[], material?: Pick<RawMaterial, 'processingPath' | 'fixedStageId' | 'allowedStageIds'>): 'raw' | string {
+    if (material?.processingPath === 'custom_stages') {
+      const selected = (material.allowedStageIds || [])
+        .map(id => stages.find(s => s.id === id))
+        .filter((s): s is ProcessingStage => !!s)
+        .sort((a, b) => a.sequence - b.sequence);
+      if (selected.length > 0) {
+        if (targetStageId === selected[0].id) return 'raw';
+        const target = stages.find(s => s.id === targetStageId);
+        const prev = [...selected].reverse().find(s => s.sequence < (target?.sequence ?? 0));
+        if (prev) return prev.id;
+      }
+    }
+    return this.requiredSourceForTarget(targetStageId, stages);
   }
 
   /**
@@ -658,12 +691,12 @@ export class InventoryCalculationService {
     products: Product[],
     excludeSaleId?: string,
     stages: ProcessingStage[] = [],
-    material?: Pick<RawMaterial, 'processingPath' | 'fixedStageId'>
+    material?: Pick<RawMaterial, 'processingPath' | 'fixedStageId' | 'allowedStageIds'>
   ): Batch[] {
     // Batch-carried path snapshot wins: the trail must replay under the path
     // the pcs were BOUGHT under, even if the material's path was edited later.
     const pathSource = (batches.find(b => b.materialId === materialId && b.processingPath)) || material;
-    const pathMaterial = pathSource ? { processingPath: pathSource.processingPath, fixedStageId: pathSource.fixedStageId } : undefined;
+    const pathMaterial = pathSource ? { processingPath: pathSource.processingPath, fixedStageId: pathSource.fixedStageId, allowedStageIds: pathSource.allowedStageIds } : undefined;
     // 1. Reset this material's batches to the purchase baseline (all raw).
     let trail: Batch[] = batches.map(b =>
       b.materialId === materialId
@@ -732,7 +765,7 @@ export class InventoryCalculationService {
     for (const ev of stageEvents) {
       if (ev.kind === 'send') {
         const s = ev.s;
-        const source = this.requiredSourceForTarget(s.stageId!, stages);
+        const source = this.requiredSourceForTargetForPath(s.stageId!, stages, pathMaterial);
         try {
           const res = this.moveAvailableToProcessor(materialId, source, s.pcsSent || 0, trail, s.batchId || undefined);
           trail = res.batches;

@@ -193,7 +193,7 @@ export function migrateERPState(state: any): any {
         products,
         undefined,
         processingStages,
-        mat ? { processingPath: mat.processingPath, fixedStageId: mat.fixedStageId } : undefined
+        mat ? { processingPath: mat.processingPath, fixedStageId: mat.fixedStageId, allowedStageIds: mat.allowedStageIds } : undefined
       );
     }
     // Scrub the legacy scalar availability fields — the per-source map

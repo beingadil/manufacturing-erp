@@ -89,6 +89,15 @@ export function SendToProcessorForm({
   const fixedStage = isSingleStage && selectedMaterial?.fixedStageId
     ? sortedStages.find(s => s.id === selectedMaterial.fixedStageId) || null
     : null;
+  // Custom-stages: only the material's selected stages (chain order) are legal
+  // targets; raw draws at the FIRST selected stage.
+  const isCustomStages = materialPath === 'custom_stages';
+  const allowedOrderedStages = useMemo(() => (
+    isCustomStages
+      ? sortedStages.filter(s => (selectedMaterial?.allowedStageIds || []).includes(s.id))
+      : []
+  ), [isCustomStages, sortedStages, selectedMaterial]);
+  const firstAllowedStage = allowedOrderedStages[0] || null;
 
   // Materials offered in the dropdown: ready-made items are excluded (nothing
   // to process), with their available buckets still shown for the rest.
@@ -112,20 +121,24 @@ export function SendToProcessorForm({
     const candidates: { stageId: string; pcs: number }[] = [];
     const rawTotal = (batches || []).filter(b => b.materialId === materialId)
       .reduce((sum, b) => sum + batchRawAvailableOf(b), 0);
-    if (rawTotal > 0 && sortedStages[0]) candidates.push({ stageId: sortedStages[0].id, pcs: rawTotal });
+    const firstStage = isCustomStages ? firstAllowedStage : sortedStages[0];
+    if (rawTotal > 0 && firstStage) candidates.push({ stageId: firstStage.id, pcs: rawTotal });
     for (const stage of sortedStages) {
+      if (isCustomStages && !allowedOrderedStages.some(s => s.id === stage.id)) continue;
       const avail = (batches || []).filter(b => b.materialId === materialId)
         .reduce((sum, b) => sum + batchAvailableAtSource(b, stage.id), 0);
       if (avail <= 0) continue;
-      const next = sortedStages.find(s => s.sequence === stage.sequence + 1);
+      const next = isCustomStages
+        ? allowedOrderedStages.find(s => s.sequence > stage.sequence)
+        : sortedStages.find(s => s.sequence === stage.sequence + 1);
       if (next) candidates.push({ stageId: next.id, pcs: avail });
     }
-    if (candidates.length === 0) return { nextStage: sortedStages[0], isRaw: true };
+    if (candidates.length === 0) return { nextStage: firstStage || sortedStages[0], isRaw: true };
     // Default to the bucket with the MOST pcs so the user lands on their main flow.
     const best = [...candidates].sort((a, b) => b.pcs - a.pcs)[0];
     const nextStage = sortedStages.find(s => s.id === best.stageId) || null;
-    return { nextStage, isRaw: best.stageId === sortedStages[0]?.id };
-  }, [materialId, batches, sortedStages]);
+    return { nextStage, isRaw: best.stageId === firstStage?.id };
+  }, [materialId, batches, sortedStages, isCustomStages, allowedOrderedStages, firstAllowedStage]);
 
   // Per-batch progress for the selected material (the multi-stage view).
   const batchProgress = useMemo(
@@ -146,6 +159,10 @@ export function SendToProcessorForm({
     return materialProgress?.nextStage?.id || '';
   }, [editSendId, stageId, batchId, batchProgress, materialProgress, isSingleStage, fixedStage]);
 
+  // Custom-stages guard: an effective stage outside the selected set is illegal.
+  const effectiveStageIllegal = isCustomStages && !!effectiveStageId
+    && !allowedOrderedStages.some(s => s.id === effectiveStageId);
+
   const effectiveStage = sortedStages.find(s => s.id === effectiveStageId);
   const rateMethod = effectiveStage?.rateMethod || 'per_piece';
 
@@ -156,8 +173,18 @@ export function SendToProcessorForm({
     if (isSingleStage && fixedStage) {
       return (batches || []).filter(b => b.materialId === materialId && batchRawAvailableOf(b) > 0);
     }
+    if (isCustomStages) {
+      // Custom-stages: first selected stage draws raw; later selected stages
+      // draw the availability produced by the previous SELECTED stage.
+      if (firstAllowedStage && effectiveStageId === firstAllowedStage.id) {
+        return (batches || []).filter(b => b.materialId === materialId && batchRawAvailableOf(b) > 0);
+      }
+      const prevSelected = [...allowedOrderedStages].reverse().find(s => s.sequence < (effectiveStage?.sequence ?? 0));
+      if (!prevSelected) return [];
+      return (batches || []).filter(b => b.materialId === materialId && batchAvailableAtSource(b, prevSelected.id) > 0);
+    }
     return (batches || []).filter(b => b.materialId === materialId && batchCanSendToStage(b, effectiveStageId, sortedStages));
-  }, [materialId, batches, effectiveStageId, sortedStages, isSingleStage, fixedStage]);
+  }, [materialId, batches, effectiveStageId, sortedStages, isSingleStage, fixedStage, isCustomStages, allowedOrderedStages, firstAllowedStage, effectiveStage]);
 
   // All target stages the user can send to right now, with the pcs available at
   // each — raw pcs go to stage 1, received pcs go to the NEXT stage after the
@@ -174,20 +201,24 @@ export function SendToProcessorForm({
     const opts: { stageId: string; availablePcs: number; fromStageName?: string }[] = [];
     const rawTotal = (batches || []).filter(b => b.materialId === materialId)
       .reduce((sum, b) => sum + batchRawAvailableOf(b), 0);
-    if (rawTotal > 0 && sortedStages[0]) {
-      opts.push({ stageId: sortedStages[0].id, availablePcs: rawTotal });
+    const firstStage = isCustomStages ? firstAllowedStage : sortedStages[0];
+    if (rawTotal > 0 && firstStage) {
+      opts.push({ stageId: firstStage.id, availablePcs: rawTotal });
     }
     // One option per SOURCE stage with waiting pcs — Machine-produced and
     // Initial-produced pcs are separate, independently-routable buckets.
     for (const stage of sortedStages) {
+      if (isCustomStages && !allowedOrderedStages.some(s => s.id === stage.id)) continue;
       const avail = (batches || []).filter(b => b.materialId === materialId)
         .reduce((sum, b) => sum + batchAvailableAtSource(b, stage.id), 0);
       if (avail <= 0) continue;
-      const next = sortedStages.find(s => s.sequence === stage.sequence + 1);
+      const next = isCustomStages
+        ? allowedOrderedStages.find(s => s.sequence > stage.sequence)
+        : sortedStages.find(s => s.sequence === stage.sequence + 1);
       if (next) opts.push({ stageId: next.id, availablePcs: avail, fromStageName: stage.name });
     }
     return opts;
-  }, [materialId, batches, sortedStages, isSingleStage, fixedStage]);
+  }, [materialId, batches, sortedStages, isSingleStage, fixedStage, isCustomStages, allowedOrderedStages, firstAllowedStage]);
 
   // Total pcs available for this material at the effective stage.
   // Multi-position aware: stage 1 draws raw pcs (never-dispatched remainder);
@@ -203,17 +234,20 @@ export function SendToProcessorForm({
         .filter(b => b.materialId === materialId)
         .reduce((sum, b) => sum + batchRawAvailableOf(b), 0);
     }
-    if (effectiveStage.sequence <= 1) {
+    if (effectiveStage.sequence <= 1 || (isCustomStages && firstAllowedStage && effectiveStage.id === firstAllowedStage.id)) {
       return (batches || [])
         .filter(b => b.materialId === materialId)
         .reduce((sum, b) => sum + batchRawAvailableOf(b), 0);
     }
     // Availability from THIS target's predecessor only (movement map).
-    const requiredSource = InventoryCalculationService.requiredSourceForTarget(effectiveStageId, sortedStages);
+    // Custom-stages: predecessor is the previous SELECTED stage, if any.
+    const requiredSource = isCustomStages
+      ? (allowedOrderedStages.find(s => s.sequence < effectiveStage.sequence)?.id ?? 'raw')
+      : InventoryCalculationService.requiredSourceForTarget(effectiveStageId, sortedStages);
     if (requiredSource === 'raw') return 0;
     return (batches || []).filter(b => b.materialId === materialId)
       .reduce((sum, b) => sum + batchAvailableAtSource(b, requiredSource), 0);
-  }, [effectiveStage, effectiveStageId, materialId, batches, sortedStages, isSingleStage, fixedStage]);
+  }, [effectiveStage, effectiveStageId, materialId, batches, sortedStages, isSingleStage, fixedStage, isCustomStages, allowedOrderedStages]);
 
   const previousPendingSends = useMemo(() => {
     if (!processorId) return [];
@@ -243,6 +277,10 @@ export function SendToProcessorForm({
       setError(`This processor does not work the ${effectiveStage?.name || 'selected'} stage.`);
       return;
     }
+    if (effectiveStageIllegal) {
+      setError(`"${selectedMaterial?.name || 'This material'}" only processes at: ${allowedOrderedStages.map(s => s.name).join(', ') || 'its selected stages'}.`);
+      return;
+    }
     const qty = parseInt(pcs, 10);
     if (!qty || qty <= 0) {
       setError('Quantity must be a positive whole number of PCS.');
@@ -255,10 +293,13 @@ export function SendToProcessorForm({
     if (batchId) {
       const b = sendableBatches.find(x => x.id === batchId);
       if (b) {
-        const isStageOne = !effectiveStage || effectiveStage.sequence <= 1;
+        const isStageOne = !effectiveStage || effectiveStage.sequence <= 1
+          || (isCustomStages && firstAllowedStage && effectiveStage.id === firstAllowedStage.id);
         const avail = isStageOne
           ? InventoryCalculationService.batchRawAvailable(b)
-          : batchAvailableAtSource(b, InventoryCalculationService.requiredSourceForTarget(effectiveStageId, sortedStages));
+          : batchAvailableAtSource(b, isCustomStages
+            ? (allowedOrderedStages.find(s => s.sequence < effectiveStage!.sequence)?.id ?? '')
+            : InventoryCalculationService.requiredSourceForTarget(effectiveStageId, sortedStages));
         if (!editSendId && qty > (avail || 0)) {
           setError(`Only ${formatNumber(avail || 0)} PCS available in batch ${b.batchNo}.`);
           return;

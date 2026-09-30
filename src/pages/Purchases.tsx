@@ -314,7 +314,9 @@ export function Purchases() {
                     ? 'Ready-made'
                     : m.processingPath === 'single_stage'
                       ? 'Single processor'
-                      : undefined,
+                      : m.processingPath === 'custom_stages'
+                        ? 'Selected processors'
+                        : undefined,
                 }))}
                 value={materialId}
                 onChange={handleMaterialChange}

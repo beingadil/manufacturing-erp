@@ -1,4 +1,5 @@
 import { useERPStore } from '../../store/useERPStore';
+import { InventoryCalculationService } from '../business/InventoryCalculationService';
 import { UnitConversionService } from '../business/UnitConversionService';
 import { BusinessValidators } from './BusinessValidators';
 import { FieldValidators } from './FieldValidators';
@@ -127,7 +128,8 @@ export class ProcessingDispatchValidator implements IValidator<ProcessingDispatc
       // the former (the store re-validates authoritatively).
       const state = (useERPStore.getState() as any);
       const stages = (state.processingStages || []);
-      const consumesRaw = !data.stageId || !stages.find((s: any) => s.id === data.stageId) || (stages.find((s: any) => s.id === data.stageId)?.sequence || 0) <= 1;
+      const material = state.materials?.find((m: any) => m.id === data.materialId);
+      const consumesRaw = InventoryCalculationService.sendConsumesRaw(data.stageId, stages, material);
       if (consumesRaw) BusinessValidators.stockAvailable(data.materialId, data.pcsSent, result);
     }
 

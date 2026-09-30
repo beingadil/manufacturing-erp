@@ -100,6 +100,7 @@ export function RawMaterials() {
   );
   const [processingPath, setProcessingPath] = useState<ProcessingPath>('full_chain');
   const [fixedStageId, setFixedStageId] = useState('');
+  const [allowedStageIds, setAllowedStageIds] = useState<string[]>([]);
 
   // Category prefill: a category with a defaultProcessingPath seeds the selector.
   const handleCategoryChange = (id: string) => {
@@ -116,6 +117,7 @@ export function RawMaterials() {
     setStatus(material.status === 'Inactive' ? 'Inactive' : 'Active');
     setProcessingPath(material.processingPath ?? 'full_chain');
     setFixedStageId(material.fixedStageId || '');
+    setAllowedStageIds(material.allowedStageIds || []);
     setIsModalOpen(true);
   };
 
@@ -128,12 +130,14 @@ export function RawMaterials() {
     setStatus("Active");
     setProcessingPath('full_chain');
     setFixedStageId('');
+    setAllowedStageIds([]);
   };
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !categoryId) return;
     if (processingPath === 'single_stage' && !fixedStageId) return;
+    if (processingPath === 'custom_stages' && allowedStageIds.length === 0) return;
 
     try {
       MaterialService.create({
@@ -142,7 +146,8 @@ export function RawMaterials() {
         description,
         status,
         processingPath,
-        fixedStageId: processingPath === 'single_stage' ? fixedStageId : undefined
+        fixedStageId: processingPath === 'single_stage' ? fixedStageId : undefined,
+        allowedStageIds: processingPath === 'custom_stages' ? allowedStageIds : undefined
       });
       toast.success('Material created successfully');
       closeModal();
@@ -155,6 +160,7 @@ export function RawMaterials() {
     e.preventDefault();
     if (!editingMaterial || !name.trim() || !categoryId) return;
     if (processingPath === 'single_stage' && !fixedStageId) return;
+    if (processingPath === 'custom_stages' && allowedStageIds.length === 0) return;
 
     try {
       MaterialService.update(editingMaterial.id, {
@@ -163,7 +169,8 @@ export function RawMaterials() {
         description,
         status,
         processingPath,
-        fixedStageId: processingPath === 'single_stage' ? fixedStageId : undefined
+        fixedStageId: processingPath === 'single_stage' ? fixedStageId : undefined,
+        allowedStageIds: processingPath === 'custom_stages' ? allowedStageIds : undefined
       });
       toast.success('Material updated successfully');
       closeModal();
@@ -385,14 +392,42 @@ export function RawMaterials() {
             >
               <option value="full_chain">Through all processors ({sortedStagesForForm.length || 5} stages)</option>
               <option value="single_stage">One processor only — becomes final product</option>
+              <option value="custom_stages">Selected processors only — pick stages below</option>
               <option value="ready_made">Ready-made — no processing, straight to stock</option>
             </select>
             <p className="text-xs text-muted-foreground">
               {processingPath === 'full_chain' && 'Material goes through every processor in sequence before becoming a final product.'}
               {processingPath === 'single_stage' && 'Material is sent to exactly one processor below; what comes back is the final product.'}
+              {processingPath === 'custom_stages' && 'Tick the processors this material passes through (in chain order). What comes back from the LAST ticked processor is the final product.'}
               {processingPath === 'ready_made' && 'Purchased already finished (e.g. lids, handles) — enters sellable stock directly, never dispatched.'}
             </p>
           </div>
+          {processingPath === 'custom_stages' && (
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-foreground">Selected Processors *</label>
+              <div className="rounded-xl border border-border bg-card p-3 space-y-2">
+                {sortedStagesForForm.map(s => (
+                  <label key={s.id} className="flex items-center gap-3 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={allowedStageIds.includes(s.id)}
+                      onChange={(e) => setAllowedStageIds(prev =>
+                        e.target.checked ? [...prev, s.id] : prev.filter(id => id !== s.id)
+                      )}
+                      className="accent-primary"
+                    />
+                    <span className="text-foreground">{s.sequence}. {s.name}{s.isFinalStage ? ' (Final)' : ''}</span>
+                  </label>
+                ))}
+                {sortedStagesForForm.length === 0 && (
+                  <p className="text-xs text-muted-foreground">No processor stages configured yet.</p>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Sends always follow the chain order among the selected processors; the last selected one produces the final product.
+              </p>
+            </div>
+          )}
           {processingPath === 'single_stage' && (
             <div className="space-y-2">
               <label htmlFor="material-fixed-stage" className="text-sm font-semibold text-foreground">The One Processor *</label>

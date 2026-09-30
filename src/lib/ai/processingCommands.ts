@@ -136,7 +136,7 @@ function executeSend(args: SendArgs): CommandResult {
     return { ok: false, message: 'Processor "' + processor.party.name + '" has no stage assigned and no stage name was given. Assign a stage to the processor first.' };
   }
 
-  const consumesRaw = InventoryCalculationService.sendConsumesRaw(stageId, stages);
+  const consumesRaw = InventoryCalculationService.sendConsumesRaw(stageId, stages, material.party);
 
   // Pre-flight readability: report the source-bucket balance before the engine
   // rejects (the engine's own error is the authoritative one — this just makes
@@ -145,7 +145,7 @@ function executeSend(args: SendArgs): CommandResult {
     return { ok: false, message: 'Only ' + fmtPcs(rawAvailable(materialId)) + ' pcs of ' + material.party.name + ' are available in raw stock.' };
   }
   if (!consumesRaw) {
-    const sourceStageId = InventoryCalculationService.requiredSourceForTarget(stageId, stages);
+    const sourceStageId = InventoryCalculationService.requiredSourceForTargetForPath(stageId, stages, material.party);
     const avail = (s.batches || [])
       .filter(b => b.materialId === materialId && b.status === 'Active')
       .reduce((sum, b) => sum + batchAvailableAtSource(b, sourceStageId), 0);

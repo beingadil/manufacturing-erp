@@ -226,12 +226,13 @@ export function QuickAddMaterial({ isOpen, onClose, onSuccess }: BaseModalProps)
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !categoryId) return;
-    // Category's default processing path pre-seeds the new material. A
-    // single_stage default is skipped: quick-add has no stage picker, and
-    // single_stage without a fixed stage can never be dispatched, so the
-    // material starts on the full chain and gets its stage in the material form.
+    // Category's default processing path pre-seeds the new material. Defaults
+    // that need extra picks (single_stage's one stage, custom_stages' stage
+    // set) are skipped: quick-add has no pickers for them and they would
+    // create materials that can never be dispatched. The material form or
+    // edit sets those up.
     const defaultPath = categories.find(c => c.id === categoryId)?.defaultProcessingPath;
-    const pathToApply = defaultPath === 'single_stage' ? undefined : defaultPath;
+    const pathToApply = (defaultPath === 'single_stage' || defaultPath === 'custom_stages') ? undefined : defaultPath;
     const id = addRawMaterial({ name, categoryId, status: "Active", ...(pathToApply ? { processingPath: pathToApply } : {}) });
     onSuccess(id);
     onClose();

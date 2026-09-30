@@ -666,6 +666,7 @@ export const useERPStore = create<ERPState>()(
           // under, even if the material's path is edited later.
           processingPath: material?.processingPath ?? 'full_chain',
           fixedStageId: material?.fixedStageId,
+          allowedStageIds: material?.allowedStageIds,
         };
 
         const currentMaterial = state.materials.find(m => m.id === data.materialId);
@@ -791,6 +792,15 @@ export const useERPStore = create<ERPState>()(
               const fixedStage = state.processingStages.find(s => s.id === sendMaterial?.fixedStageId);
               throw new AppError(`"${sendMaterial?.name || 'This material'}" only processes at ${fixedStage?.name || 'its designated stage'}.`);
             }
+            if (sendPath === 'custom_stages') {
+              const allowed = sendMaterial?.allowedStageIds || [];
+              if (!data.stageId || !allowed.includes(data.stageId)) {
+                const allowedNames = allowed
+                  .map(id => state.processingStages.find(s => s.id === id)?.name)
+                  .filter(Boolean).join(', ') || 'its selected stages';
+                throw new AppError(`"${sendMaterial?.name || 'This material'}" only processes at: ${allowedNames}.`);
+              }
+            }
 
             // ── Stage-worker guard: a processor assigned to a stage can only
             // work that stage (general workers can work any).
@@ -823,7 +833,7 @@ export const useERPStore = create<ERPState>()(
             // re-processing already-processed pcs are physically impossible.
             const sourceStageId = consumesRaw
               ? 'raw' as const
-              : InventoryCalculationService.requiredSourceForTarget(data.stageId!, stages);
+              : InventoryCalculationService.requiredSourceForTargetForPath(data.stageId!, stages, sendMaterial);
 
             let updatedBatches: Batch[] = state.batches || [];
             let consumedBatchId = data.batchId;

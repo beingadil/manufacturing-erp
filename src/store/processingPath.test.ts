@@ -185,6 +185,91 @@ describe('ready_made — purchase lands in finished stock, never dispatched', ()
   });
 });
 
+describe('custom_stages — user-selected subset of stages, chain order enforced', () => {
+  let s: ReturnType<typeof seed>;
+  beforeEach(() => { s = seed(); });
+  // Chain: 0=Initial 1=Machine 2=Acid 3=Polish 4=Spot(final). Select 1=Machine and 3=Polish.
+  const SELECTED = [STAGES[1].id, STAGES[3].id];
+
+  it('purchase lands raw; send consumes RAW at FIRST selected stage mid-chain', () => {
+    const materialId = s.addRawMaterial({ name: 'Clip', categoryId: 'c1', processingPath: 'custom_stages', allowedStageIds: SELECTED });
+    s.addPurchase({ supplierId: s.suppliers[0].id, materialId, date: '2026-09-01', weight: 100, weightUnit: 'KGs', ratePerUnit: 300, weightPerPiece: 0.5 } as any); // 200 pcs
+    let st = useERPStore.getState();
+    expect(st.materials.find(m => m.id === materialId)!.stockPcs).toBe(200);
+
+    // First selected stage is Machine (sequence 2, NOT stage 1) — raw draw legal.
+    st.addProcessingSend({ processorId: s.machineProcessorId, materialId, stageId: STAGES[1].id, date: '2026-09-02', pcsSent: 150, ratePerPiece: 8 } as any);
+    st = useERPStore.getState();
+    expect(st.materials.find(m => m.id === materialId)!.stockPcs).toBe(50);
+    expect(st.materials.find(m => m.id === materialId)!.atProcessorPcs).toBe(150);
+  });
+
+  it('receipt at LAST selected stage produces FINISHED; intermediate receipt does not', () => {
+    const materialId = s.addRawMaterial({ name: 'Clip', categoryId: 'c1', processingPath: 'custom_stages', allowedStageIds: SELECTED });
+    s.addPurchase({ supplierId: s.suppliers[0].id, materialId, date: '2026-09-01', weight: 100, weightUnit: 'KGs', ratePerUnit: 300, weightPerPiece: 0.5 } as any);
+    let st = useERPStore.getState();
+    st.addProcessingSend({ processorId: s.machineProcessorId, materialId, stageId: STAGES[1].id, date: '2026-09-02', pcsSent: 150, ratePerPiece: 8 } as any);
+    st = useERPStore.getState();
+    st.addProcessingReceipt({ sendId: st.processingSends[0].id, processorId: s.machineProcessorId, materialId, date: '2026-09-03', pcsReceived: 150 } as any);
+    st = useERPStore.getState();
+    // Machine is NOT the last selected stage (Polish is) → availability, not finished.
+    expect(st.materials.find(m => m.id === materialId)!.processedStockPcs).toBe(0);
+    expect(st.materials.find(m => m.id === materialId)!.stockPcs).toBe(50);
+
+    // Second leg: Machine output → Polish (last selected) — legal, produces finished.
+    st.addProcessingSend({ processorId: st.addProcessor({ name: 'Polish Man', stageId: STAGES[3].id }), materialId, stageId: STAGES[3].id, date: '2026-09-04', pcsSent: 150, ratePerPiece: 6 } as any);
+    st = useERPStore.getState();
+    st.addProcessingReceipt({ sendId: st.processingSends[0].id, processorId: st.processors[st.processors.length - 1].id, materialId, date: '2026-09-05', pcsReceived: 150 } as any);
+    st = useERPStore.getState();
+    expect(st.materials.find(m => m.id === materialId)!.processedStockPcs).toBe(150);
+    expect(batchTotalPcs(st.batches.find(b => b.materialId === materialId)!)).toBe(200); // LAW 3
+  });
+
+  it('rejects sending to an UNSELECTED stage even if it is stage 1', () => {
+    const materialId = s.addRawMaterial({ name: 'Clip', categoryId: 'c1', processingPath: 'custom_stages', allowedStageIds: SELECTED });
+    s.addPurchase({ supplierId: s.suppliers[0].id, materialId, date: '2026-09-01', weight: 100, weightUnit: 'KGs', ratePerUnit: 300, weightPerPiece: 0.5 } as any);
+    const st = useERPStore.getState();
+    expect(() =>
+      st.addProcessingSend({ processorId: s.initialProcessorId, materialId, stageId: STAGES[0].id, date: '2026-09-02', pcsSent: 10, ratePerPiece: 8 } as any)
+    ).toThrow(/only processes at/);
+  });
+
+  it('rejects skipping: Machine output cannot jump past Polish to an unselected stage', () => {
+    const materialId = s.addRawMaterial({ name: 'Clip', categoryId: 'c1', processingPath: 'custom_stages', allowedStageIds: SELECTED });
+    s.addPurchase({ supplierId: s.suppliers[0].id, materialId, date: '2026-09-01', weight: 100, weightUnit: 'KGs', ratePerUnit: 300, weightPerPiece: 0.5 } as any);
+    let st = useERPStore.getState();
+    st.addProcessingSend({ processorId: s.machineProcessorId, materialId, stageId: STAGES[1].id, date: '2026-09-02', pcsSent: 100, ratePerPiece: 8 } as any);
+    st = useERPStore.getState();
+    st.addProcessingReceipt({ sendId: st.processingSends[0].id, processorId: s.machineProcessorId, materialId, date: '2026-09-03', pcsReceived: 100 } as any);
+    st = useERPStore.getState();
+    // Spot (final system stage) is unselected — must be rejected.
+    const spotProcessor = st.addProcessor({ name: 'Spot Man', stageId: STAGES[4].id });
+    expect(() =>
+      st.addProcessingSend({ processorId: spotProcessor, materialId, stageId: STAGES[4].id, date: '2026-09-04', pcsSent: 100, ratePerPiece: 5 } as any)
+    ).toThrow(/only processes at/);
+  });
+
+  it('engine helpers: raw at first selected, finished at last selected', () => {
+    const stages = STAGES;
+    const mat = { processingPath: 'custom_stages' as const, allowedStageIds: SELECTED };
+    expect(InventoryCalculationService.sendConsumesRaw(stages[1].id, stages, mat)).toBe(true);   // first selected
+    expect(InventoryCalculationService.sendConsumesRaw(stages[0].id, stages, mat)).toBe(false);  // unselected
+    expect(InventoryCalculationService.receiptProducesFinished(stages[3].id, stages, mat)).toBe(true);  // last selected
+    expect(InventoryCalculationService.receiptProducesFinished(stages[4].id, stages, mat)).toBe(false); // unselected final stage
+  });
+
+  it('purchase through the real service path validates weight math normally', () => {
+    const materialId = s.addRawMaterial({ name: 'Clip', categoryId: 'c1', processingPath: 'custom_stages', allowedStageIds: SELECTED });
+    PurchaseService.create({
+      supplierId: s.suppliers[0].id, materialId, date: '2026-09-01',
+      weight: 50, weightUnit: 'KGs', ratePerUnit: 300, weightPerPiece: 0.5,
+    } as any);
+    const st = useERPStore.getState();
+    expect(st.purchases).toHaveLength(1);
+    expect(st.materials.find(m => m.id === materialId)!.stockPcs).toBe(100);
+  });
+});
+
 describe('path helpers (engine level)', () => {
   it('sendConsumesRaw: single_stage only at fixed stage; ready_made never', () => {
     const stages = STAGES;

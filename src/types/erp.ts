@@ -1,10 +1,12 @@
 /**
  * How a material flows through manufacturing:
- *  - full_chain   → through EVERY configured processor in sequence (default; existing data)
- *  - single_stage → through exactly ONE fixed processor; its receipt makes it a final product
- *  - ready_made   → purchased finished (lids, handles); lands directly in the sellable finished pool
+ *  - full_chain      → through EVERY configured processor in sequence (default; existing data)
+ *  - single_stage    → through exactly ONE fixed processor; its receipt makes it a final product
+ *  - custom_stages   → through a USER-SELECTED SUBSET of the configured stages, in chain order;
+ *                      the receipt from the LAST selected stage makes it a final product
+ *  - ready_made      → purchased finished (lids, handles); lands directly in the sellable finished pool
  */
-export type ProcessingPath = 'full_chain' | 'single_stage' | 'ready_made';
+export type ProcessingPath = 'full_chain' | 'single_stage' | 'custom_stages' | 'ready_made';
 
 export interface MaterialCategory {
   id: string;
@@ -35,6 +37,8 @@ export interface RawMaterial {
   processingPath?: ProcessingPath;
   /** The ONE processor stage a single_stage material passes through. */
   fixedStageId?: string;
+  /** For custom_stages materials: the selected stages (stored in chain order). */
+  allowedStageIds?: string[];
 }
 
 export interface Batch {
@@ -71,6 +75,8 @@ export interface Batch {
   processingPath?: ProcessingPath;
   /** For single_stage batches: the one stage their pcs pass through. */
   fixedStageId?: string;
+  /** For custom_stages batches: the selected stages at purchase time (chain order). */
+  allowedStageIds?: string[];
 }
 
 export type ProcessingRateMethod = "per_piece" | "per_kg";

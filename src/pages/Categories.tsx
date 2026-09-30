@@ -316,6 +316,7 @@ export default function Categories() {
                 >
                   <option value="full_chain">Through all processors</option>
                   <option value="single_stage">One processor only</option>
+                  <option value="custom_stages">Selected processors (stages picked on each material)</option>
                   <option value="ready_made">Ready-made (no processing)</option>
                 </select>
                 <p className="text-xs text-muted-foreground">Pre-selected when creating a material in this category.</p>
