@@ -65,6 +65,7 @@ export interface ERPState {
   addProcessingStage: (data: Omit<ProcessingStage, 'id'>) => string;
   updateProcessingStage: (id: string, data: Partial<ProcessingStage>) => void;
   deleteProcessingStage: (id: string) => void;
+  reorderProcessingStages: (orderedIds: string[]) => void;
   addProcessor: (data: Omit<Processor, 'id' | 'balancePayable'>) => string;
   addSupplier: (data: Omit<Supplier, 'id' | 'balancePayable'>) => string;
   addCustomer: (data: Omit<Customer, 'id' | 'balanceReceivable'>) => string;
@@ -518,6 +519,20 @@ export const useERPStore = create<ERPState>()(
           || state.processingReceipts.some(r => r.stageId === id);
         if (hasMovements) return state;
         return { processingStages: rewireStageChain(state.processingStages.filter(s => s.id !== id)) };
+      }),
+
+      // Atomic reorder: pass the full chain in the NEW order (stage ids only).
+      // Sequences are renumbered 1..N in one set() so live sends and the
+      // movement map can never observe a half-swapped chain.
+      reorderProcessingStages: (orderedIds) => set((state) => {
+        const byId = new Map(state.processingStages.map(s => [s.id, s]));
+        const reordered = orderedIds.map(id => byId.get(id)).filter((s): s is ProcessingStage => !!s);
+        // Any stage missing from orderedIds (shouldn't happen) keeps its place at the end.
+        if (reordered.length !== state.processingStages.length) {
+          const missing = state.processingStages.filter(s => !orderedIds.includes(s.id));
+          reordered.push(...missing);
+        }
+        return { processingStages: rewireStageChain(reordered.map((s, i) => ({ ...s, sequence: i + 1 }))) };
       }),
 
       addProcessor: (data) => {

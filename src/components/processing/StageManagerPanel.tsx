@@ -1,4 +1,4 @@
-import { Edit, Plus, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Edit, Plus, Trash2, TriangleAlert } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ProcessingService } from '../../services/ProcessingService';
 import { useERPStore } from '../../store/useERPStore';
@@ -24,6 +24,9 @@ export function StageManagerPanel() {
   const [billingEnabled, setBillingEnabled] = useState(true);
   const [description, setDescription] = useState('');
   const [stageToDelete, setStageToDelete] = useState<string | null>(null);
+
+  const { processingSends, processingReceipts } = useERPStore();
+  const hasInFlightWork = processingSends.some(s => (s.pcsSent || 0) > (s.pcsReceived || 0) && s.status === 'Pending');
 
   const sorted = useMemo(() => [...(processingStages || [])].sort((a, b) => a.sequence - b.sequence), [processingStages]);
 
@@ -76,6 +79,15 @@ export function StageManagerPanel() {
     setModalOpen(false);
   };
 
+  const moveStage = (stageId: string, dir: -1 | 1) => {
+    const ids = sorted.map(s => s.id);
+    const i = ids.indexOf(stageId);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    useERPStore.getState().reorderProcessingStages(ids);
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -90,11 +102,22 @@ export function StageManagerPanel() {
         </button>
       </div>
 
+      {hasInFlightWork && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            Some batches are currently at a processor (pending receipts). Reordering the chain now changes where future pcs can be sent — existing pending dispatches keep their own stage. Check the Job Work board after reordering.
+          </span>
+        </div>
+      )}
+
       <DataTable
         data={sorted.map(s => ({ ...s, isFinal: s.isFinalStage ? 'Yes' : 'No', rate: s.rateMethod === 'per_kg' ? 'Per KG' : 'Per PCS', activeLabel: s.active ? 'Active' : 'Inactive' }))}
         columns={[
           { key: 'actions', label: 'Actions', align: 'right', render: (item) => (
             <div className="flex justify-end gap-2">
+              <button onClick={() => moveStage(item.id, -1)} disabled={item.sequence <= 1} aria-label="Move stage up" title="Move up in the chain" className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"><ArrowUp className="h-4 w-4" /></button>
+              <button onClick={() => moveStage(item.id, 1)} disabled={item.sequence >= sorted.length} aria-label="Move stage down" title="Move down in the chain" className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"><ArrowDown className="h-4 w-4" /></button>
               <button onClick={() => openEdit(item)} aria-label="Edit stage" className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Edit className="h-4 w-4" /></button>
               <button onClick={() => setStageToDelete(item.id)} aria-label="Delete stage" className="p-1.5 hover:bg-destructive/10 text-destructive rounded-md transition-colors" title="Only unused stages can be deleted"><Trash2 className="h-4 w-4" /></button>
             </div>
