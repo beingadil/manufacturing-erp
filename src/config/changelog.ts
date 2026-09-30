@@ -20,6 +20,27 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.40',
+    date: '2026-09-30',
+    title: 'Custom Stages Path & Google Drive Backup',
+    sections: [
+      {
+        title: 'Processing Paths',
+        items: [
+          'New "Custom Stages" path: pick any subset of the saved processor stages when creating a material, and the pcs flow through only those stages — always in the saved chain order.',
+          'Raw pcs are drawn at the first selected stage, the material becomes finished goods only when the last selected stage receives its pcs back, and sending to an unselected stage is rejected with a clear message naming the allowed stages.',
+          'Existing paths (Full Chain, Single Stage, Ready-Made) are unchanged; the form shows which stages are selected and their chain order while sending.',
+        ],
+      },
+      {
+        title: 'Backups',
+        items: [
+          'Google Drive backup: sign in once and the app uploads a daily database backup to your Drive, with connect/disconnect controls in Settings → Backup & Restore.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.39',
     date: '2026-09-24',
     title: 'Processing Paths — Full Chain, Single Stage & Ready-Made',
