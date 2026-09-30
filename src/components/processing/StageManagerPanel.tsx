@@ -25,7 +25,7 @@ export function StageManagerPanel() {
   const [description, setDescription] = useState('');
   const [stageToDelete, setStageToDelete] = useState<string | null>(null);
 
-  const { processingSends, processingReceipts } = useERPStore();
+  const { processingSends } = useERPStore();
   const hasInFlightWork = processingSends.some(s => (s.pcsSent || 0) > (s.pcsReceived || 0) && s.status === 'Pending');
 
   const sorted = useMemo(() => [...(processingStages || [])].sort((a, b) => a.sequence - b.sequence), [processingStages]);

@@ -20,6 +20,20 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.41',
+    date: '2026-09-30',
+    title: 'Stage Master Reordering',
+    sections: [
+      {
+        title: 'Processing Stage Master',
+        items: [
+          'Reorder the processor chain with one click — new up/down arrows renumber the sequence and rewire the chain atomically, so mid-edit states can never break sending.',
+          'A warning appears when dispatches are still awaiting receipt, since reordering changes where future pcs can be sent.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.40',
     date: '2026-09-30',
     title: 'Custom Stages Path & Google Drive Backup',
