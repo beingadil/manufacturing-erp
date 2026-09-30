@@ -3,6 +3,7 @@ const path = require('path');
 const { autoUpdater } = require('electron-updater');
 const db = require('./database.cjs');
 const ai = require('./ai.cjs');
+const drive = require('./drive.cjs');
 const { detectLegacyInstall } = require('./legacy-install-detector.cjs');
 
 const createWindow = () => {
@@ -48,6 +49,8 @@ app.whenReady().then(() => {
 
   // AI gateway config lives in userData (key never in renderer/SQLite).
   ai.initAiConfig(app.getPath('userData'));
+  // Google Drive backup config lives in userData (refresh token never in renderer).
+  drive.initDriveConfig(app.getPath('userData'));
 
   const fs = require('fs');
   const dbPath = require('path').join(app.getPath('userData'), 'manufacturing-erp.sqlite');
@@ -98,6 +101,30 @@ app.whenReady().then(() => {
   runDailyBackupSafe();
   const dailyBackupTimer = setInterval(runDailyBackupSafe, 60 * 60 * 1000);
   app.on('will-quit', () => clearInterval(dailyBackupTimer));
+
+  // Daily Google Drive upload: after the local snapshot exists, push it to the
+  // user's Drive app folder (same once-per-day skip logic as the local copy).
+  const runDailyDriveBackupSafe = async () => {
+    try {
+      const cfg = drive.publicConfig(drive.loadConfig());
+      if (!cfg.connected || !cfg.autoEnabled) return;
+      const { runDailyBackup } = require('./database.cjs');
+      // runDailyBackup() skips if today's local snapshot already exists and
+      // returns its path either way — we upload that same file.
+      const local = db.runDailyBackup();
+      if (!local.success) return;
+      const today = new Date().toISOString().slice(0, 10);
+      const cfgNow = drive.publicConfig(drive.loadConfig());
+      if (cfgNow.lastBackupAt && cfgNow.lastBackupAt.slice(0, 10) === today) return; // already uploaded today
+      const result = await drive.uploadBackup(local.path);
+      console.log('[Main] Daily Drive backup uploaded:', result.name);
+    } catch (e) {
+      console.warn('[Main] Daily Drive backup failed (non-fatal):', e.message);
+    }
+  };
+  runDailyDriveBackupSafe();
+  const dailyDriveTimer = setInterval(runDailyDriveBackupSafe, 60 * 60 * 1000);
+  app.on('will-quit', () => clearInterval(dailyDriveTimer));
 
   // Register IPC handlers
   ipcMain.handle('db:initialize', async () => {
@@ -413,6 +440,8 @@ app.whenReady().then(() => {
 
   // AI (Groq) IPC handlers — config, tool-calling chat, Whisper transcription.
   ai.registerAiHandlers(ipcMain);
+  // Google Drive backup IPC handlers — connect, upload, list, download.
+  drive.registerDriveHandlers(ipcMain);
 });
 
 app.on('window-all-closed', () => {

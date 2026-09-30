@@ -40,3 +40,15 @@ contextBridge.exposeInMainWorld('electronAI', {
   chat: (payload) => ipcRenderer.invoke('ai:chat', payload),
   transcribe: (payload) => ipcRenderer.invoke('ai:transcribe', payload),
 });
+
+// Google Drive backup surface — refresh token lives only in the main process.
+contextBridge.exposeInMainWorld('electronDrive', {
+  getConfig: () => ipcRenderer.invoke('drive:getConfig'),
+  setCredentials: (patch) => ipcRenderer.invoke('drive:setCredentials', patch),
+  connect: () => ipcRenderer.invoke('drive:connect'),
+  disconnect: () => ipcRenderer.invoke('drive:disconnect'),
+  backup: (localPath) => ipcRenderer.invoke('drive:backup', localPath),
+  list: () => ipcRenderer.invoke('drive:list'),
+  download: (fileId) => ipcRenderer.invoke('drive:download', fileId),
+  setAuto: (enabled) => ipcRenderer.invoke('drive:setAuto', enabled),
+});
