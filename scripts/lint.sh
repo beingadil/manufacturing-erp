@@ -10,6 +10,7 @@
 #   4. tailwindcss CSS validation
 #   5. vite build smoke test
 #   6. ts-prune dead code detection
+#   7. README link check (catches paths that 404 on the repo page)
 
 set -euo pipefail
 
@@ -57,5 +58,6 @@ else
   echo "(skipped — .rules/testBuild.sh not present in this checkout)"
 fi
 step "Dead Code (ts-prune)"     bash "$SCRIPT_DIR/deadcode.sh"
+step "README Links"             node "$SCRIPT_DIR/check-readme-links.cjs"
 
 exit $EXIT_CODE

@@ -1,0 +1,69 @@
+
+name: Feature request
+description: Suggest an improvement or new capability.
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please describe the problem first and the solution second. That ordering makes it
+        much easier to judge whether the feature is worth building, and often surfaces a
+        simpler fix that works just as well.
+
+  - type: dropdown
+    id: module
+    attributes:
+      label: Which area does this affect?
+      options:
+        - Dashboard
+        - Raw Materials
+        - Job Work / Processing
+        - Processors
+        - Finished Goods
+        - Purchases
+        - Sales
+        - Accounting / Ledgers
+        - Customers & Suppliers
+        - Reports
+        - Backup & Restore / Maintenance
+        - Access control / Security
+        - Cross-cutting / app-wide
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the situation today and what it costs you.
+      placeholder: >
+        Today I have to export three reports and reconcile them by hand before I can close
+        the month.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like the app to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What have you tried instead?
+      description: Optional — workarounds, spreadsheets, or a paper process.
+    validations:
+      required: false
+
+  - type: textarea
+    id: data
+    attributes:
+      label: Does this need new data or a schema change?
+      description: >
+        Optional — if it means new fields, new tables, or a change to the `.merpbak` backup
+        format, say so. Those affect every existing installation.
+    validations:
+      required: false

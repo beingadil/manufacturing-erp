@@ -1,0 +1,108 @@
+
+name: Bug report
+description: Something in the app is broken or behaving incorrectly.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please fill in the sections below — the more precise the
+        steps, the faster this gets fixed.
+
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Settings shows the installed version.
+      placeholder: "1.0.43"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Windows version
+      options:
+        - Windows 11
+        - Windows 10
+        - Windows Server / other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: module
+    attributes:
+      label: Which module is affected?
+      options:
+        - Dashboard
+        - Raw Materials
+        - Job Work / Processing
+        - Processors
+        - Finished Goods
+        - Purchases
+        - Sales
+        - Accounting / Ledgers
+        - Customers & Suppliers
+        - Reports
+        - Backup & Restore / Maintenance
+        - Access control / Security
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you saw, including any error message.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered, starting from opening the app.
+      placeholder: |
+        1. Open Job Work
+        2. Open dispatch for batch X
+        3. Click Receive
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Business impact
+      description: >
+        Does this lose data, block work, or misstate a figure? If a voucher or stock
+        quantity is wrong, say which one.
+    validations:
+      required: false
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: >
+        Optional — paste the output of Settings → Maintenance → System Diagnostics if you
+        can reach that screen.
+      render: text
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: backup
+    attributes:
+      label: Data safety
+      options:
+        - label: I have a current `.merpbak` backup of this installation.
+          required: false

@@ -1,0 +1,9 @@
+
+blank_issues_enabled: true
+contact_links:
+  - name: Question or usage help
+    url: https://github.com/beingadil/manufacturing-erp/discussions
+    about: Ask how to use the app, or how something works. Open a bug report if something is actually broken.
+  - name: Security vulnerability
+    url: https://github.com/beingadil/manufacturing-erp/security/advisories/new
+    about: Report a security problem privately. Please do not open a public issue for these.

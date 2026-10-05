@@ -2,6 +2,31 @@
   "name": "manufacturing-erp",
   "version": "1.0.43",
   "description": "Manufacturing ERP — Full-featured desktop ERP for inventory, purchases, sales, processing, and accounting management.",
+  "license": "MIT",
+  "homepage": "https://github.com/beingadil/manufacturing-erp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/beingadil/manufacturing-erp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/beingadil/manufacturing-erp/issues",
+    "email": "beingadil@users.noreply.github.com"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "erp",
+    "manufacturing",
+    "inventory",
+    "accounting",
+    "sqlite",
+    "electron",
+    "react",
+    "typescript",
+    "offline-first",
+    "desktop-app"
+  ],
   "author": "beingadil <https://github.com/beingadil>",
   "type": "module",
   "main": "electron/main.cjs",

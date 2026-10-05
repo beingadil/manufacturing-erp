@@ -1,0 +1,46 @@
+version: 2
+
+updates:
+  # Dependencies. Minor and patch are grouped; majors arrive as individual PRs so an
+  # Electron or React major can be reviewed and tested on its own.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "Asia/Karachi"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      dev-dependencies:
+        dependency-type: "development"
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "electron"
+          - "electron-builder"
+          - "electron-updater"
+          - "@electron/rebuild"
+          - "better-sqlite3"
+    ignore:
+      # Vite is aliased to rolldown-vite — Dependabot cannot track that correctly.
+      - dependency-name: "vite"
+
+  # The three workflows. A stale action reference can silently break releases.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "Asia/Karachi"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "ci"
+    groups:
+      actions:
+        patterns:
+          - "*"
