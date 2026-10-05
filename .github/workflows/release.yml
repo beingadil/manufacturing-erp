@@ -12,6 +12,9 @@ name: Build & Release
 # for the current package.json version already exists, so it can never clobber
 # or duplicate one.
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:

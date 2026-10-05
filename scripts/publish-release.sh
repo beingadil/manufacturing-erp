@@ -15,26 +15,23 @@
 #   3. Publish config in package.json pointing to your repo
 #   4. All changes committed on your current branch
 #
-# What it does (fully local — no waiting on GitHub Actions):
+# What it does (the heavy lifting is done by CI):
 #   1. Checks the working tree is clean (uncommitted changes must be
 #      committed first; pass SKIP_CLEAN_CHECK=1 to override)
 #   2. Bumps version in package.json + src/config/version.ts
 #   3. Commits the version bump and tags v*.*.*
-#   4. Pushes the branch + tag to origin — BEFORE publishing, so the
-#      release is tagged at the commit that is actually being shipped
-#   5. Builds the Vite frontend
-#   6. Runs electron-builder --win --publish always → uploads the
-#      installer + latest.yml straight to GitHub Releases (installed
-#      users auto-update immediately)
-#   7. Verifies the published tag still points at HEAD, failing loudly if not
-#   8. Auto-generates the release notes body from the commit log since
-#      the previous tag and PATCHes it onto the GitHub release
+#   4. Pushes the branch + tag to origin, then verifies the pushed tag
+#      really points at HEAD and fails loudly if it does not
 #
-#   The GitHub Actions workflow (.github/workflows/release.yml) is kept as a
-#   fallback for other machines; this script is the primary path. The workflow
-#   is manual-only (workflow_dispatch) — it never auto-triggers on the tag
-#   push this script performs, so it cannot race or duplicate the release
-#   (and it skips if a release for the version already exists).
+#   The tag push then triggers .github/workflows/release.yml, which builds
+#   the installer on windows-latest and publishes the installer + latest.yml
+#   to GitHub Releases (installed users auto-update). CI is the ONLY
+#   publisher: building and uploading here as well would race the workflow
+#   and produce duplicate releases.
+#
+#   Run this script, then watch the run in the Actions tab. The workflow
+#   also stays available via workflow_dispatch for manual re-runs, and its
+#   guard job skips the build if a release for the version already exists.
 #
 # ============================================================
 
@@ -129,61 +126,35 @@ echo "Tagged: v$NEW_VERSION"
 echo ""
 
 # ── Push branch + tag BEFORE publishing ────────────────────────────
-#    ORDERING MATTERS. electron-builder creates the release tag itself when it
-#    is missing, and it resolves "the commit being released" from
-#    origin/<branch>. If the branch is still only local at that moment, the
-#    release gets tagged at the PREVIOUS commit — so the published tag would
-#    not contain the code being shipped (this shipped v1.0.43 tagged at the
-#    v1.0.42 commit). Push first; electron-builder then attaches the release
-#    to the tag that is already there.
+#    ORDERING MATTERS. The tag must exist on GitHub BEFORE anything uploads,
+#    so the release is attached to the commit actually being shipped. This
+#    shipped v1.0.43 tagged at the v1.0.42 commit when the local build did the
+#    publishing. CI (.github/workflows/release.yml) now builds and publishes on
+#    the tag push, so this script only has to get the tag to origin.
 
 echo "Pushing branch and tag to origin ($CURRENT_BRANCH)..."
 git push origin "$CURRENT_BRANCH"
 git push origin "v$NEW_VERSION"
 echo ""
 
-# ── Build frontend ─────────────────────────────────────────────────
-
-echo "📦  Building Vite frontend..."
-npx vite build
-echo "✅  Vite build complete."
-echo ""
-
-# ── Build installer & publish to GitHub Releases ────────────────────
-#    --publish always uploads the installer + latest.yml + blockmap
-#    straight to GitHub Releases; installed users auto-update.
-
-echo "🚀  Building installer and publishing to GitHub Releases..."
-npx electron-builder --win --publish always
-echo "✅  Installer built and published."
-echo ""
-
-# ── Verify the published tag actually points at this commit ─────────
-#    Cheap insurance: if the tag ever drifts again, fail loudly instead of
-#    shipping a release whose source does not match its installer.
+# ── Verify the pushed tag actually points at this commit ───────────
+#    Cheap insurance: if the tag ever drifts, fail loudly here rather than
+#    let CI build a release from the wrong commit.
 
 LOCAL_COMMIT=$(git rev-parse HEAD)
 REMOTE_TAG_COMMIT=$(git ls-remote origin "refs/tags/v$NEW_VERSION^{}" | awk '{print $1}')
 if [ "$REMOTE_TAG_COMMIT" != "$LOCAL_COMMIT" ]; then
   echo ""
   echo "❌ Release tag v$NEW_VERSION points at ${REMOTE_TAG_COMMIT:-<missing>}, expected $LOCAL_COMMIT."
-  echo "   The published source does not match the released build. Fix with:"
+  echo "   CI would build the wrong commit. Fix with:"
   echo "   git tag -f -a v$NEW_VERSION -m 'Release v$NEW_VERSION' $LOCAL_COMMIT"
   echo "   git push --force origin v$NEW_VERSION"
   exit 1
 fi
 echo "✅ Release tag v$NEW_VERSION verified at $LOCAL_COMMIT"
 echo ""
-
-# ── Auto-generate release notes & update the GitHub release ─────────
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+echo "✅  Tag v$NEW_VERSION pushed — GitHub Actions is now building the installer."
+echo "    Watch it: https://github.com/$(git remote get-url origin | sed -E 's#.*github\.com[:/]##; s#\.git$##')/actions"
+echo "    Release appears at: https://github.com/$(git remote get-url origin | sed -E 's#.*github\.com[:/]##; s#\.git$##')/releases/tag/v$NEW_VERSION"
 echo ""
-echo "Updating release body on GitHub..."
-bash "$SCRIPT_DIR/set-release-notes.sh"
-
-echo ""
-echo "✅  Release v$NEW_VERSION published!"
-echo "    https://github.com/$(git remote get-url origin | sed -E 's#.*github\.com[:/]##; s#\.git$##')/releases/tag/v$NEW_VERSION"
-echo ""
-echo "Users will receive the update automatically within minutes."
+echo "Typical build is ~6-10 min. Once published, installed users auto-update."
