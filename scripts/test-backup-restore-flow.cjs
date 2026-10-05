@@ -3,11 +3,16 @@
 //
 // Uses the REAL electron/database.cjs (backup/restore/import + key_value_store)
 // and replicates the renderer's SQLiteStorageAdapter.getItem() mirror logic so
-// the end-to-end outcome — including the localStorage-mirror defeat and its
-// fix — is pinned without needing the full renderer. The replication models a
-// legacy envelope (no `unsynced` flag): the production adapter now also trusts
-// an explicit unsynced mirror, but the restore invariant tested here is the
-// same — a cleared mirror lets the restored SQLite rows win.
+// the end-to-end outcome — including the localStorage-mirror precedence rules —
+// is pinned without needing the full renderer.
+//
+// Precedence replicated from src/database/sqlite/SQLiteStorageAdapter.ts:
+// SQLite is the single source of truth. The ONLY mirror that may override it is
+// an UNSYNCED one (a value whose SQLite write genuinely failed, so the mirror is
+// the last surviving copy). A synced mirror is a cache entry with no authority —
+// which is what makes a restore stick, because a pre-restore mirror is always
+// newer than the row a restore just wrote. Restore still clears the mirrors so
+// an in-flight unsynced mirror cannot survive it.
 //
 // Run: npx electron scripts/test-backup-restore-flow.cjs
 
@@ -25,21 +30,15 @@ fs.mkdirSync(path.join(workDir, 'documents'), { recursive: true });
 const db = require('../electron/database.cjs');
 
 // ── faithful replication of SQLiteStorageAdapter's mirror logic ─────────────
-const STALE_TOLERANCE_MS = 2000;
-function parseSqliteTimestamp(updatedAt) {
-  if (!updatedAt) return 0;
-  const t = Date.parse(updatedAt.replace(' ', 'T') + 'Z');
-  return Number.isFinite(t) ? t : 0;
-}
-// Returns what the renderer's getItem() would return, and whether it "healed".
+// Returns what the renderer's getItem() would return, and whether it "healed"
+// (i.e. wrote the mirror back into SQLite).
 function adapterGetItem(sqliteRow, mirror) {
   if (sqliteRow && sqliteRow.value != null) {
-    const sqliteSavedAt = parseSqliteTimestamp(sqliteRow.updated_at);
-    if (!mirror || sqliteSavedAt >= mirror.savedAt - STALE_TOLERANCE_MS) {
-      return { returned: sqliteRow.value, healed: false };
-    }
-    // Mirror newer → previous SQLite write "failed" → return mirror + heal SQLite
-    return { returned: mirror.value, healed: true };
+    // Only an UNSYNCED mirror may override SQLite — it means the SQLite write
+    // for that value failed, so this is the only surviving copy. Timestamps are
+    // deliberately NOT consulted.
+    if (mirror && mirror.unsynced) return { returned: mirror.value, healed: true };
+    return { returned: sqliteRow.value, healed: false };
   }
   if (mirror) return { returned: mirror.value, healed: false };
   return { returned: null, healed: false };
@@ -73,8 +72,7 @@ async function main() {
 
   // 1. User saves data → persist setItem → SQLite + localStorage mirror (T1)
   db.execute(UPSERT, ['erp-storage', stateWithData]);
-  const mirrorSavedAt_afterSave = Date.now();
-  await sleep(2100); // exceed STALE_TOLERANCE_MS so timestamps are unambiguous
+  await sleep(1100); // make the mirror unambiguously newer than the SQLite row
 
   // 2. User creates the backup
   const bak = db.backupDatabase();
@@ -83,10 +81,8 @@ async function main() {
   const dbPath = path.join(app.getPath('userData'), 'manufacturing-erp.sqlite');
 
   // 3. User deletes the data → persist setItem → SQLite + mirror now hold deleted state (T2)
-  await sleep(2100);
   db.execute(UPSERT, ['erp-storage', stateAfterDelete]);
-  const mirrorSavedAt_afterDelete = Date.now();
-  await sleep(2100);
+  await sleep(1100);
 
   // 4. User imports the backup (unified .merpbak path used by the Import button)
   const imp = db.importUnifiedBackupFromPath(bak.path);
@@ -105,13 +101,22 @@ async function main() {
   const integrity = db.runIntegrityCheck();
   check('Database integrity passes after import', integrity.success === true);
 
-  // 7. Without invalidation the mirror (newer) defeats the restore — documents
-  //    why clearStorageMirrors() is required.
-  const mirror = { value: stateAfterDelete, savedAt: mirrorSavedAt_afterDelete };
-  const withoutFix = adapterGetItem(row, mirror);
-  check('Without invalidation the newer mirror overrides the restore (bug documented)', withoutFix.healed === true && !withoutFix.returned.includes('cat-1'));
+  // 7. THE FIX: a SYNCED pre-restore mirror is a cache entry, not an authority.
+  //    Even though it is newer than the restored row, it must not clobber it —
+  //    this is what used to make a restore look like it "deleted everything".
+  const syncedMirror = { value: stateAfterDelete, unsynced: false };
+  const afterRestore = adapterGetItem(row, syncedMirror);
+  check('A synced pre-restore mirror does NOT override the restored SQLite row',
+    afterRestore.healed === false && afterRestore.returned.includes('cat-1'));
 
-  // 8. With the fix (mirrors invalidated before reload) the restored state wins.
+  // 8. An UNSYNCED mirror would still win (its SQLite write failed, so it is the
+  //    only surviving copy) — which is why restore additionally clears mirrors.
+  const unsyncedMirror = { value: stateAfterDelete, unsynced: true };
+  const withUnsynced = adapterGetItem(row, unsyncedMirror);
+  check('An unsynced mirror still wins (and is written back into SQLite)',
+    withUnsynced.healed === true && !withUnsynced.returned.includes('cat-1'));
+
+  // 9. With mirrors cleared before reload, nothing can survive the restore.
   const withFix = adapterGetItem(row, null);
   check('After clearStorageMirrors() the restored SQLite state wins', !!withFix.returned && withFix.returned.includes('cat-1'));
 

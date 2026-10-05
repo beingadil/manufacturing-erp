@@ -383,51 +383,6 @@ function runDailyBackup() {
   }
 }
 
-function deleteBackup(filename) {
-  try {
-    const fs = require('fs');
-    const backupDir = path.join(app.getPath('userData'), 'backups');
-    // Only allow deleting files inside the backups directory (no path traversal)
-    const safe = path.basename(filename);
-    if (safe !== filename) {
-      return { success: false, error: 'Invalid backup filename' };
-    }
-    const target = path.join(backupDir, safe);
-    if (!fs.existsSync(target)) {
-      return { success: false, error: 'Backup not found' };
-    }
-    fs.rmSync(target, { force: true });
-    console.log('[DB] Backup deleted:', target);
-    return { success: true };
-  } catch (error) {
-    console.error('[DB] Delete backup error:', error);
-    return { success: false, error: error.message };
-  }
-}
-
-function restoreDatabase(backupPath) {
-  try {
-    const fs = require('fs');
-    const dbPath = getDbPath();
-    if (!fs.existsSync(backupPath)) {
-      return { success: false, error: 'Backup file not found' };
-    }
-    if (db) {
-      db.close();
-      db = null;
-    }
-    fs.copyFileSync(backupPath, dbPath);
-    removeWalSidecars(dbPath);
-    initialized = false;
-    initializeDatabase();
-    console.log('[DB] Database restored from:', backupPath);
-    return { success: true };
-  } catch (error) {
-    console.error('[DB] Restore error:', error);
-    return { success: false, error: error.message };
-  }
-}
-
 // ─── External Backup Export / Import ─────────────────────────────────────────
 // These let users save a full SQLite backup to any location on disk (USB, network, etc.)
 // and restore from a backup file on any machine.
@@ -707,6 +662,7 @@ function restoreFromUpdateSafeBackup() {
 // -shm files from the previous connection must be removed. Replaying a stale
 // WAL against a different database file is a classic SQLite corruption source.
 function removeWalSidecars(dbPath) {
+  const fs = require('fs');
   try {
     for (const ext of ['-wal', '-shm']) {
       const f = dbPath + ext;
@@ -717,22 +673,4 @@ function removeWalSidecars(dbPath) {
   }
 }
 
-function listBackups() {
-  try {
-    const fs = require('fs');
-    const backupDir = path.join(app.getPath('userData'), 'backups');
-    if (!fs.existsSync(backupDir)) return [];
-    return fs.readdirSync(backupDir)
-      .filter(f => f.startsWith('manufacturing-erp-') && f.endsWith('.sqlite.bak'))
-      .map(f => {
-        const stat = fs.statSync(path.join(backupDir, f));
-        return { filename: f, path: path.join(backupDir, f), size: stat.size, createdAt: stat.birthtime.toISOString(), modifiedAt: stat.mtime.toISOString() };
-      })
-      .sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
-  } catch (error) {
-    console.error('[DB] List backups error:', error);
-    return [];
-  }
-}
-
-module.exports = { initializeDatabase, query, queryOne, execute, transaction, closeDatabase, runIntegrityCheck, backupDatabase, runDailyBackup, deleteBackup, restoreDatabase, listBackups, exportBackupToPath, importBackupFromPath, exportUnifiedBackupToPath, importUnifiedBackupFromPath, createUpdateSafeBackup, restoreFromUpdateSafeBackup };
+module.exports = { initializeDatabase, query, queryOne, execute, transaction, closeDatabase, runIntegrityCheck, backupDatabase, runDailyBackup, exportBackupToPath, importBackupFromPath, exportUnifiedBackupToPath, importUnifiedBackupFromPath, createUpdateSafeBackup, restoreFromUpdateSafeBackup };

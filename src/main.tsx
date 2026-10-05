@@ -77,18 +77,18 @@ async function bootstrap() {
             // control-account nesting, and legacy ledgerEntries trail removal.
             const migrated = migrateERPState(persistedState);
 
-            // One-time data-fix for historical postings. Snapshot the DB first
-            // so the migration is always reversible, then remap legacy purchase
+            // One-time data-fix for historical postings: remap legacy purchase
             // postings (COGS expense → Raw Material Inventory asset) and
             // back-fill COGS on legacy sales. Idempotent — no-ops once applied.
             // Best-effort: if it ever throws, the app must STILL open — the
             // fix simply runs again next launch.
+            //
+            // NOTE: there is deliberately no pre-migration snapshot here. Snapshot
+            // machinery was removed (see BackupRestoreTab / preload electronDB);
+            // the only user-facing recovery path is "Backup to file" in
+            // Settings → System Maintenance, which writes a portable .merpbak.
             let fixedState = migrated;
             let fixReport: any = null;
-            try {
-              const backup = await (window as any).electronDB?.backup?.();
-              if (backup?.success) Logger.info('Startup', `Pre-migration DB backup saved: ${backup.path || 'ok'}`);
-            } catch (_b) { /* non-fatal — migration still proceeds */ }
             try {
               const fixed = fixHistoricalPostings(migrated);
               fixedState = fixed.state;

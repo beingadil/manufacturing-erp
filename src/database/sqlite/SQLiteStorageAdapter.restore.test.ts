@@ -67,7 +67,7 @@ function makeMockElectronDB(opts?: { delayFirstUpsertMs?: number }) {
 
 const BACKUP_TIME = "2026-08-15 11:21:02"; // SQLite CURRENT_TIMESTAMP (UTC, second precision)
 const BACKUP_MS = Date.parse("2026-08-15T11:21:02Z");
-const DELETE_MS = Date.parse("2026-08-15T11:21:06Z"); // > 2s later → beats STALE_TOLERANCE_MS (2000ms)
+const DELETE_MS = Date.parse("2026-08-15T11:21:06Z"); // seconds after the restore
 
 describe("SQLiteStorageAdapter restore-mirror interplay", () => {
   beforeEach(() => {
@@ -80,43 +80,50 @@ describe("SQLiteStorageAdapter restore-mirror interplay", () => {
     vi.resetModules();
   });
 
-  it("mirror newer than a restored SQLite row wins without invalidation (documents the bug)", async () => {
+  it("a SYNCED mirror never overrides a freshly restored SQLite row, however newer it is", async () => {
     const { dbService } = await import("../DatabaseService");
     await dbService.initialize();
     const { SQLiteStorageAdapter } = await import("./SQLiteStorageAdapter");
 
     // Restore: SQLite row is back to the backup point-in-time (older).
     kvTable.set("erp-storage", { value: "state-with-category", updated_at: BACKUP_TIME });
-    // Mirror still holds the pre-restore deleted state, meaningfully newer.
-    localStorage.setItem("erp-storage", JSON.stringify({ value: "state-after-delete", savedAt: DELETE_MS }));
+    // The localStorage mirror still holds the pre-restore deleted state and is
+    // newer in wall-clock terms — but it is SYNCED (its SQLite write succeeded),
+    // so it is a plain cache entry and carries no authority.
+    localStorage.setItem("erp-storage", JSON.stringify({ value: "state-after-delete", savedAt: DELETE_MS, unsynced: false }));
 
     const got = await SQLiteStorageAdapter.getItem("erp-storage");
-    expect(got).toBe("state-after-delete");
+    expect(got).toBe("state-with-category");
+    // SQLite was NOT healed back to the deleted state — that was the bug that
+    // made a restore look like it "deleted everything" instead of restoring.
+    expect(kvTable.get("erp-storage")!.value).toBe("state-with-category");
   });
 
-  it("clearStorageMirrors() makes the restored SQLite row authoritative", async () => {
+  it("clearStorageMirrors() also drops an unsynced mirror so a restore always wins", async () => {
     const { dbService } = await import("../DatabaseService");
     await dbService.initialize();
     const { SQLiteStorageAdapter, clearStorageMirrors } = await import("./SQLiteStorageAdapter");
 
     kvTable.set("erp-storage", { value: "state-with-category", updated_at: BACKUP_TIME });
-    localStorage.setItem("erp-storage", JSON.stringify({ value: "state-after-delete", savedAt: DELETE_MS }));
+    // Worst case: an UNSYNCED mirror (a genuine failed write) would normally win.
+    // Restore explicitly clears the mirrors so it cannot survive the import.
+    localStorage.setItem("erp-storage", JSON.stringify({ value: "state-after-delete", savedAt: DELETE_MS, unsynced: true }));
 
     clearStorageMirrors();
 
     const got = await SQLiteStorageAdapter.getItem("erp-storage");
     expect(got).toBe("state-with-category");
-    // The mirror is gone, so nothing can heal the deleted state back into SQLite.
     expect(localStorage.getItem("erp-storage")).toBeNull();
   });
 
-  it("an unsynced mirror wins and heals SQLite even when only milliseconds older", async () => {
+  it("an unsynced mirror wins and is written back, regardless of its timestamp", async () => {
     const { dbService } = await import("../DatabaseService");
     await dbService.initialize();
     const { SQLiteStorageAdapter } = await import("./SQLiteStorageAdapter");
 
     // SQLite row was written at BACKUP_TIME; the failed write's mirror is
     // OLDER by 100ms yet unsynced (SQLite never got it) → it must still win.
+    // The flag, not the clock, is what makes the mirror authoritative.
     kvTable.set("erp-storage", { value: "sqlite-old", updated_at: BACKUP_TIME });
     localStorage.setItem("erp-storage", JSON.stringify({ value: "mirror-newer", savedAt: BACKUP_MS - 100, unsynced: true }));
 
@@ -126,7 +133,7 @@ describe("SQLiteStorageAdapter restore-mirror interplay", () => {
     expect(kvTable.get("erp-storage")!.value).toBe("mirror-newer");
   });
 
-  it("a synced mirror never overrides a slightly newer SQLite row", async () => {
+  it("a synced mirror never overrides a newer SQLite row", async () => {
     const { dbService } = await import("../DatabaseService");
     await dbService.initialize();
     const { SQLiteStorageAdapter } = await import("./SQLiteStorageAdapter");

@@ -14,16 +14,20 @@ import { dbService } from '../DatabaseService';
  * as a JSON blob in the key_value_store table via the Electron IPC bridge.
  * No entity table sync — the persist blob is the single source of truth.
  *
- * Resilience: every write is mirrored to localStorage. Writes are serialized
- * per key so they always land in call order in BOTH stores, and the mirror
- * carries an `unsynced` flag whenever SQLite failed to persist a value:
+ * Resilience: every write is mirrored to localStorage. SQLite is the single
+ * source of truth; the mirror is a fallback, never an authority. Writes are
+ * serialized per key so they always land in call order, and the mirror carries
+ * an `unsynced` flag whenever SQLite failed to persist a value:
  *   - the browser preview (MockSQLiteAdapter, which stores nothing) persists
  *     across reloads via the mirror;
- *   - a failed SQLite write is recovered on next boot because the unsynced
- *     mirror wins and heals SQLite — no wall-clock guessing;
- *   - a user restore/import clears the mirrors (clearStorageMirrors) so the
- *     restored SQLite rows rehydrate instead of a pre-restore mirror;
- *   - legacy envelopes (no unsynced flag) fall back to a timestamp heuristic.
+ *   - a failed SQLite write is recovered on next boot because an UNSYNCED
+ *     mirror is the only surviving copy, so it wins and is written back —
+ *     this is recovery, not a competing source of truth;
+ *   - a SYNCED mirror never overrides SQLite. The old "mirror is newer than
+ *     SQLite, so heal" heuristic let a pre-restore mirror silently overwrite a
+ *     freshly restored database on the next read, which is why restore used to
+ *     appear to do nothing. A restore/import still clears the mirrors
+ *     (clearStorageMirrors) so an in-flight unsynced mirror cannot survive it.
  */
 
 interface MirrorEntry {
@@ -33,8 +37,8 @@ interface MirrorEntry {
    * True when the SQLite write for this value FAILED (or the DB wasn't ready):
    * the mirror is the ONLY copy of that state and must win on rehydration,
    * regardless of how much time has passed since the SQLite row was written.
-   * Absent on legacy envelopes (written before this flag) — those fall back to
-   * the timestamp heuristic below.
+   * Absent (or false) on envelopes written before the flag existed — those are
+   * plain synced mirrors and carry no authority over SQLite.
    */
   unsynced?: boolean;
 }
@@ -93,11 +97,10 @@ const PERSIST_KEYS = [
  * Drop the localStorage mirror cache for all persisted stores.
  *
  * Call this AFTER the main process has replaced the SQLite file with a
- * point-in-time backup (restore/import). The mirrors still hold the newer,
- * pre-restore state, and getItem()'s "mirror newer than SQLite → heal" logic
- * would otherwise override the restored SQLite state and re-clobber it —
- * making restore appear to do nothing. Clearing forces the next boot to
- * rehydrate purely from the restored SQLite rows.
+ * point-in-time backup (restore/import). A synced mirror can no longer
+ * override SQLite, but an UNSYNCED mirror still can — and a restore is an
+ * explicit user instruction, so it must win over any pre-restore local copy.
+ * Clearing forces the next boot to rehydrate purely from the restored rows.
  */
 export function clearStorageMirrors(): void {
   for (const key of PERSIST_KEYS) {
@@ -105,21 +108,8 @@ export function clearStorageMirrors(): void {
   }
 }
 
-function parseSqliteTimestamp(updatedAt: string | null | undefined): number {
-  if (!updatedAt) return 0;
-  // SQLite timestamps: 'YYYY-MM-DD HH:MM:SS' or fractional 'YYYY-MM-DD HH:MM:SS.SSS' (UTC).
-  const t = Date.parse(updatedAt.replace(' ', 'T') + 'Z');
-  return Number.isFinite(t) ? t : 0;
-}
-
-// Only used for legacy mirror envelopes written before the `unsynced` flag
-// existed. Covers second-granularity rows + IPC latency for those one-off
-// migrations; the flag path needs no tolerance at all.
-const STALE_TOLERANCE_MS = 2000;
-
 // Millisecond precision (strftime %f) instead of CURRENT_TIMESTAMP (second
-// precision) so the SQLite-vs-mirror comparison is exact — no more "the row
-// looks up to 1s older than it actually is" ambiguity.
+// precision) so timestamps stay useful for diagnostics.
 const UPSERT_SQL = `INSERT INTO key_value_store (key, value, updated_at)
   VALUES (?, ?, strftime('%Y-%m-%d %H:%M:%f', 'now'))
   ON CONFLICT(key) DO UPDATE SET
@@ -133,7 +123,7 @@ async function writeToSqlite(db: any, name: string, value: string): Promise<void
 // Serialize writes per key so concurrent persist setItem calls always land in
 // call order in BOTH stores. Without this, two rapid updates could apply to
 // SQLite out of order, leaving the row stale while the mirror holds the newer
-// value — and the timestamp heuristic would then trust the stale row.
+// value — and since SQLite is authoritative, that stale row would be served.
 const writeQueues = new Map<string, Promise<void>>();
 
 function enqueueWrite(name: string, task: () => Promise<void>): Promise<void> {
@@ -155,42 +145,31 @@ export const SQLiteStorageAdapter = {
     try {
       if (dbService.isReady()) {
         const db = dbService.getAdapter();
-        const result = await db.queryOne<{ value: string; updated_at?: string | null }>(
-          'SELECT value, updated_at FROM key_value_store WHERE key = ?',
+        const result = await db.queryOne<{ value: string }>(
+          'SELECT value FROM key_value_store WHERE key = ?',
           [name]
         );
         if (result && result.value != null) {
-          const sqliteSavedAt = parseSqliteTimestamp(result.updated_at);
-
-          // An UNSYNCED mirror means a SQLite write for this value failed (or
-          // the DB wasn't ready) — the mirror is the only copy of that state,
-          // so it wins and heals SQLite. No timestamp guessing: a failed write
-          // can be only milliseconds older than the row.
+          // SQLite wins. The single exception is an UNSYNCED mirror: that flag
+          // means the SQLite write for this value genuinely failed (or the DB
+          // wasn't ready yet), so the mirror holds the only surviving copy and
+          // must be written back — that is recovery, not a second authority.
+          //
+          // A synced mirror never overrides SQLite regardless of its timestamp.
+          // The previous "mirror is newer, so heal SQLite" heuristic did, and a
+          // pre-restore mirror is always newer than a freshly restored row — so
+          // the restore was silently undone on the very next read.
           if (mirror && mirror.unsynced) {
-            console.warn('[SQLiteStorageAdapter]', `${name}: mirror is unsynced (SQLite write failed), healing SQLite`);
+            console.warn('[SQLiteStorageAdapter]', `${name}: mirror is unsynced (SQLite write failed), writing it back`);
             try {
               await writeToSqlite(db, name, mirror.value);
               localSet(name, mirror.value, false); // now in sync
-            } catch (healError: any) {
-              console.error('[SQLiteStorageAdapter]', `Failed to heal ${name}: ${healError.message}`);
+            } catch (recoverError: any) {
+              console.error('[SQLiteStorageAdapter]', `Failed to recover ${name} from mirror: ${recoverError.message}`);
             }
             return mirror.value;
           }
-
-          // Legacy envelopes (no unsynced flag, written by older versions) fall
-          // back to the timestamp heuristic: prefer SQLite unless the mirror is
-          // meaningfully newer.
-          if (!mirror || sqliteSavedAt >= mirror.savedAt - STALE_TOLERANCE_MS) {
-            return result.value;
-          }
-          console.warn('[SQLiteStorageAdapter]', `${name}: mirror is newer than SQLite, healing SQLite`);
-          try {
-            await writeToSqlite(db, name, mirror.value);
-            localSet(name, mirror.value, false);
-          } catch (healError: any) {
-            console.error('[SQLiteStorageAdapter]', `Failed to heal ${name}: ${healError.message}`);
-          }
-          return mirror.value;
+          return result.value;
         }
 
         // SQLite has NO row for this key but the mirror does — the DB was lost

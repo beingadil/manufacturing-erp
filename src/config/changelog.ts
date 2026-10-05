@@ -20,6 +20,36 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.43',
+    date: '2026-10-05',
+    title: 'Backup & Restore That Actually Restores',
+    sections: [
+      {
+        title: 'Fixed',
+        items: [
+          'Restoring a backup no longer wipes your data. Two separate bugs were silently undoing it.',
+          'A leftover database lock file left behind by a crash or force-quit was being replayed on top of the restored database, mixing deleted records back in and corrupting the file. Clean quits were unaffected, which is why this looked random.',
+          'A "newer cached copy wins" rule was overwriting the freshly restored rows with the browser cache on the very next read, so the restore appeared to do nothing.',
+        ],
+      },
+      {
+        title: 'Backup & Restore',
+        items: [
+          'Settings → System Maintenance now offers exactly two actions: "Backup to file" and "Restore from file".',
+          'Both use one portable backup file. Save it to a USB stick, a network folder or Documents, and restore that same file on any other computer.',
+          'Every restore validates the file before touching anything and keeps a safety copy of the data it replaced.',
+        ],
+      },
+      {
+        title: 'Data & Storage',
+        items: [
+          'Your database is now the single source of truth. The browser cache is kept only as a fallback for recovering a failed write — it can no longer overwrite what the app has saved.',
+          'Removed the local snapshot list and Google Drive backup. The automatic daily backup to Documents is unchanged.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.42',
     date: '2026-09-30',
     title: 'Premium Glass App Shell',
