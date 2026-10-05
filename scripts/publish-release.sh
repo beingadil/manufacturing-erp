@@ -19,13 +19,15 @@
 #   1. Checks the working tree is clean (uncommitted changes must be
 #      committed first; pass SKIP_CLEAN_CHECK=1 to override)
 #   2. Bumps version in package.json + src/config/version.ts
-#   3. Commits the version bump
-#   4. Builds the Vite frontend
-#   5. Runs electron-builder --win --publish always → uploads the
+#   3. Commits the version bump and tags v*.*.*
+#   4. Pushes the branch + tag to origin — BEFORE publishing, so the
+#      release is tagged at the commit that is actually being shipped
+#   5. Builds the Vite frontend
+#   6. Runs electron-builder --win --publish always → uploads the
 #      installer + latest.yml straight to GitHub Releases (installed
 #      users auto-update immediately)
-#   6. Pushes the branch + v*.*.* tag to origin
-#   7. Auto-generates the release notes body from the commit log since
+#   7. Verifies the published tag still points at HEAD, failing loudly if not
+#   8. Auto-generates the release notes body from the commit log since
 #      the previous tag and PATCHes it onto the GitHub release
 #
 #   The GitHub Actions workflow (.github/workflows/release.yml) is kept as a
@@ -126,6 +128,20 @@ git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
 echo "Tagged: v$NEW_VERSION"
 echo ""
 
+# ── Push branch + tag BEFORE publishing ────────────────────────────
+#    ORDERING MATTERS. electron-builder creates the release tag itself when it
+#    is missing, and it resolves "the commit being released" from
+#    origin/<branch>. If the branch is still only local at that moment, the
+#    release gets tagged at the PREVIOUS commit — so the published tag would
+#    not contain the code being shipped (this shipped v1.0.43 tagged at the
+#    v1.0.42 commit). Push first; electron-builder then attaches the release
+#    to the tag that is already there.
+
+echo "Pushing branch and tag to origin ($CURRENT_BRANCH)..."
+git push origin "$CURRENT_BRANCH"
+git push origin "v$NEW_VERSION"
+echo ""
+
 # ── Build frontend ─────────────────────────────────────────────────
 
 echo "📦  Building Vite frontend..."
@@ -142,19 +158,22 @@ npx electron-builder --win --publish always
 echo "✅  Installer built and published."
 echo ""
 
-# ── Push branch + tag ──────────────────────────────────────────────
+# ── Verify the published tag actually points at this commit ─────────
+#    Cheap insurance: if the tag ever drifts again, fail loudly instead of
+#    shipping a release whose source does not match its installer.
 
-echo "Pushing commit and tag to origin ($CURRENT_BRANCH)..."
-git push origin "$CURRENT_BRANCH"
-# electron-builder --publish always already created the v* tag on GitHub when
-# it published the release, so the tag push may be rejected as 'already exists'
-# — that is expected, not an error.
-PUSH_TAG_OUTPUT=$(git push origin "v$NEW_VERSION" 2>&1 || true)
-if echo "$PUSH_TAG_OUTPUT" | grep -q "already exists"; then
-  echo "ℹ️  Tag v$NEW_VERSION already exists on origin (created by electron-builder) — skipping."
-else
-  echo "$PUSH_TAG_OUTPUT"
+LOCAL_COMMIT=$(git rev-parse HEAD)
+REMOTE_TAG_COMMIT=$(git ls-remote origin "refs/tags/v$NEW_VERSION^{}" | awk '{print $1}')
+if [ "$REMOTE_TAG_COMMIT" != "$LOCAL_COMMIT" ]; then
+  echo ""
+  echo "❌ Release tag v$NEW_VERSION points at ${REMOTE_TAG_COMMIT:-<missing>}, expected $LOCAL_COMMIT."
+  echo "   The published source does not match the released build. Fix with:"
+  echo "   git tag -f -a v$NEW_VERSION -m 'Release v$NEW_VERSION' $LOCAL_COMMIT"
+  echo "   git push --force origin v$NEW_VERSION"
+  exit 1
 fi
+echo "✅ Release tag v$NEW_VERSION verified at $LOCAL_COMMIT"
+echo ""
 
 # ── Auto-generate release notes & update the GitHub release ─────────
 
