@@ -1,0 +1,104 @@
+name: Branch Protection
+
+# Applies/refreshes the branch protection rule on master that makes the CI gate
+# binding.
+#
+# WHY A WORKFLOW FOR THIS: branch protection is repository configuration, not
+# code, so it is invisible in the git history and silently drifts — someone
+# toggles a setting in the UI, or a repo transfer resets it. Re-applying it on a
+# schedule makes the desired state declarative and idempotent instead of a
+# one-time click somebody has to remember.
+#
+# TWO CONSTRAINTS THAT SHAPE THIS FILE:
+#
+# 1. NO "REQUIRE PULL REQUEST" RULE. publish-release.sh pushes the release
+#    branch and its tag DIRECTLY to master. Enabling required_pull_request_reviews
+#    would make every release fail to push. required_pull_request_reviews and
+#    restrictions are therefore both null on purpose.
+# 2. THE TOKEN. The branch-protection API needs Administration: write. The
+#    built-in GITHUB_TOKEN requests administration: write below, but GitHub has
+#    historically refused this for Actions tokens. The apply step detects the
+#    403 and tells you exactly what to do rather than failing obscurely.
+
+on:
+  workflow_dispatch:
+    inputs:
+      context:
+        description: 'Required status check (the job name in ci.yml)'
+        required: false
+        default: 'lint-and-test'
+      enforce_admins:
+        description: 'Apply the rule to admins too'
+        type: boolean
+        required: false
+        default: false
+  schedule:
+    # Weekly drift repair. 03:17 UTC avoids the top-of-hour Actions rush.
+    - cron: '17 3 * * 1'
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      administration: write
+      contents: read
+    steps:
+      # Show what check contexts actually exist on the newest commit, so if the
+      # required context is ever misspelled you can see the correct name here
+      # instead of guessing.
+      - name: Show recent status check contexts
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.repos.listCheckSuitesForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: 'master',
+            });
+            const names = [...new Set(data.flatMap(s => (s.latest_check_runs || []).map(r => r.name)))];
+            core.info('Check contexts seen on master: ' + (names.join(', ') || '(none yet)'));
+
+      - name: Apply branch protection to master
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const context_name = '${{ inputs.context }}' || 'lint-and-test';
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            try {
+              await github.rest.repos.updateBranchProtection({
+                owner,
+                repo,
+                branch: 'master',
+                required_status_checks: {
+                  strict: true,
+                  contexts: [context_name],
+                },
+                // Deliberately null — see constraint 1 in the header.
+                enforce_admins: ${{ inputs.enforce_admins || false }},
+                required_pull_request_reviews: null,
+                restrictions: null,
+                allow_force_pushes: false,
+                allow_deletions: false,
+              });
+              core.info(`✅ Branch protection applied to master (required check: ${context_name})`);
+            } catch (error) {
+              if (error.status === 403) {
+                core.setFailed(
+                  'GitHub refused the request (403): the GITHUB_TOKEN lacks ' +
+                  'Administration: write, which the branch-protection API requires.\n' +
+                  'Fix: create a fine-grained PAT with Administration -> Read and write, ' +
+                  'add it as a repo secret (Settings -> Secrets -> Actions), then re-run ' +
+                  'this workflow with that secret wired in.'
+                );
+                return;
+              }
+              core.setFailed(`Branch protection failed (${error.status}): ${error.message}`);
+              return;
+            }
+
+            const { data } = await github.rest.repos.getBranchProtection({
+              owner, repo, branch: 'master',
+            });
+            core.info('Verified: required checks = ' + JSON.stringify(data.required_status_checks));
