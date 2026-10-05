@@ -57,6 +57,13 @@ jobs:
     # Release and upload the installer assets via electron-builder.
     permissions:
       contents: write
+    env:
+      # Pin the Electron runtime + electron-builder binary caches to paths inside
+      # the workspace. The defaults live under the runner's user profile, whose
+      # exact location is not guaranteed; setting these explicitly means the
+      # cache step below and the build always agree on one directory.
+      ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
+      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
 
     steps:
       - name: Checkout code
@@ -75,6 +82,39 @@ jobs:
         uses: pnpm/action-setup@v4
         with:
           version: 10
+
+      # Caches below key off content hashes, so they invalidate automatically
+      # when the lockfile or the Electron version changes — a stale cache can
+      # never be reused for a different dependency set.
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        # Ask pnpm where its store actually lives rather than hardcoding a
+        # Windows path that differs between runner images. shell: bash is
+        # explicit because this job runs on windows-latest, where the default
+        # run: shell is PowerShell and $(...) / >> would mean something else.
+        shell: bash
+        run: echo "dir=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.dir }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          # Relative paths resolve against GITHUB_WORKSPACE, matching the
+          # ELECTRON_CACHE / ELECTRON_BUILDER_CACHE env vars above.
+          path: |
+            .cache/electron
+            .cache/electron-builder
+          # Keyed on package.json because that is what pins the Electron
+          # version electron-builder will download.
+          key: ${{ runner.os }}-electron-${{ hashFiles('package.json') }}
+          restore-keys: ${{ runner.os }}-electron-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
