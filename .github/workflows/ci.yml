@@ -1,0 +1,71 @@
+name: CI
+
+# Gate for pull requests so a broken build never reaches a release tag.
+#
+# This workflow is completely INDEPENDENT of release.yml: it does not run
+# during a tag build, so it adds nothing to release time. It costs time on the
+# pull request instead, which is where you want to spend it — you find out in
+# ~2 minutes instead of after the tag is pushed and CI has spent ~10 minutes
+# building an installer.
+#
+# Release.yml already runs `npm run lint` as one of its steps, so this does
+# not replace that. It moves the failure earlier and makes it cheap.
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+# Superseded runs on the same branch/PR are cancelled — with rapid pushes you
+# would otherwise queue several identical runs and waste runner minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    # Linux is deliberate and sufficient here. The expensive parts of a release
+    # — rebuilding better-sqlite3 for the Electron ABI and packaging the NSIS
+    # installer — need Windows and belong in release.yml. No test imports
+    # better-sqlite3 directly; the storage adapter is exercised through mocks.
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      # Same store caching as release.yml, keyed on the lockfile so it
+      # invalidates automatically when dependencies change. Ubuntu is cheap
+      # enough to skip caching entirely, but sharing the convention means one
+      # mental model for both workflows.
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        shell: bash
+        run: echo "dir=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.dir }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
