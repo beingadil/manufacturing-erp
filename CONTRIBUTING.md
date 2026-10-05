@@ -45,7 +45,7 @@ the merge.
 npx tsgo -p tsconfig.check.json   # TypeScript type check
 npx biome lint                    # lint
 pnpm test                         # Vitest suite
-pnpm lint                         # full pipeline, including dead-code + README link check
+pnpm lint                         # full pipeline, incl. dead-code + README checks
 npx vite build                    # production build
 ```
 

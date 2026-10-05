@@ -11,6 +11,7 @@
 #   5. vite build smoke test
 #   6. ts-prune dead code detection
 #   7. README link check (catches paths that 404 on the repo page)
+#   8. README block-width check (stops code blocks being clipped when rendered)
 
 set -euo pipefail
 
@@ -59,5 +60,6 @@ else
 fi
 step "Dead Code (ts-prune)"     bash "$SCRIPT_DIR/deadcode.sh"
 step "README Links"             node "$SCRIPT_DIR/check-readme-links.cjs"
+step "README Block Width"       node "$SCRIPT_DIR/check-readme-blocks.cjs"
 
 exit $EXIT_CODE
