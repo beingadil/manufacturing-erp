@@ -29,7 +29,7 @@ git commit -m "initial commit: Manufacturing ERP v1.0.0"
 git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
 
 # Push
-git push -u origin main
+git push -u origin master
 ```
 
 ### 3. Configure the Publish Target
@@ -92,13 +92,14 @@ The script will:
 
 1. Bump the version in `package.json` and `src/config/version.ts`
 2. Commit the change
-3. Build the frontend and publish the installer + `latest.yml` straight to **GitHub Releases** (`electron-builder --publish always`)
-4. Tag the commit with `v1.x.x` and push the branch + tag
-5. Fill in the release notes from the commit log since the previous tag
+3. Tag the commit with `v1.x.x` and push the branch + tag to origin
+4. Stop — pushing the tag is what starts the release
+
+The **GitHub Actions workflow builds and publishes** the installer + `latest.yml` to **GitHub Releases**. The script itself does not build and does not upload. Pushing the `v*` tag fires `.github/workflows/release.yml`, which is why the tag is pushed before anything is uploaded: the release then attaches to the exact commit being shipped.
 
 Users will see the update automatically within minutes of the release being published.
 
-The build and publish happen **locally on your machine** — the GitHub Actions workflow is a manual-only fallback for building on another machine. It does **not** auto-trigger on tag pushes (that previously raced the local publish and produced duplicate/orphaned releases), and it skips automatically if a release for the current version already exists. To use it: **Actions → Build & Release → Run workflow**.
+The workflow's guard job skips the build whenever a release for the current `package.json` version already exists, so a re-dispatch or an accidental extra tag can never clobber or duplicate a release. You can also trigger it by hand from another machine: **Actions → Build & Release → Run workflow**.
 
 ### Option B: Manual
 
@@ -111,16 +112,21 @@ npm version patch --no-git-tag-version
 # 2. Update version.ts with build number and release date
 # (edit src/config/version.ts manually or run the script without pushing)
 
-# 3. Build and publish
-npx vite build
-npx electron-builder --win --publish always
-
-# 4. Commit and tag
+# 3. Commit and tag, then push -- this triggers the CI build
 git add package.json src/config/version.ts
 git commit -m "chore: bump version to v1.x.x"
 git tag v1.x.x
-git push origin main --tags
+git push origin master --tags
 ```
+
+To build a release entirely on your own machine instead (no CI), publish directly:
+
+```bash
+npx vite build
+npx electron-builder --win --publish always
+```
+
+Only pick one. Doing both for the same version produces duplicate releases and breaks auto-update.
 
 ---
 
@@ -152,7 +158,8 @@ Users can also check manually from **Settings → About & Updates → Check for 
 | `fatal: not a git repository` | Git not initialized | Run `git init` |
 | `fatal: remote origin already exists` | Remote already set | Run `git remote set-url origin <url>` |
 | `GH_TOKEN not set` | Token not configured | Set `export GH_TOKEN="ghp_..."` |
-| CI release not auto-triggering | By design — tag pushes never trigger CI | The local script is the primary path; run the workflow manually from **Actions** for a CI build |
+| CI release not auto-triggering | Tag did not match `v*`, or was already pushed | Tags must look like `v1.0.45`; check `git ls-remote --tags origin` |
+| Duplicate release / auto-update broken | Both CI and a local publish uploaded the same version | Pick one path — see Option A / Option B |
 | App shows "Update Error" | No internet or wrong repo | Check network; verify publish config |
 
 ---

@@ -1,16 +1,26 @@
 name: Build & Release
 
-# Manual-only trigger. Tag pushes deliberately do NOT auto-trigger this
-# workflow: the primary release path is scripts/publish-release.sh, which
-# builds locally and publishes the installer + latest.yml straight to GitHub
-# Releases via `electron-builder --publish always`, and only THEN pushes the
-# v* tag. A `push: tags` trigger made CI fire on that same tag and build +
-# publish a SECOND installer, racing the local upload — duplicate releases,
-# orphaned drafts, broken auto-update. Run this workflow manually (Actions →
-# Build & Release → Run workflow) when you want a CI-built release from
-# another machine. The guard job below additionally skips whenever a release
-# for the current package.json version already exists, so it can never clobber
-# or duplicate one.
+# Release path: CI BUILDS AND PUBLISHES on the tag push.
+# scripts/publish-release.sh bumps the version, commits, tags, and pushes the
+# branch + tag to origin — and then stops. It does not build and does not
+# upload; this workflow does both. Pushing the tag is what starts a release.
+#
+# The tag must reach origin BEFORE anything is uploaded, so the release is
+# attached to the exact commit being shipped rather than whatever the branch
+# tip happens to be a minute later. That ordering is why the script pushes the
+# tag first and lets this workflow take it from there.
+#
+# EARLIER DUPLICATE-RELEASE RACE (why the guard job below exists): when the
+# script used to build locally with `electron-builder --publish always` AND
+# this file fired on the same tag, both uploaded — duplicate releases and
+# orphaned drafts, which broke auto-update. Local publishing was removed, so
+# there is now exactly one uploader. The guard job is kept as belt-and-braces:
+# it skips the build whenever a release for the current package.json version
+# already exists, so a re-dispatch or an accidental extra tag can never clobber
+# or duplicate a release.
+#
+# workflow_dispatch stays available for re-running a release by hand from
+# another machine.
 on:
   push:
     tags:
