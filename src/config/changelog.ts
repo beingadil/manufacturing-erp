@@ -20,6 +20,38 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.44',
+    date: '2026-10-06',
+    title: 'Products Made From Your Own Parts',
+    sections: [
+      {
+        title: 'Assembled Products',
+        items: [
+          'A raw material can now be a part — something you build into a finished product — instead of only something you sell on its own.',
+          'A product is either one material or several. Pick "Several" and choose the parts it is made from; each part keeps its own quantity per finished piece.',
+          'Selling the product now takes every part off stock and records the cost, so material usage and stock stay true without a separate bill of materials module.',
+          'Editing or deleting an invoice puts the parts back exactly as they were, and cleans up the voucher and journal entries with it.',
+        ],
+      },
+      {
+        title: 'Before You Save',
+        items: [
+          'The sale form now lists exactly which parts the invoice will use, how many of each it needs and what each has left — no guessing from the stock column.',
+          'If a part is short, the sale is refused and tells you which one and by how many, instead of failing part-way through.',
+          'New: if the sale would go through but leave a part at or under your low-stock line, the form warns you up front, names the part and suggests raising a purchase order first.',
+        ],
+      },
+      {
+        title: 'Fixed',
+        items: [
+          'A product made from one material no longer offers parts that belong inside other products.',
+          'Product and sale forms are checked before they save, so a missing part or a duplicated one is reported instead of quietly written to the database.',
+          'Database upgrades run as versioned migrations, so an existing database is updated in place on open rather than depending on fresh table creation.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.43',
     date: '2026-10-05',
     title: 'Backup & Restore That Actually Restores',
