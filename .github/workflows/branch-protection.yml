@@ -15,10 +15,16 @@ name: Branch Protection
 #    branch and its tag DIRECTLY to master. Enabling required_pull_request_reviews
 #    would make every release fail to push. required_pull_request_reviews and
 #    restrictions are therefore both null on purpose.
-# 2. THE TOKEN. The branch-protection API needs Administration: write. The
-#    built-in GITHUB_TOKEN requests administration: write below, but GitHub has
-#    historically refused this for Actions tokens. The apply step detects the
-#    403 and tells you exactly what to do rather than failing obscurely.
+# 2. THE TOKEN. The branch-protection API needs "Administration: Read and write".
+#    GITHUB_TOKEN can never have that, and `permissions:` below cannot grant it:
+#    administration is a repository-ROLE permission, not a token scope, so
+#    requesting it here makes the whole workflow file invalid and GitHub refuses
+#    to load it at all (the job never starts, and the workflow shows up under
+#    its file path instead of its name). To actually apply the rule, store a
+#    fine-grained PAT (Administration -> Read and write) as the repo secret
+#    BRANCH_PROTECTION_TOKEN; the apply step passes it to github-script.
+#    Without that secret it falls back to GITHUB_TOKEN, warns, and exits 0 --
+#    a weekly cron that cannot succeed should not go red every Monday.
 
 on:
   workflow_dispatch:
@@ -40,7 +46,9 @@ jobs:
   apply:
     runs-on: ubuntu-latest
     permissions:
-      administration: write
+      # Valid token scopes ONLY. "administration" is NOT one of them -- it is a
+      # repository-role permission. Listing it here invalidates the entire
+      # workflow file and GitHub silently refuses to run it. See header note 2.
       contents: read
     steps:
       # Show what check contexts actually exist on the newest commit, so if the
@@ -61,10 +69,59 @@ jobs:
       - name: Apply branch protection to master
         uses: actions/github-script@v7
         with:
+          # Without this line the PAT secret is never used: github-script always
+          # authenticated with the default GITHUB_TOKEN, so the "add a secret"
+          # advice in the 403 handler changed nothing and the rule could never be
+          # applied. Falls back to GITHUB_TOKEN when the secret is absent.
+          github-token: ${{ secrets.BRANCH_PROTECTION_TOKEN || github.token }}
           script: |
             const context_name = '${{ inputs.context }}' || 'lint-and-test';
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            const has_pat = Boolean('${{ secrets.BRANCH_PROTECTION_TOKEN }}');
+
+            if (!has_pat) {
+              core.warning(
+                'BRANCH_PROTECTION_TOKEN is not set, so branch protection was NOT applied. ' +
+                'GITHUB_TOKEN can never hold Administration: write, and it cannot be granted ' +
+                'via `permissions:` (administration is a repository-role permission, not a ' +
+                'token scope). To turn this on: create a fine-grained PAT with ' +
+                'Administration -> Read and write on this repository, add it as the repo ' +
+                'secret BRANCH_PROTECTION_TOKEN, then re-run this workflow. Exiting 0 so the ' +
+                'weekly cron stays green while it is deliberately unconfigured.'
+              );
+              return;
+            }
+
+            // Read the current rule first so a healthy repo is a no-op rather than
+            // a blind overwrite on every Monday.
+            let current = null;
+            try {
+              const { data } = await github.rest.repos.getBranchProtection({
+                owner, repo, branch: 'master',
+              });
+              current = data;
+            } catch (error) {
+              if (error.status !== 404) {
+                core.setFailed(`Could not read branch protection (${error.status}): ${error.message}`);
+                return;
+              }
+            }
+
+            const correct =
+              current &&
+              current.required_status_checks &&
+              current.required_status_checks.strict === true &&
+              (current.required_status_checks.contexts || []).includes(context_name) &&
+              Boolean(current.allow_force_pushes && current.allow_force_pushes.enabled) === false &&
+              Boolean(current.allow_deletions && current.allow_deletions.enabled) === false &&
+              !current.required_pull_request_reviews &&
+              !current.restrictions;
+
+            if (correct) {
+              core.info(`Branch protection already correct on master (required check: ${context_name}) - nothing to do.`);
+              return;
+            }
 
             try {
               await github.rest.repos.updateBranchProtection({
@@ -82,15 +139,13 @@ jobs:
                 allow_force_pushes: false,
                 allow_deletions: false,
               });
-              core.info(`✅ Branch protection applied to master (required check: ${context_name})`);
+              core.info(`Branch protection applied to master (required check: ${context_name})`);
             } catch (error) {
               if (error.status === 403) {
                 core.setFailed(
-                  'GitHub refused the request (403): the GITHUB_TOKEN lacks ' +
-                  'Administration: write, which the branch-protection API requires.\n' +
-                  'Fix: create a fine-grained PAT with Administration -> Read and write, ' +
-                  'add it as a repo secret (Settings -> Secrets -> Actions), then re-run ' +
-                  'this workflow with that secret wired in.'
+                  'GitHub refused the request (403). BRANCH_PROTECTION_TOKEN is set but was not ' +
+                  'accepted for branch protection. Confirm it is a fine-grained PAT with ' +
+                  'Administration -> Read and write on this repository, and that it has not expired.'
                 );
                 return;
               }
