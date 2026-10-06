@@ -5,7 +5,7 @@ allowBuilds:
   core-js: true
 catalog:
   "@react-three/drei": 9.122.0
-  "@react-three/fiber": 8.18.0
+  "@react-three/fiber": 9.8.1
   three: 0.180.0
 lockfileIncludeTarballUrl: false
 minimumReleaseAge: 1440
