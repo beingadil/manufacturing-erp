@@ -18,6 +18,9 @@ export interface MaterialCategory {
   status: 'Active' | 'Inactive';
 }
 
+/** How a material is used: sold on its own, or as a part of another product. */
+export type MaterialUsageType = 'sellable' | 'component';
+
 export interface RawMaterial {
   id: string;
   code?: string;
@@ -39,6 +42,23 @@ export interface RawMaterial {
   fixedStageId?: string;
   /** For custom_stages materials: the selected stages (stored in chain order). */
   allowedStageIds?: string[];
+  /**
+   * How this material is used.
+   *  - 'sellable'  — becomes a product in its own right (the chain makes it
+   *    saleable and the Product form links it 1:1).
+   *  - 'component' — a part consumed by a product made from several materials
+   *    (a steel dhakkan on a steel jug, a handle). It is never sold directly.
+   * Undefined is treated as 'sellable', so every pre-existing material keeps
+   * behaving exactly as it did before this field existed.
+   */
+  usageType?: MaterialUsageType;
+}
+
+/** One material a product is built from, and how many of ONE product it takes. */
+export interface ProductComponent {
+  materialId: string;
+  quantity: number;
+  sortOrder?: number;
 }
 
 export interface Batch {
@@ -260,7 +280,21 @@ export interface Product {
   status?: string;
   sellingPrice: number;
   description?: string;
+  /**
+   * How the product is fulfilled.
+   *  - 'simple'    (default) — made from ONE material, so it is sold out of
+   *    that material's finished stock and nothing extra is consumed.
+   *  - 'assembled' — made from SEVERAL materials (a jug = circle + no.4 +
+   *    handle). Each sale deducts every component in `components`; the product
+   *    itself holds no stock of its own.
+   */
+  usageType?: ProductUsageType;
+  /** Only meaningful for 'assembled'. How many of each material ONE unit takes. */
+  components?: ProductComponent[];
 }
+
+/** Whether a product is sold from one material's own stock, or from several. */
+export type ProductUsageType = 'simple' | 'assembled';
 
 export interface Sale {
   id: string;

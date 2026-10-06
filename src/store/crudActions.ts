@@ -1,9 +1,11 @@
 import { v4 as uuidv4 } from 'uuid';
 import { StoreApi } from 'zustand';
 import { getSystemAccountBySubtype, getSystemCOGSAccount, getSystemInventoryAccount } from '../lib/accounting/accountClassification';
+import { AppError } from '../lib/errorHandler';
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
+import { consumeComponentStock, isAssembled, perUnitRequirement, restoreComponentStock, roundQty } from '../lib/business/ProductAssemblyService';
 import { UnitConversionService } from '../lib/business/UnitConversionService';
-import type { Batch, ProcessingReceipt, ProcessingSend, Product, Sale } from '../types/erp';
+import type { Batch, InventoryMovement, ProcessingReceipt, ProcessingSend, Product, Sale } from '../types/erp';
 import { ERPState } from './useERPStore';
 
 /**
@@ -200,6 +202,30 @@ export const createCRUDActions = (
       // Remove inventory movement
       const updatedInventoryMovements = state.inventoryMovements.filter(im => im.referenceNo !== sale.invoiceNo);
 
+      // A product made from several materials was FULFILLED at the point of
+      // sale: its parts came off RAW stock, and the product itself holds no
+      // stock to rebuild. Deleting the sale must therefore hand those raw
+      // pieces back, or the parts stay consumed forever. (A single-material
+      // product keeps the finished-pcs replay below, unchanged.)
+      if (product && isAssembled(product)) {
+        let restored = state.batches;
+        for (const [materialId, perUnitQty] of perUnitRequirement(product)) {
+          restored = restoreComponentStock(restored, materialId, roundQty(perUnitQty * sale.pcsSold));
+        }
+        return {
+          ...state,
+          sales: state.sales.filter(s => s.id !== id),
+          materials: InventoryCalculationService.syncMaterialCounters(state.materials, restored),
+          batches: restored,
+          inventoryMovements: updatedInventoryMovements,
+          vouchers: state.vouchers.filter(v => !(v.sourceId === id && v.sourceModule === 'Sales')),
+          journalEntries: state.journalEntries.filter(je => {
+            const v = state.vouchers.find(x => x.id === je.voucherId);
+            return !(v && v.sourceId === id && v.sourceModule === 'Sales');
+          }),
+        };
+      }
+
       // Restore the finished pcs this sale consumed (FIFO) back onto batches
       // (stage-aware replay), then re-derive the material counters from the
       // rebuilt trail so they can never drift.
@@ -245,11 +271,144 @@ export const createCRUDActions = (
       const oldSale = state.sales.find(s => s.id === id);
       if (!oldSale) return state;
 
-      const newTotalAmount = data.pcsSold * data.pricePerPiece;
+      // `data` is Partial<Sale>: an edit that only touches the date must not
+      // silently rewrite the quantity and price to NaN.
+      const newPcsSold = data.pcsSold ?? oldSale.pcsSold;
+      const newPricePerPiece = data.pricePerPiece ?? oldSale.pricePerPiece;
+      const newDate = data.date ?? oldSale.date;
+      const newTotalAmount = newPcsSold * newPricePerPiece;
 
-      const updatedSales = state.sales.map(s => 
-        s.id === id ? { ...s, ...data, totalAmount: newTotalAmount } : s
+      const updatedSales = state.sales.map(s =>
+        s.id === id ? { ...s, ...data, pcsSold: newPcsSold, pricePerPiece: newPricePerPiece, totalAmount: newTotalAmount } : s
       );
+
+      // ── Assembled product: re-derive the component consumption ──────────
+      // An assembled sale consumed raw parts at the moment it was saved. An
+      // edit therefore has to give the OLD consumption back and take the NEW
+      // one, otherwise changing 5 → 8 leaves stock three sets short and
+      // deleting the components later returns the wrong amount. Everything is
+      // computed on private copies because databaseMiddleware runs the `set`
+      // updater twice (validation, then commit).
+      const oldProduct = state.products.find(p => p.id === oldSale.productId);
+      const newProduct = state.products.find(p => p.id === data.productId) ?? oldProduct;
+      if ((oldProduct && isAssembled(oldProduct)) || (newProduct && isAssembled(newProduct))) {
+        let nextBatches = state.batches.map(b => ({ ...b }));
+        const newMovements: InventoryMovement[] = [];
+
+        // Whichever SIDE is a single-material product still goes through the
+        // finished-pcs replay, or swapping a simple sale onto an assembled
+        // product would leave the old product's finished stock permanently
+        // deducted by this sale.
+        for (const side of [oldProduct, newProduct]) {
+          if (!side || isAssembled(side) || !side.materialId) continue;
+          nextBatches = InventoryCalculationService.recomputeFinishedPcsForMaterial(
+            side.materialId,
+            nextBatches,
+            state.processingReceipts || [],
+            state.processingSends || [],
+            updatedSales,
+            state.products || [],
+            undefined,
+            state.processingStages || [],
+          );
+        }
+
+        // Return the old product's parts first, then draw the new plan.
+        if (oldProduct && isAssembled(oldProduct)) {
+          for (const [materialId, perUnitQty] of perUnitRequirement(oldProduct)) {
+            nextBatches = restoreComponentStock(nextBatches, materialId, roundQty(perUnitQty * oldSale.pcsSold));
+          }
+        }
+        const invoiceNo = updatedSales.find(s => s.id === id)?.invoiceNo ?? oldSale.invoiceNo;
+        let partsCost = 0;
+        if (newProduct && isAssembled(newProduct)) {
+          for (const [materialId, perUnitQty] of perUnitRequirement(newProduct)) {
+            const required = roundQty(perUnitQty * newPcsSold);
+            const result = consumeComponentStock(nextBatches, materialId, required);
+            if (result.shortage > 1e-9) {
+              throw new AppError(
+                `Not enough stock to record this edit: ` +
+                `${state.materials.find(m => m.id === materialId)?.name ?? materialId} ` +
+                `is short ${result.shortage}.`,
+                'INSUFFICIENT_STOCK',
+              );
+            }
+            nextBatches = result.batches;
+            partsCost = roundQty(
+              partsCost + required * InventoryCalculationService.getWeightedAverageCostPerPiece(materialId, nextBatches),
+            );
+            newMovements.push({
+              id: uuidv4(),
+              materialId,
+              date: newDate,
+              referenceNo: invoiceNo,
+              module: 'Sale',
+              transactionType: 'OUT',
+              quantity: required,
+              runningBalance: InventoryCalculationService.calculateRawMaterialStock(materialId, nextBatches),
+              remarks: `Used in ${newProduct.name} \u00d7 ${newPcsSold}`,
+            });
+          }
+        }
+
+        // One movement per component, replacing whatever the old edit wrote.
+        const updatedInventoryMovements = [
+          ...newMovements,
+          ...(state.inventoryMovements || []).filter(im => im.referenceNo !== invoiceNo),
+        ];
+
+        const voucher = state.vouchers.find(v => v.sourceId === id && v.sourceModule === 'Sales');
+        let updatedVouchers = state.vouchers;
+        let updatedJournalEntries = state.journalEntries;
+        if (voucher) {
+          // Same four-leg shape addSale posts for an assembled sale: revenue
+          // against receivables, and the purchase value of the parts against
+          // Raw Material Inventory (never Finished Goods — assembled goods are
+          // never booked there).
+          // `data` is Partial<Sale>, so a metadata-only edit (price/date fix)
+          // carries no customerId. Compare truthily, not with ===, or the find
+          // below matches every account whose linkedEntityId is also undefined
+          // — the stock and COGS accounts — and posts the revenue leg to them.
+          const customerId = data.customerId ?? oldSale.customerId;
+          const receivableAccount = state.accounts.find(a => a.linkedEntityId && a.linkedEntityId === customerId)
+            || getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Accounts Receivable');
+          const salesAccount = getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Sales');
+          const cogsAccount = getSystemCOGSAccount(state.accounts, state.accountSubtypes);
+          const rawInventoryAccount = getSystemInventoryAccount(state.accounts, state.accountSubtypes, 'Raw Material Inventory');
+          const hasPartsLeg = partsCost > 0 && !!cogsAccount && !!rawInventoryAccount;
+          const voucherTotal = newTotalAmount + (hasPartsLeg ? partsCost : 0);
+
+          updatedVouchers = state.vouchers.map(v =>
+            v.id === voucher.id ? { ...v, totalDebit: voucherTotal, totalCredit: voucherTotal, date: newDate } : v
+          );
+
+          const rebuiltEntries: { accountId: string; debit: number; credit: number }[] = [];
+          if (receivableAccount) rebuiltEntries.push({ accountId: receivableAccount.id, debit: newTotalAmount, credit: 0 });
+          if (salesAccount) rebuiltEntries.push({ accountId: salesAccount.id, debit: 0, credit: newTotalAmount });
+          if (hasPartsLeg) {
+            rebuiltEntries.push({ accountId: cogsAccount!.id, debit: partsCost, credit: 0 });
+            rebuiltEntries.push({ accountId: rawInventoryAccount!.id, debit: 0, credit: partsCost });
+          }
+          const existingEntries = state.journalEntries.filter(je => je.voucherId === voucher.id);
+          updatedJournalEntries = [
+            ...state.journalEntries.filter(je => je.voucherId !== voucher.id),
+            ...rebuiltEntries.map(ne => {
+              const match = existingEntries.find(e => e.accountId === ne.accountId);
+              return { id: match?.id || uuidv4(), voucherId: voucher.id, ...ne };
+            }),
+          ];
+        }
+
+        return {
+          ...state,
+          sales: updatedSales,
+          batches: nextBatches,
+          materials: InventoryCalculationService.syncMaterialCounters(state.materials, nextBatches),
+          inventoryMovements: updatedInventoryMovements,
+          vouchers: updatedVouchers,
+          journalEntries: updatedJournalEntries,
+        };
+      }
 
       // NOTE: the customer's balanceReceivable is derived from the linked
       // account's COMPLETE ledger via the afterMutation callback — never
@@ -295,11 +454,12 @@ export const createCRUDActions = (
           || state.products.find(p => p.id === oldSale.productId);
         const linkedMaterialId = product?.materialId;
         const fifo = linkedMaterialId
-          ? InventoryCalculationService.getFIFOCOGSForSale(linkedMaterialId, data.pcsSold, updatedBatches || [])
+          ? InventoryCalculationService.getFIFOCOGSForSale(linkedMaterialId, newPcsSold, updatedBatches || [])
           : { cogs: 0 };
         const cogsAmount = fifo.cogs;
 
-        const receivableAccount = state.accounts.find(a => a.linkedEntityId === data.customerId)
+        const editCustomerId = data.customerId ?? oldSale.customerId;
+        const receivableAccount = state.accounts.find(a => a.linkedEntityId && a.linkedEntityId === editCustomerId)
           || getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Accounts Receivable');
         const salesAccount = getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Sales');
         const cogsAccount = getSystemCOGSAccount(state.accounts, state.accountSubtypes);

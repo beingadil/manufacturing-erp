@@ -9,10 +9,11 @@ import { SearchableSelect } from "../components/SearchableSelect";
 import { KpiCard } from '../components/ui/KpiCard';
 import { PageModal } from "../components/ui/PageModal";
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
+import { findMaterialCodeConflict } from '../lib/business/ProductAssemblyService';
 import { cn, formatCurrency, formatNumber } from "../lib/utils";
 import { MaterialService } from '../services/MaterialService';
 import { useERPStore } from "../store/useERPStore";
-import type { ProcessingPath } from '../types/erp';
+import type { MaterialUsageType, ProcessingPath } from '../types/erp';
 
 export function RawMaterials() {
   const { materials, categories, purchases, processingSends, processingReceipts, batches } = useERPStore();
@@ -90,6 +91,12 @@ export function RawMaterials() {
   };
 
   const [name, setName] = useState("");
+  // The "No." a person reads out with the name — "Circle 12½ Inch, No. 4 No".
+  // Free text: it is a designation the shop already uses, not a system code.
+  const [code, setCode] = useState("");
+  // Sellable on its own, or a part consumed by a product made of several
+  // materials (a steel dhakkan on a steel jug, a handle).
+  const [usageType, setUsageType] = useState<MaterialUsageType>('sellable');
   const [categoryId, setCategoryId] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<'Active' | 'Inactive'>("Active");
@@ -112,6 +119,9 @@ export function RawMaterials() {
   const openEditModal = (material: any) => {
     setEditingMaterial(material);
     setName(material.name);
+    setCode(material.code || '');
+    // Older materials have no usageType; they behave exactly as before.
+    setUsageType(material.usageType === 'component' ? 'component' : 'sellable');
     setCategoryId(material.categoryId);
     setDescription(material.description || '');
     setStatus(material.status === 'Inactive' ? 'Inactive' : 'Active');
@@ -125,6 +135,8 @@ export function RawMaterials() {
     setIsModalOpen(false);
     setEditingMaterial(null);
     setName("");
+    setCode("");
+    setUsageType('sellable');
     setCategoryId("");
     setDescription("");
     setStatus("Active");
@@ -139,9 +151,17 @@ export function RawMaterials() {
     if (processingPath === 'single_stage' && !fixedStageId) return;
     if (processingPath === 'custom_stages' && allowedStageIds.length === 0) return;
 
+    const clash = findMaterialCodeConflict(materials, code);
+    if (clash) {
+      toast.error(`No. "${code.trim()}" is already used by "${clash}". Pick a different one.`);
+      return;
+    }
+
     try {
       MaterialService.create({
         name,
+        code: code.trim() || undefined,
+        usageType,
         categoryId,
         description,
         status,
@@ -162,9 +182,17 @@ export function RawMaterials() {
     if (processingPath === 'single_stage' && !fixedStageId) return;
     if (processingPath === 'custom_stages' && allowedStageIds.length === 0) return;
 
+    const clash = findMaterialCodeConflict(materials, code, editingMaterial.id);
+    if (clash) {
+      toast.error(`No. "${code.trim()}" is already used by "${clash}". Pick a different one.`);
+      return;
+    }
+
     try {
       MaterialService.update(editingMaterial.id, {
         name,
+        code: code.trim() || undefined,
+        usageType,
         categoryId,
         description,
         status,
@@ -221,6 +249,30 @@ export function RawMaterials() {
           </div>
         </Link>
       )
+    },
+    {
+      key: "code",
+      label: "No.",
+      sortable: true,
+      render: (item) => (
+        <span className="font-mono text-xs text-muted-foreground">{item.code || '—'}</span>
+      ),
+    },
+    {
+      key: "usageType",
+      label: "Used as",
+      sortable: true,
+      render: (item) => {
+        const isComponent = item.usageType === 'component';
+        return (
+          <span className={cn(
+            'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+            isComponent ? 'bg-violet-500/10 text-violet-600' : 'bg-emerald-500/10 text-emerald-600',
+          )}>
+            {isComponent ? 'Part of a product' : 'Product on its own'}
+          </span>
+        );
+      },
     },
     { 
       key: "categoryName", 
@@ -359,8 +411,8 @@ export function RawMaterials() {
       <DataTable
         data={enrichedMaterials}
         columns={columns}
-        searchKeys={["name", "categoryName", "description"]}
-        searchPlaceholder="Search materials by name or category..."
+        searchKeys={["name", "code", "categoryName", "description"]}
+        searchPlaceholder="Search materials by name, No. or category..."
         persistKey="materials-table"
         defaultSortKey="name"
       />
@@ -369,8 +421,36 @@ export function RawMaterials() {
         <form onSubmit={editingMaterial ? handleEdit : handleCreate} className="space-y-4">
           <div className="space-y-2">
             <label htmlFor="material-name" className="text-sm font-semibold text-foreground">Material Name *</label>
-            <input id="material-name" name="material-name" type="text" required value={name} onChange={e => setName(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors" placeholder="e.g. Circle 6½ Inch" />
+            <input id="material-name" name="material-name" type="text" required value={name} onChange={e => setName(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors" placeholder="e.g. Circle 12½ Inch" />
           </div>
+          <div className="space-y-2">
+            <label htmlFor="material-code" className="text-sm font-semibold text-foreground">No.</label>
+            <input id="material-code" name="material-code" type="text" value={code} onChange={e => setCode(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors" placeholder="e.g. 4 No" />
+            <p className="text-xs text-muted-foreground">Shown next to the name everywhere, and searchable.</p>
+          </div>
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-semibold text-foreground">This material is used as…</legend>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {([
+                { v: 'sellable', t: 'A product on its own', d: 'Processing makes it saleable; the Products form links it directly.' },
+                { v: 'component', t: 'A part of another product', d: 'A steel dhakkan on a steel jug, a handle. Never sold on its own.' },
+              ] as const).map(o => (
+                <button
+                  key={o.v}
+                  type="button"
+                  onClick={() => setUsageType(o.v)}
+                  aria-pressed={usageType === o.v}
+                  className={`rounded-xl border px-4 py-3 text-left transition-colors ${usageType === o.v ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}
+                >
+                  <span className={`block text-sm font-medium ${usageType === o.v ? 'text-primary' : 'text-foreground'}`}>{o.t}</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">{o.d}</span>
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Only materials marked as a part can be picked in the Products form.
+            </p>
+          </fieldset>
           <div className="space-y-2">
             <label htmlFor="material-category" className="text-sm font-semibold text-foreground">Category *</label>
             <SearchableSelect

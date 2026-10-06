@@ -11,13 +11,20 @@ import { KpiCard } from "../components/ui/KpiCard";
 import { PageModal } from "../components/ui/PageModal";
 import { VoucherHistoryTab } from "../components/VoucherHistoryTab";
 import { generateInvoicePDF } from "../lib/documentGenerators";
+import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
+import {
+  breakdownForSale,
+  isAssembled,
+  runningLowAfterSale,
+  shortfallMessage,
+} from '../lib/business/ProductAssemblyService';
 import { formatCurrency } from "../lib/utils";
 import { ErrorManagement } from '../lib/validation';
 import { SalesService } from '../services/SalesService';
 import { useERPStore } from "../store/useERPStore";
 
 export function Sales() {
-  const { sales, products, materials, customers, vouchers } = useERPStore();
+  const { sales, products, materials, customers, vouchers, batches, inventoryThreshold } = useERPStore();
   const [searchParams, setSearchParams] = useSearchParams();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editSaleId, setEditSaleId] = useState<string | undefined>();
@@ -62,6 +69,36 @@ export function Sales() {
   const editingSalePcs = editSaleId ? (sales.find(s => s.id === editSaleId)?.pcsSold || 0) : 0;
   const availableStock = (linkedMaterial ? linkedMaterial.processedStockPcs : 0) + editingSalePcs;
 
+  // A product made from several materials is fulfilled at the moment of sale:
+  // each sale consumes the parts. The breakdown is SHOWN to the seller but is
+  // never editable — the product record is the single authority, so the recipe
+  // cannot drift from what actually left the stock.
+  const soldPcs = parseInt(pcsSold);
+  const componentAvailability = useMemo(
+    () =>
+      materials.map(m => ({
+        materialId: m.id,
+        availablePcs: InventoryCalculationService.calculateRawMaterialStock(m.id, batches),
+        unitCost: InventoryCalculationService.getWeightedAverageCostPerPiece(m.id, batches),
+      })),
+    [materials, batches],
+  );
+  const breakdown = useMemo(() => {
+    if (!selectedProduct || !isAssembled(selectedProduct) || !(soldPcs > 0)) return null;
+    return breakdownForSale(selectedProduct, soldPcs, componentAvailability);
+  }, [selectedProduct, soldPcs, componentAvailability]);
+  const shortfall = breakdown ? shortfallMessage(
+    breakdown,
+    id => materials.find(m => m.id === id)?.name ?? 'Unknown material',
+  ) : null;
+  // Heads-up only: parts this sale can still pay for, but which land on or
+  // below the shop's low-stock line afterwards. Surfaced before saving so the
+  // shop can decide to buy more first, rather than discovering it later.
+  const runningLow = useMemo(() => {
+    if (!breakdown || shortfall) return [];
+    return runningLowAfterSale(breakdown, inventoryThreshold);
+  }, [breakdown, shortfall, inventoryThreshold]);
+
   
   const handleEditClick = (item: any) => {
     setEditSaleId(item.id);
@@ -84,7 +121,16 @@ export function Sales() {
     if (!productId || !customerId || !pcsSold || !pricePerPiece || !date) return;
     
     const pcs = parseInt(pcsSold);
-    if (pcs > availableStock) {
+    // An assembled product is checked part-by-part; a single-material product
+    // against its own finished stock, exactly as before.
+    if (selectedProduct && isAssembled(selectedProduct)) {
+      const b = breakdownForSale(selectedProduct, pcs, componentAvailability);
+      const message = shortfallMessage(b, id => materials.find(m => m.id === id)?.name ?? 'Unknown material');
+      if (message) {
+        toast.error('Not enough stock', { description: message });
+        return;
+      }
+    } else if (pcs > availableStock) {
       toast.error('Insufficient stock', {
         description: linkedMaterial
           ? `${linkedMaterial.name} has only ${availableStock} finished PCS available — you tried to sell ${pcs}.`
@@ -254,8 +300,11 @@ export function Sales() {
               <label htmlFor="sale-product" className="block text-sm font-medium text-foreground/80 mb-1">Product</label>
               <SearchableSelect 
                 options={products.map(p => {
+                  if (isAssembled(p)) {
+                    return { id: p.id, label: p.name, secondaryLabel: `Made from ${p.components?.length ?? 0} materials` };
+                  }
                   const m = materials.find(mat => mat.id === p.materialId);
-                  return { id: p.id, label: p.name, secondaryLabel: `Available: ${m?.processedStockPcs || 0} PCS` }
+                  return { id: p.id, label: p.name, secondaryLabel: `Available: ${m?.processedStockPcs || 0} PCS` };
                 })}
                 value={productId}
                 onChange={handleProductChange}
@@ -270,10 +319,16 @@ export function Sales() {
             <div>
               <label htmlFor="sale-pcs" className="block text-sm font-medium text-foreground/80 mb-1">PCS to Sell *</label>
               <input id="sale-pcs" name="sale-pcs" type="number" required placeholder="Quantity" value={pcsSold} onChange={e => setPcsSold(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 h-12" />
-              {linkedMaterial && (
-                <p className={`mt-1 text-xs ${pcsSold && parseInt(pcsSold) > availableStock ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
-                  Available: {availableStock} PCS of {linkedMaterial.name}
+              {breakdown ? (
+                <p className={`mt-1 text-xs ${shortfall ? 'text-destructive font-medium' : runningLow.length > 0 ? 'text-amber-600 dark:text-amber-500 font-medium' : 'text-muted-foreground'}`}>
+                  {shortfall ?? `All ${breakdown.lines.length} material(s) in stock`}
                 </p>
+              ) : (
+                linkedMaterial && (
+                  <p className={`mt-1 text-xs ${pcsSold && parseInt(pcsSold) > availableStock ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
+                    Available: {availableStock} PCS of {linkedMaterial.name}
+                  </p>
+                )
               )}
             </div>
             <div>
@@ -285,6 +340,79 @@ export function Sales() {
               <DatePicker id="sale-date" value={date} onChange={setDate} />
             </div>
           </div>
+          {breakdown && (
+            <div className={`rounded-xl border px-4 py-3 ${shortfall ? 'border-destructive/40 bg-destructive/5' : 'border-border bg-muted/30'}`}>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-semibold text-foreground">
+                  Selling {breakdown.pcsSold} &times; {selectedProduct?.name} uses
+                </p>
+                <span className="text-xs text-muted-foreground">Set on the product</span>
+              </div>
+              <table className="w-full text-sm">
+                <thead className="text-xs text-muted-foreground">
+                  <tr>
+                    <th className="py-1 text-left font-medium">Material</th>
+                    <th className="py-1 text-right font-medium">Per unit</th>
+                    <th className="py-1 text-right font-medium">Will deduct</th>
+                    <th className="py-1 text-right font-medium">In stock</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/50">
+                  {breakdown.lines.map(line => {
+                    const m = materials.find(x => x.id === line.materialId);
+                    const isShort = line.shortageQty > 0;
+                    return (
+                      <tr key={line.materialId}>
+                        <td className="py-1 font-medium text-foreground">
+                          {m?.name ?? 'Unknown material'}
+                          {m?.code && <span className="ml-2 font-mono text-xs text-muted-foreground">{m.code}</span>}
+                        </td>
+                        <td className="py-1 text-right tabular-nums text-muted-foreground">{line.perUnitQty}</td>
+                        <td className={`py-1 text-right tabular-nums font-medium ${isShort ? 'text-destructive' : ''}`}>
+                          {line.requiredQty}
+                        </td>
+                        <td className="py-1 text-right tabular-nums text-muted-foreground">{line.availablePcs}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Cost of these parts: {formatCurrency(breakdown.totalCost)}. All of them come off stock when this invoice is saved.
+              </p>
+              {runningLow.length > 0 && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  data-testid="low-stock-warning"
+                  className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2"
+                >
+                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+                    Running low after this sale
+                  </p>
+                  <ul className="mt-1 space-y-0.5">
+                    {runningLow.map(l => {
+                      const m = materials.find(x => x.id === l.materialId);
+                      return (
+                        <li key={l.materialId} className="text-[11px] text-amber-700/90 dark:text-amber-400/90">
+                          <span className="font-medium">{m?.name ?? 'Unknown material'}</span>
+                          {m?.code && <span className="ml-1 font-mono">{m.code}</span>}
+                          {' — '}
+                          {l.remainingAfter} PCS left after {l.requiredQty} are used
+                          {' (low-stock line is '}
+                          {l.threshold}
+                          {').'}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <p className="mt-1 text-[11px] text-amber-700/80 dark:text-amber-400/80">
+                    The sale will still go through. Consider a purchase order before you confirm this invoice.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
           <div className="pt-2 flex gap-3">
             <button type="button" onClick={() => { setIsModalOpen(false); setEditSaleId(undefined); }} className="flex-1 rounded-xl border border-border bg-card px-4 py-3 font-semibold text-foreground/80 hover:bg-muted/40 transition-colors">Cancel</button>
             <button type="submit" className="flex-1 rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-md">{editSaleId ? "Update Sale" : "Confirm Sale"}</button>

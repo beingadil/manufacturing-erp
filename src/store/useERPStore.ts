@@ -7,6 +7,7 @@ import { getSystemAccountBySubtype, getSystemCOGSAccount, getSystemInventoryAcco
 import { DocumentNumberingService } from '../lib/business/DocumentNumberingService';
 import { batchAvailableAtSource, batchTotalPcs, InsufficientStockError, InventoryCalculationService } from '../lib/business/InventoryCalculationService';
 import { UnitConversionService } from '../lib/business/UnitConversionService';
+import { isAssembled, findMaterialCodeConflict, perUnitRequirement, roundQty, validateComponents } from '../lib/business/ProductAssemblyService';
 import { AppError } from '../lib/errorHandler';import {Account, 
   AccountSubtype, 
   Batch, 
@@ -58,6 +59,11 @@ export interface ERPState {
   updateModuleItem: (table: string, id: string, item: any) => void;
   removeModuleItem: (table: string, id: string) => void;
   journalEntries: JournalEntry[];
+
+  // ── Product assembly ─────────────────────────────────────────────────────
+  // A product made from several materials lists them here (Product.components);
+  // a product made from one material just points at it (Product.materialId).
+  // There is no separate recipe module — the recipe IS the product record.
   
   // Entity Add Actions
   addCategory: (data: Omit<MaterialCategory, 'id'>) => string;
@@ -321,23 +327,44 @@ export const useERPStore = create<ERPState>()(
         return { [key]: [item, ...currentArray] };
       }),
 
-      updateModuleItem: (table, id, item) => set((state) => {
-        const keyMap: Record<string, keyof ERPState> = {
-          'categories': 'categories',
-          'materials': 'materials',
-          'products': 'products',
-          'customers': 'customers',
-          'suppliers': 'suppliers',
-          'processors': 'processors',
-          'purchases': 'purchases',
-          'sales': 'sales'
-        };
-        const key = keyMap[table];
-        if (!key) return state;
+      updateModuleItem: (table, id, item) => {
+        // A material's `No.` must stay unique across the list, so the rename is
+        // validated here — the same place the create path checks it.
+        if (table === 'materials' && item.code !== undefined) {
+          const clash = findMaterialCodeConflict(useERPStore.getState().materials, item.code, id);
+          if (clash) {
+            throw new AppError(`No. "${item.code?.trim()}" is already used by "${clash}". Each No. must identify one material.`);
+          }
+        }
 
-        const currentArray = state[key] as any[];
-        return { [key]: currentArray.map(x => x.id === id ? { ...x, ...item, isOptimistic: item.isOptimistic } : x) };
-      }),
+        // Same rule on the edit path, checking the parts the product will
+        // actually end up with (the patch may leave `components` untouched).
+        if (table === 'products' && (item as Partial<Product>).usageType === 'assembled') {
+          const existing = useERPStore.getState().products.find(p => p.id === id);
+          const effective = (item as Partial<Product>).components !== undefined
+            ? (item as Partial<Product>).components
+            : existing?.components;
+          validateComponents(effective ?? []);
+        }
+
+        set((state) => {
+          const keyMap: Record<string, keyof ERPState> = {
+            'categories': 'categories',
+            'materials': 'materials',
+            'products': 'products',
+            'customers': 'customers',
+            'suppliers': 'suppliers',
+            'processors': 'processors',
+            'purchases': 'purchases',
+            'sales': 'sales'
+          };
+          const key = keyMap[table];
+          if (!key) return state;
+
+          const currentArray = state[key] as any[];
+          return { [key]: currentArray.map(x => x.id === id ? { ...x, ...item, isOptimistic: item.isOptimistic } : x) };
+        });
+      },
 
       removeModuleItem: (table, id) => set((state) => {
         const keyMap: Record<string, keyof ERPState> = {
@@ -626,12 +653,24 @@ export const useERPStore = create<ERPState>()(
       },
 
       addRawMaterial: (data) => {
+        // Checked before `set` so a duplicate `No.` is refused outright. The
+        // check reads state directly rather than living in the updater because
+        // databaseMiddleware runs that updater twice.
+        const clash = findMaterialCodeConflict(useERPStore.getState().materials, data.code);
+        if (clash) {
+          throw new AppError(`No. "${data.code?.trim()}" is already used by "${clash}". Each No. must identify one material.`);
+        }
         const id = uuidv4();
         set((state) => ({ materials: [{ ...data, id, stockPcs: 0, processedStockPcs: 0 }, ...state.materials] }));
         return id;
       },
 
       addProduct: (data) => {
+        // An assembled product with no parts would be billed as "made from
+        // several materials" while deducting nothing, so the shape is checked
+        // here too — not only in the form that normally builds it.
+        if (data.usageType === 'assembled') validateComponents(data.components ?? []);
+
         const id = uuidv4();
         set((state) => ({ products: [{ ...data, id }, ...state.products] }));
         return id;
@@ -1244,6 +1283,134 @@ export const useERPStore = create<ERPState>()(
         const selectedProduct = state.products.find(p => p.id === data.productId);
         
         let movement: InventoryMovement | null = null;
+
+        // A product made from several materials is FULFILLED at the point of
+        // sale: every part listed on the product comes off raw stock now, and
+        // the product itself holds no stock of its own. A single-material
+        // product keeps selling from its own finished stock, unchanged.
+        const assembled = selectedProduct && isAssembled(selectedProduct) ? selectedProduct : null;
+        if (assembled) {
+          const perUnit = perUnitRequirement(assembled);
+          // NOTE: databaseMiddleware runs the `set` updater TWICE — once to
+          // validate business rules, once to commit. Any handler that mutates
+          // its inputs in place therefore runs its mutations twice. Every other
+          // handler here builds fresh objects and is unaffected; this one
+          // rewrites batch balances, so it must work on a private COPY taken
+          // from the untouched `state.batches`. Copying makes a second
+          // invocation produce exactly the same result instead of deducting
+          // the parts a second time.
+          const nextBatches = (state.batches || []).map(b => ({ ...b }));
+          const newMovements: InventoryMovement[] = [];
+
+          // Check the WHOLE plan before touching anything: a sale must never
+          // take part of its components and then fail on a shortage further
+          // down the list, which would leave stock quietly out of step.
+          for (const [materialId, perUnitQty] of perUnit) {
+            const required = roundQty(perUnitQty * data.pcsSold);
+            const available = InventoryCalculationService.calculateRawMaterialStock(materialId, nextBatches);
+            if (required > available + 1e-9) {
+              throw new AppError(
+                `Not enough stock to sell ${data.pcsSold} \u00d7 ${assembled.name}: ` +
+                `${state.materials.find(m => m.id === materialId)?.name ?? materialId} ` +
+                `needs ${required} but only ${available} available.`,
+              );
+            }
+          }
+
+          for (const [materialId, perUnitQty] of perUnit) {
+            const required = roundQty(perUnitQty * data.pcsSold);
+            let consumed = 0;
+            for (const b of nextBatches) {
+              if (consumed >= required) break;
+              if (b.materialId !== materialId || b.status !== 'Active') continue;
+              const availableHere = InventoryCalculationService.batchRawAvailable(b);
+              if (availableHere <= 0) continue;
+              const take = Math.min(availableHere, required - consumed);
+              b.remainingPcs = roundQty(b.remainingPcs - take);
+              if (b.remainingPcs <= 1e-9) b.status = 'Depleted';
+              consumed = roundQty(consumed + take);
+            }
+            const running = InventoryCalculationService.calculateRawMaterialStock(materialId, nextBatches);
+            newMovements.push({
+              id: uuidv4(),
+              materialId,
+              date: data.date,
+              referenceNo: invoiceNo,
+              module: 'Sale',
+              transactionType: 'OUT',
+              quantity: required,
+              runningBalance: running,
+              remarks: `Used in ${assembled.name} \u00d7 ${data.pcsSold}`,
+            });
+          }
+
+          // The same balanced Sales Voucher a normal sale posts, but the cost leg is
+          // the PURCHASE VALUE OF THE PARTS that left stock — an assembled
+          // product never passes through Finished Goods, so crediting Finished
+          // Goods for stock that was never booked there would misstate both
+          // accounts. Debit COGS, credit Raw Material Inventory instead.
+          const partsCost = roundQty(
+            [...perUnit.entries()].reduce((sum, [materialId, perUnitQty]) => {
+              const required = roundQty(perUnitQty * data.pcsSold);
+              return sum + required * InventoryCalculationService.getWeightedAverageCostPerPiece(materialId, nextBatches);
+            }, 0),
+          );
+          const arAccount = state.accounts.find(a => a.linkedEntityId === data.customerId)
+            || getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Accounts Receivable');
+          const revenueAccount = getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Sales');
+          const cogsAccount = getSystemCOGSAccount(state.accounts, state.accountSubtypes);
+          const rawInventoryAccount = getSystemInventoryAccount(state.accounts, state.accountSubtypes, 'Raw Material Inventory');
+          const hasPartsLeg = partsCost > 0 && !!cogsAccount && !!rawInventoryAccount;
+          const voucherTotal = totalAmount + (hasPartsLeg ? partsCost : 0);
+
+          let assembledVouchers = state.vouchers;
+          let assembledEntries = state.journalEntries;
+          if (arAccount && revenueAccount) {
+            const voucherId = uuidv4();
+            const voucherNo = DocumentNumberingService.nextVoucherNumber(state.vouchers, 'Sales Voucher', data.date);
+            const voucher: Voucher = {
+              id: voucherId,
+              voucherNo,
+              date: data.date,
+              type: 'Sales Voucher',
+              referenceNo: invoiceNo,
+              sourceModule: 'Sales',
+              sourceId: saleId,
+              narration: `Sale of ${data.pcsSold} \u00d7 ${assembled.name}`,
+              totalDebit: voucherTotal,
+              totalCredit: voucherTotal,
+              createdAt: new Date().toISOString(),
+              status: 'Posted',
+              versionHistory: [{
+                id: uuidv4(),
+                modifiedAt: new Date().toISOString(),
+                action: 'Created',
+                reason: 'Auto-generated from Sale',
+              }],
+            };
+            const entries: JournalEntry[] = [
+              { id: uuidv4(), voucherId, accountId: arAccount.id, debit: totalAmount, credit: 0 },
+              { id: uuidv4(), voucherId, accountId: revenueAccount.id, debit: 0, credit: totalAmount },
+            ];
+            if (hasPartsLeg) {
+              entries.push(
+                { id: uuidv4(), voucherId, accountId: cogsAccount!.id, debit: partsCost, credit: 0 },
+                { id: uuidv4(), voucherId, accountId: rawInventoryAccount!.id, debit: 0, credit: partsCost },
+              );
+            }
+            assembledVouchers = [voucher, ...state.vouchers];
+            assembledEntries = [...entries, ...state.journalEntries];
+          }
+
+          return {
+            sales: [newSale, ...state.sales],
+            batches: nextBatches,
+            materials: InventoryCalculationService.syncMaterialCounters(state.materials || [], nextBatches),
+            inventoryMovements: [...newMovements, ...(state.inventoryMovements || [])],
+            vouchers: assembledVouchers,
+            journalEntries: assembledEntries,
+          };
+        }
 
         const updatedMaterials = state.materials.map(m => {
           if (selectedProduct && m.id === selectedProduct.materialId) {

@@ -136,6 +136,7 @@ export default function App() {
           <Route path="materials" element={<RouteGuard requireModule="Master Data" requireAction="View"><RawMaterials /></RouteGuard>} />
           <Route path="materials/:id" element={<RouteGuard requireModule="Master Data" requireAction="View"><MaterialDetail /></RouteGuard>} />
           <Route path="products" element={<RouteGuard requireModule="Master Data" requireAction="View"><FinishedGoods /></RouteGuard>} />
+          
           <Route path="ledgers" element={<RouteGuard requireModule="Ledgers" requireAction="View"><Ledgers /></RouteGuard>} />
           <Route path="processors" element={<RouteGuard requireModule="Master Data" requireAction="View"><Processors /></RouteGuard>} />
           <Route path="suppliers" element={<RouteGuard requireModule="Master Data" requireAction="View"><Suppliers /></RouteGuard>} />

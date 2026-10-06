@@ -2,6 +2,7 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const crypto = require('crypto');
 const { app } = require('electron');
+const { runMigrations } = require('./migrations.cjs');
 
 // ─── Unified Backup Bundle Format (.merpbak) ─────────────────────────────
 // A deterministic, self-describing single-file bundle:
@@ -53,6 +54,18 @@ function initializeDatabase() {
   db.pragma('cache_size = -8000');
 
   createAllTables();
+
+  // Versioned schema migrations. Runs after createAllTables() so a brand-new
+  // database bootstraps the legacy schema and then receives the same recorded
+  // migrations an existing database gets — one code path for both.
+  try {
+    runMigrations(db, dbPath, { backupDir: path.join(app.getPath('userData'), 'backups') });
+  } catch (e) {
+    console.error('[DB] Migration failed:', e.message);
+    // A failed migration must not leave the app running on a half-migrated
+    // schema; surface it loudly and keep the pre-migration backup.
+    throw e;
+  }
 
   // Run integrity check
   try {
@@ -184,9 +197,10 @@ function createAllTables() {
     );
   `);
 
-  // Clean up orphan tables from previous schema versions
+  // Clean up orphan tables from previous schema versions.
+  // NOTE: `_migrations` is no longer dropped — the versioned runner in
+  // migrations.cjs owns schema history now. Legacy rows are removed once.
   db.exec(`
-    DROP TABLE IF EXISTS _migrations;
     DROP TABLE IF EXISTS key_value_store_history;
   `);
 
