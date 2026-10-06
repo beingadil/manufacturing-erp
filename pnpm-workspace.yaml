@@ -4,7 +4,7 @@ allowBuilds:
   better-sqlite3: true
   core-js: true
 catalog:
-  "@react-three/drei": 9.122.0
+  "@react-three/drei": 10.7.9
   "@react-three/fiber": 8.18.0
   three: 0.180.0
 lockfileIncludeTarballUrl: false
