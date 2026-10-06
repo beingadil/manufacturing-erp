@@ -59,24 +59,26 @@ jobs:
       # instead of guessing.
       #
       # DIAGNOSTIC ONLY -- it must never be able to fail the run and thereby
-      # skip the apply step below. It previously threw (the check-suites
-      # endpoint lives under rest.checkSuites, not rest.repos), which is
-      # invisible while the file is unloadable but takes the whole job down the
-      # moment GitHub can actually run it.
+      # skip the apply step below. It silently did for its whole life: while the
+      # file was unloadable nobody could see it, and the moment GitHub could run
+      # it the step threw (the endpoint is not reachable at rest.repos.* or
+      # rest.checkSuites.* in the bundled octokit) and took the job down with it.
+      #
+      # Uses the raw route rather than a rest.* helper so it cannot break again
+      # on an octokit namespace/version difference inside actions/github-script.
       - name: Show recent status check contexts
         continue-on-error: true
         uses: actions/github-script@v7
         with:
           script: |
             try {
-              const { data } = await github.rest.checkSuites.listForRef({
+              const { data } = await github.request('GET /repos/{owner}/{repo}/commits/{ref}/check-runs', {
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 ref: 'master',
+                per_page: 100,
               });
-              const names = [
-                ...new Set(data.check_suites.flatMap(s => (s.latest_check_runs || []).map(r => r.name))),
-              ];
+              const names = [...new Set((data.check_runs || []).map(r => r.name))];
               core.info('Check contexts seen on master: ' + (names.join(', ') || '(none yet)'));
             } catch (error) {
               core.warning(`Could not list check contexts (${error.status}): ${error.message}`);
