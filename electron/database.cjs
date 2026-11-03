@@ -67,18 +67,26 @@ function initializeDatabase() {
     throw e;
   }
 
-  // Run integrity check
+  // Run integrity check — a failed check must be LOUD (the app may be about
+  // to run on a corrupt database), not a silent log line.
+  let integrityStatus = 'ok';
   try {
     const integrity = db.pragma('integrity_check');
     const ok = integrity[0] && integrity[0].integrity_check === 'ok';
-    console.log('[DB] Integrity check:', ok ? 'PASSED' : 'FAILED');
+    integrityStatus = ok ? 'ok' : 'failed';
+    if (!ok) {
+      console.error('[DB] Integrity check FAILED — database may be corrupt. Contents:', JSON.stringify(integrity));
+    } else {
+      console.log('[DB] Integrity check: PASSED');
+    }
   } catch (e) {
-    console.warn('[DB] Integrity check error:', e.message);
+    integrityStatus = 'error';
+    console.error('[DB] Integrity check error — the database may be corrupt:', e.message);
   }
 
   initialized = true;
   console.log('[DB] Database initialized successfully');
-  return { success: true };
+  return { success: true, integrity: integrityStatus };
 }
 
 function createAllTables() {
@@ -312,6 +320,85 @@ function runIntegrityCheck() {
   }
 }
 
+// Required ERP tables — BACKUP_TABLES is declared below; default parameter
+// values are evaluated at call time, so referencing it here is safe. A
+// database candidate missing any of these is not a usable manufacturing-erp
+// database and must never replace the live one.
+
+// Validate a database FILE without touching the live connection. Opens the
+// candidate read-only in a probe connection and runs integrity_check plus a
+// table-presence check. Returns { ok, error? }.
+function validateCandidateDatabase(candidatePath, requiredTables = BACKUP_TABLES) {
+  const fs = require('fs');
+  if (!fs.existsSync(candidatePath)) {
+    return { ok: false, error: 'File not found: ' + candidatePath };
+  }
+  let probe = null;
+  try {
+    probe = new Database(candidatePath, { readonly: true, fileMustExist: true });
+    const rows = probe.pragma('integrity_check');
+    const first = Array.isArray(rows) ? rows[0] : rows;
+    const status = first && typeof first === 'object' ? first.integrity_check : first;
+    if (String(status) !== 'ok') {
+      return { ok: false, error: `integrity_check reported: ${status}` };
+    }
+    const tables = new Set(
+      probe.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name)
+    );
+    const missing = requiredTables.filter(t => !tables.has(t));
+    if (missing.length > 0) {
+      return { ok: false, error: 'Missing required tables: ' + missing.join(', ') };
+    }
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  } finally {
+    if (probe) {
+      try { probe.close(); } catch (_e) { /* best effort */ }
+    }
+  }
+}
+
+// Row counts for the required tables, from a probe connection. Used both to
+// build an honest export manifest (counts come from the actual snapshot, not
+// from the source connection) and to verify a restore after reopening.
+function countRequiredTables(probe, tables = BACKUP_TABLES) {
+  const counts = {};
+  for (const t of tables) {
+    try {
+      counts[t] = probe.prepare(`SELECT COUNT(*) AS c FROM ${t}`).get().c;
+    } catch (_e) {
+      counts[t] = -1;
+    }
+  }
+  return counts;
+}
+
+// Create a consistent, self-contained snapshot of the live database at
+// destPath using VACUUM INTO. Unlike `wal_checkpoint(TRUNCATE) + copyFileSync`,
+// VACUUM INTO captures ALL committed frames regardless of WAL state and does
+// not depend on the (previously unchecked) busy flag of a checkpoint. The
+// destination must not exist; it is written next to destPath and renamed into
+// place atomically so a crash never leaves a half-written backup.
+function vacuumInto(destPath) {
+  const fs = require('fs');
+  const tmp = destPath + '.tmp-' + process.pid;
+  try {
+    if (fs.existsSync(tmp)) fs.rmSync(tmp, { force: true });
+    db.exec(`VACUUM INTO '${tmp.replace(/'/g, "''")}'`);
+    const v = validateCandidateDatabase(tmp);
+    if (!v.ok) {
+      try { fs.rmSync(tmp, { force: true }); } catch (_e) { /* best effort */ }
+      return { ok: false, error: 'Snapshot failed validation: ' + v.error };
+    }
+    fs.renameSync(tmp, destPath);
+    return { ok: true };
+  } catch (error) {
+    try { if (fs.existsSync(tmp)) fs.rmSync(tmp, { force: true }); } catch (_e) { /* best effort */ }
+    return { ok: false, error: error.message };
+  }
+}
+
 function backupDatabase() {
   try {
     const fs = require('fs');
@@ -325,15 +412,14 @@ function backupDatabase() {
     }
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const backupPath = path.join(backupDir, `manufacturing-erp-${timestamp}.sqlite.bak`);
+    console.log('[DB] Backup starting:', dbPath, '->', backupPath);
 
-    // SYNCHRONOUS and guaranteed: force the WAL journal into the main .sqlite
-    // file, then copy that file. The backup is complete and consistent before
-    // this function returns — the caller can immediately trust success and
-    // list the new snapshot. (Previously this used the async db.backup()
-    // promise without awaiting it, so success was reported before the file
-    // existed and failures were silently swallowed.)
-    db.pragma('wal_checkpoint(TRUNCATE)');
-    fs.copyFileSync(dbPath, backupPath);
+    // Consistent snapshot via VACUUM INTO, validated before it is renamed
+    // into place. Success is only reported for a verified file.
+    const snap = vacuumInto(backupPath);
+    if (!snap.ok) {
+      return { success: false, error: 'Backup failed: ' + snap.error };
+    }
 
     // Prune old backups (keep the newest 30)
     try {
@@ -346,7 +432,7 @@ function backupDatabase() {
     } catch {}
 
     const size = fs.statSync(backupPath).size;
-    console.log('[DB] Backup saved:', backupPath, `(${size} bytes)`);
+    console.log('[DB] Backup saved and verified:', backupPath, `(${size} bytes)`);
     return { success: true, path: backupPath, size };
   } catch (error) {
     console.error('[DB] Backup error:', error);
@@ -366,7 +452,7 @@ function runDailyBackup() {
     const today = new Date().toISOString().slice(0, 10);
     const backupDir = path.join(app.getPath('userData'), 'backups');
     const todays = fs.existsSync(backupDir)
-      ? fs.readdirSync(backupDir).filter(f => f.includes(today))
+      ? fs.readdirSync(backupDir).filter(f => f.startsWith('manufacturing-erp-') && f.endsWith('.sqlite.bak') && f.includes(today))
       : [];
     if (todays.length > 0) {
       return { success: true, skipped: true, path: path.join(backupDir, todays[0]) };
@@ -408,14 +494,20 @@ function exportBackupToPath(targetPath) {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    // Use synchronous WAL checkpoint + file copy (not async db.backup())
-    // This guarantees the backup is complete before the function returns.
-    db.pragma('wal_checkpoint(TRUNCATE)');
-    const sourcePath = getDbPath();
-    fs.copyFileSync(sourcePath, targetPath);
-    console.log('[DB] Backup exported to:', targetPath);
-    return { success: true, path: targetPath };
+    console.log('[DB] Backup export starting:', targetPath);
+    // Consistent, validated snapshot — destination must not exist, so VACUUM
+    // INTO a sibling temp file and rename atomically into place.
+    const snap = vacuumInto(targetPath + '.snapshot-' + process.pid + '.sqlite');
+    if (!snap.ok) {
+      return { success: false, error: 'Export failed: ' + snap.error };
+    }
+    // Snapshot is already verified; rename onto the user-chosen path.
+    fs.renameSync(targetPath + '.snapshot-' + process.pid + '.sqlite', targetPath);
+    const size = fs.statSync(targetPath).size;
+    console.log('[DB] Backup exported and verified:', targetPath, `(${size} bytes)`);
+    return { success: true, path: targetPath, size };
   } catch (error) {
+    try { fs.rmSync(targetPath + '.snapshot-' + process.pid + '.sqlite', { force: true }); } catch (_e) { /* best effort */ }
     console.error('[DB] Export error:', error);
     return { success: false, error: error.message };
   }
@@ -424,11 +516,11 @@ function exportBackupToPath(targetPath) {
 function importBackupFromPath(sourcePath) {
   try {
     const fs = require('fs');
-    const dbPath = getDbPath();
     if (!fs.existsSync(sourcePath)) {
       return { success: false, error: 'Source file not found' };
     }
-    // Verify it's a valid SQLite database
+    // Fast header check for a clear error message; the candidate is fully
+    // validated (integrity_check + required tables) by the swap itself.
     const header = Buffer.alloc(16);
     const fd = fs.openSync(sourcePath, 'r');
     fs.readSync(fd, header, 0, 16, 0);
@@ -437,26 +529,24 @@ function importBackupFromPath(sourcePath) {
     if (header.toString('utf8', 0, 16) !== sqliteHeader) {
       return { success: false, error: 'Invalid SQLite database file' };
     }
-    // Close current DB and replace with imported file
-    if (db) {
-      db.close();
-      db = null;
-    }
-    // Create a backup of the current state first (safety copy)
+    // Stage the candidate next to the live DB (same volume) so the swap can
+    // validate and atomically rename it without touching the live file first.
     const backupDir = path.join(app.getPath('userData'), 'backups');
     if (!fs.existsSync(backupDir)) {
       fs.mkdirSync(backupDir, { recursive: true });
     }
-    const safetyPath = path.join(backupDir, 'pre-import-safety-' + Date.now() + '.sqlite.bak');
-    fs.copyFileSync(dbPath, safetyPath);
-    console.log('[DB] Pre-import safety backup saved:', safetyPath);
-    // Replace the live database
-    fs.copyFileSync(sourcePath, dbPath);
-    removeWalSidecars(dbPath);
-    initialized = false;
-    initializeDatabase();
-    console.log('[DB] Database imported from:', sourcePath);
-    return { success: true, safetyBackupPath: safetyPath };
+    const stagedPath = path.join(backupDir, 'restore-candidate-' + Date.now() + '.sqlite');
+    fs.copyFileSync(sourcePath, stagedPath);
+    const result = swapLiveDatabase(stagedPath, {});
+    if (!result.success) {
+      // Candidate is consumed on success / rolled back on failure; if a copy
+      // is left over (e.g. validation failed), remove it here.
+      try { if (fs.existsSync(stagedPath)) fs.rmSync(stagedPath, { force: true }); } catch (_e) { /* best effort */ }
+    }
+    if (result.success) {
+      console.log('[DB] Database imported from:', sourcePath);
+    }
+    return result;
   } catch (error) {
     console.error('[DB] Import error:', error);
     return { success: false, error: error.message };
@@ -472,30 +562,25 @@ const BACKUP_TABLES = [
   'batches', 'inventoryMovements', 'key_value_store',
 ];
 
-// Collect store keys currently persisted in key_value_store (erp-storage,
-// erp-access-storage, erp-settings, erp-system-logs, …)
-function getPersistedStoreKeys() {
+// Build the manifest FROM THE SNAPSHOT BYTES that will actually be embedded
+// in the bundle. Counts and store keys are read from the snapshot itself, so
+// the manifest can never describe a different (stale) database than the one
+// being exported — the root cause of "backup reported success but restored to
+// an older state".
+function buildBackupManifest(dbBytes, snapshotPath) {
+  let stores = [];
+  let tableRowCounts = {};
+  const probe = new Database(snapshotPath, { readonly: true, fileMustExist: true });
   try {
-    return db.prepare('SELECT key FROM key_value_store ORDER BY key').all().map(r => r.key);
-  } catch (e) {
-    return [];
-  }
-}
-
-// Per-table row counts so the manifest is a full, deterministic snapshot summary
-function getTableRowCounts() {
-  const counts = {};
-  for (const t of BACKUP_TABLES) {
     try {
-      counts[t] = db.prepare(`SELECT COUNT(*) AS c FROM ${t}`).get().c;
-    } catch (e) {
-      counts[t] = 0;
+      stores = probe.prepare('SELECT key FROM key_value_store ORDER BY key').all().map(r => r.key);
+    } catch (_e) {
+      stores = [];
     }
+    tableRowCounts = countRequiredTables(probe, BACKUP_TABLES);
+  } finally {
+    try { probe.close(); } catch (_e) { /* best effort */ }
   }
-  return counts;
-}
-
-function buildBackupManifest(dbBytes) {
   return {
     format: BACKUP_FORMAT_NAME,
     formatVersion: BACKUP_FORMAT_VERSION,
@@ -504,34 +589,58 @@ function buildBackupManifest(dbBytes) {
     createdAt: new Date().toISOString(),
     dbSize: dbBytes.length,
     dbSha256: crypto.createHash('sha256').update(dbBytes).digest('hex'),
-    stores: getPersistedStoreKeys(),
-    tableRowCounts: getTableRowCounts(),
+    stores,
+    tableRowCounts,
   };
 }
 
-// Export a single-file bundle: magic + manifest length + manifest JSON + SQLite bytes
+// Export a single-file bundle: magic + manifest length + manifest JSON + SQLite bytes.
+// The embedded SQLite is a validated VACUUM INTO snapshot written to a sibling
+// temp file first — never a raw read of the live main file (which may lag the
+// WAL) — and both the snapshot and the final bundle are verified before
+// success is reported.
 function exportUnifiedBackupToPath(targetPath) {
+  const fs = require('fs');
+  const tmpDb = targetPath + '.snapshot-' + process.pid + '.sqlite';
+  const tmpBundle = targetPath + '.tmp-' + process.pid;
   try {
-    const fs = require('fs');
     const dir = require('path').dirname(targetPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    // WAL checkpoint first so the main .sqlite file is complete and consistent
-    db.pragma('wal_checkpoint(TRUNCATE)');
-    const dbBytes = fs.readFileSync(getDbPath());
-    const manifest = buildBackupManifest(dbBytes);
+    if (fs.existsSync(tmpDb)) fs.rmSync(tmpDb, { force: true });
+    if (fs.existsSync(tmpBundle)) fs.rmSync(tmpBundle, { force: true });
+    console.log('[DB] Unified backup export starting:', targetPath);
+
+    // 1. Consistent snapshot (captures all committed WAL frames)
+    db.exec(`VACUUM INTO '${tmpDb.replace(/'/g, "''")}'`);
+    // 2. Validate the snapshot before it becomes the bundle
+    const v = validateCandidateDatabase(tmpDb);
+    if (!v.ok) {
+      return { success: false, error: 'Snapshot failed validation: ' + v.error };
+    }
+    // 3. Manifest describes THESE bytes
+    const dbBytes = fs.readFileSync(tmpDb);
+    const manifest = buildBackupManifest(dbBytes, tmpDb);
     const manifestBuf = Buffer.from(JSON.stringify(manifest, null, 2), 'utf8');
     const header = Buffer.alloc(12);
     header.write(BACKUP_MAGIC, 0, 'ascii');
     header.writeUInt32BE(manifestBuf.length, 8);
     const bundle = Buffer.concat([header, manifestBuf, dbBytes]);
-    fs.writeFileSync(targetPath, bundle);
-    console.log('[DB] Unified backup exported to:', targetPath);
+    // 4. Atomic finalization: write bundle to a sibling temp, then rename
+    fs.writeFileSync(tmpBundle, bundle);
+    fs.renameSync(tmpBundle, targetPath);
+    const size = fs.statSync(targetPath).size;
+    console.log('[DB] Unified backup exported and verified:', targetPath, `(${size} bytes)`);
     return { success: true, path: targetPath, manifest };
   } catch (error) {
+    // Clean up partial artifacts so a failed export never leaves a
+    // plausible-but-invalid backup behind.
+    try { if (fs.existsSync(tmpBundle)) fs.rmSync(tmpBundle, { force: true }); } catch (_e) { /* best effort */ }
     console.error('[DB] Unified export error:', error);
     return { success: false, error: error.message };
+  } finally {
+    try { if (fs.existsSync(tmpDb)) fs.rmSync(tmpDb, { force: true }); } catch (_e) { /* best effort */ }
   }
 }
 
@@ -541,7 +650,6 @@ function exportUnifiedBackupToPath(targetPath) {
 function importUnifiedBackupFromPath(sourcePath) {
   try {
     const fs = require('fs');
-    const dbPath = getDbPath();
     if (!fs.existsSync(sourcePath)) {
       return { success: false, error: 'Source file not found' };
     }
@@ -583,27 +691,20 @@ function importUnifiedBackupFromPath(sourcePath) {
       return { success: false, error: 'Backup integrity check failed (SHA-256 mismatch). The file may be corrupted or tampered with.' };
     }
 
-    // ── Replace the live database ──
-    if (db) {
-      db.close();
-      db = null;
-    }
-    // Create a backup of the current state first (safety copy)
+    // ── Replace the live database with the verified embedded bytes ──
     const backupDir = path.join(app.getPath('userData'), 'backups');
     if (!fs.existsSync(backupDir)) {
       fs.mkdirSync(backupDir, { recursive: true });
     }
-    const safetyPath = path.join(backupDir, 'pre-import-safety-' + Date.now() + '.sqlite.bak');
-    if (fs.existsSync(dbPath)) {
-      fs.copyFileSync(dbPath, safetyPath);
+    const stagedPath = path.join(backupDir, 'restore-candidate-' + Date.now() + '.sqlite');
+    fs.writeFileSync(stagedPath, dbBytes);
+    const result = swapLiveDatabase(stagedPath, { manifest });
+    if (!result.success) {
+      try { if (fs.existsSync(stagedPath)) fs.rmSync(stagedPath, { force: true }); } catch (_e) { /* best effort */ }
+    } else {
+      console.log('[DB] Unified backup imported from:', sourcePath);
     }
-    // Replace the live database file
-    fs.writeFileSync(dbPath, dbBytes);
-    removeWalSidecars(dbPath);
-    initialized = false;
-    initializeDatabase();
-    console.log('[DB] Unified backup imported from:', sourcePath);
-    return { success: true, safetyBackupPath: safetyPath, manifest };
+    return result;
   } catch (error) {
     console.error('[DB] Unified import error:', error);
     return { success: false, error: error.message };
@@ -611,10 +712,11 @@ function importUnifiedBackupFromPath(sourcePath) {
 }
 
 // ─── Update-safe backup ───────────────────────────────────────────────────
-// Creates a backup of the DB *outside* userData so it survives uninstall
-// Uses synchronous WAL checkpoint + file copy (not async db.backup()) so the
-// backup is guaranteed complete before the function returns. This is critical
-// because the caller needs the backup done before quitAndInstall() is called.
+// Creates a backup of the DB *outside* userData so it survives uninstall.
+// VACUUM INTO gives a consistent snapshot regardless of WAL state and the
+// snapshot is validated before it is swapped into place — success is only
+// reported for a verified file, because the caller needs the backup intact
+// before quitAndInstall() is called.
 function createUpdateSafeBackup() {
   try {
     const fs = require('fs');
@@ -622,14 +724,16 @@ function createUpdateSafeBackup() {
     if (!fs.existsSync(dbPath)) {
       return { success: false, error: 'Database file not found at ' + dbPath };
     }
-    // Force WAL to flush into main DB file so the file copy is consistent
-    db.pragma('wal_checkpoint(TRUNCATE)');
-    // Save backup next to the EXE (survives uninstall of old version because
-    // the NSIS uninstaller only removes files it installed, not sidecar files)
     const exeDir = path.dirname(app.getPath('exe'));
     const backupPath = path.join(exeDir, 'pre-update-backup.sqlite');
-    fs.copyFileSync(dbPath, backupPath);
-    console.log('[DB] Update-safe backup saved:', backupPath);
+    if (fs.existsSync(backupPath)) {
+      fs.rmSync(backupPath, { force: true });
+    }
+    const snap = vacuumInto(backupPath);
+    if (!snap.ok) {
+      return { success: false, error: 'Update-safe backup failed: ' + snap.error };
+    }
+    console.log('[DB] Update-safe backup saved and verified:', backupPath);
     return { success: true, path: backupPath };
   } catch (error) {
     console.error('[DB] createUpdateSafeBackup error:', error);
@@ -637,7 +741,11 @@ function createUpdateSafeBackup() {
   }
 }
 
-// Restore from update-safe backup (used if DB is missing on startup)
+// Restore from update-safe backup (used if DB is missing on startup).
+// The candidate is validated BEFORE anything is touched, the live database is
+// only replaced through the same verified swap as user-requested restores, and
+// the update-safe backup file is deleted ONLY AFTER the restore has been
+// verified — a failed restore leaves the backup in place for the next launch.
 function restoreFromUpdateSafeBackup() {
   try {
     const fs = require('fs');
@@ -648,24 +756,26 @@ function restoreFromUpdateSafeBackup() {
       return { success: false, error: 'No update-safe backup found' };
     }
 
-    const dbPath = getDbPath();
-    console.log('[DB] Restoring from update-safe backup:', backupPath, '->', dbPath);
+    // Stage the candidate next to the live DB (same volume) without
+    // consuming the backup itself.
+    const backupDir = path.join(app.getPath('userData'), 'backups');
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
+    const stagedPath = path.join(backupDir, 'restore-candidate-' + Date.now() + '.sqlite');
+    fs.copyFileSync(backupPath, stagedPath);
+    console.log('[DB] Restoring from update-safe backup:', backupPath);
 
-    if (db) {
-      db.close();
-      db = null;
-      initialized = false;
+    const result = swapLiveDatabase(stagedPath, {});
+    if (!result.success) {
+      try { if (fs.existsSync(stagedPath)) fs.rmSync(stagedPath, { force: true }); } catch (_e) { /* best effort */ }
+      return { success: false, error: 'Update-safe restore failed: ' + result.error };
     }
 
-    fs.copyFileSync(backupPath, dbPath);
-    removeWalSidecars(dbPath);
+    // Verified restore — only NOW may the backup be consumed.
+    try { fs.rmSync(backupPath, { force: true }); } catch (_e) { /* best effort */ }
     console.log('[DB] Database restored from update-safe backup');
-
-    // Remove the backup file so we don't restore stale data next time
-    try { fs.rmSync(backupPath, { force: true }); } catch {}
-
-    // Re-initialize
-    return initializeDatabase();
+    return { success: true };
   } catch (error) {
     console.error('[DB] restoreFromUpdateSafeBackup error:', error);
     return { success: false, error: error.message };
@@ -675,16 +785,187 @@ function restoreFromUpdateSafeBackup() {
 // After replacing the live database file (restore/import) any leftover -wal /
 // -shm files from the previous connection must be removed. Replaying a stale
 // WAL against a different database file is a classic SQLite corruption source.
+// This failure is FATAL to a restore (it means the new file cannot be trusted
+// yet) — callers decide whether to roll back.
 function removeWalSidecars(dbPath) {
   const fs = require('fs');
-  try {
-    for (const ext of ['-wal', '-shm']) {
-      const f = dbPath + ext;
-      if (fs.existsSync(f)) fs.rmSync(f, { force: true });
+  for (const ext of ['-wal', '-shm']) {
+    const f = dbPath + ext;
+    if (fs.existsSync(f)) {
+      try {
+        fs.rmSync(f, { force: true });
+      } catch (error) {
+        throw new Error(`Failed to remove WAL sidecar ${f}: ${error.message}`);
+      }
     }
-  } catch (error) {
-    console.warn('[DB] Failed to remove WAL sidecars:', error.message);
   }
+}
+
+// Verify a reopened (restored) database before declaring the restore a
+// success: integrity_check must pass, required tables must exist, and — when
+// the backup's manifest carries per-table row counts — the restored row
+// counts must match what the manifest recorded at export time.
+function verifyRestoredDatabase(handle, manifest) {
+  if (!handle) {
+    return { ok: false, error: 'no database handle after reopen' };
+  }
+  try {
+    const rows = handle.pragma('integrity_check');
+    const first = Array.isArray(rows) ? rows[0] : rows;
+    const status = first && typeof first === 'object' ? first.integrity_check : first;
+    if (String(status) !== 'ok') {
+      return { ok: false, error: `integrity_check reported: ${status}` };
+    }
+    const tables = new Set(
+      handle.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name)
+    );
+    const missing = BACKUP_TABLES.filter(t => !tables.has(t));
+    if (missing.length > 0) {
+      return { ok: false, error: 'Missing required tables after restore: ' + missing.join(', ') };
+    }
+    const tableRowCounts = countRequiredTables(handle, BACKUP_TABLES);
+    if (manifest && manifest.tableRowCounts && typeof manifest.tableRowCounts === 'object') {
+      for (const [table, expected] of Object.entries(manifest.tableRowCounts)) {
+        const actual = tableRowCounts[table];
+        if (typeof expected === 'number' && expected >= 0 && actual !== expected) {
+          return { ok: false, error: `Row-count mismatch on '${table}': backup manifest=${expected}, restored=${actual}` };
+        }
+      }
+    }
+    return { ok: true, tableRowCounts };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+// Best-effort automatic rollback of a failed restore back to the safety copy.
+function rollbackToSafetyCopy(safetyPath) {
+  const fs = require('fs');
+  try {
+    if (db) {
+      try { db.close(); } catch (_e) { /* best effort */ }
+      db = null;
+      initialized = false;
+    }
+    if (safetyPath && fs.existsSync(safetyPath)) {
+      fs.copyFileSync(safetyPath, getDbPath());
+      try { removeWalSidecars(getDbPath()); } catch (_e) { /* best effort */ }
+    }
+    initialized = false;
+    const result = initializeDatabase();
+    return { ok: !!(result && result.success) };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+// Shared, safe replacement of the live database with a verified candidate.
+// Phases: (1) validate candidate BEFORE touching anything; (2) checked
+// checkpoint + close of the live connection — a busy database aborts the
+// restore; (3) safety copy of the current database; (4) atomic rename into
+// place + fatal sidecar cleanup; (5) reopen and VERIFY — a restore that
+// cannot be verified is rolled back automatically.
+// The candidate file is consumed (renamed/removed) on success; on failure it
+// may remain and must be cleaned up by the caller.
+function swapLiveDatabase(candidatePath, opts = {}) {
+  const fs = require('fs');
+  const dbPath = getDbPath();
+  console.log('[DB] Restore starting:', candidatePath, '->', dbPath);
+
+  // Phase 1 — validate the candidate BEFORE the live database is touched.
+  const pre = validateCandidateDatabase(candidatePath);
+  if (!pre.ok) {
+    return { success: false, error: 'Backup failed validation: ' + pre.error };
+  }
+
+  // Phase 2 — checkpoint the live connection fully, then close it. If another
+  // reader/writer pins the WAL, refuse to proceed rather than strand frames.
+  if (db) {
+    try {
+      const chk = db.pragma('wal_checkpoint(TRUNCATE)');
+      const row = Array.isArray(chk) && chk.length > 0 ? chk[0] : chk;
+      if (row && typeof row === 'object' && row.busy === 1) {
+        return { success: false, error: 'The database is busy (another copy of the app may be running). Close all other copies of the app and try again.' };
+      }
+    } catch (e) {
+      return { success: false, error: 'Could not checkpoint the live database before restore: ' + e.message };
+    }
+    try {
+      db.close();
+    } catch (e) {
+      return { success: false, error: 'Could not close the live database before restore: ' + e.message };
+    }
+    db = null;
+    initialized = false;
+  }
+
+  // Phase 3 — safety copy of the CURRENT database (post-close → complete).
+  const backupDir = path.join(app.getPath('userData'), 'backups');
+  if (!fs.existsSync(backupDir)) {
+    fs.mkdirSync(backupDir, { recursive: true });
+  }
+  const safetyPath = path.join(backupDir, 'pre-restore-safety-' + Date.now() + '.sqlite.bak');
+  let safetyTaken = false;
+  if (fs.existsSync(dbPath)) {
+    try {
+      fs.copyFileSync(dbPath, safetyPath);
+      safetyTaken = fs.statSync(safetyPath).size === fs.statSync(dbPath).size;
+      if (!safetyTaken) {
+        return { success: false, error: 'Could not create a safety copy of the current database — restore aborted, nothing was changed.' };
+      }
+      console.log('[DB] Pre-restore safety copy saved:', safetyPath);
+    } catch (e) {
+      return { success: false, error: 'Could not create a safety copy of the current database — restore aborted, nothing was changed: ' + e.message };
+    }
+  }
+
+  // Phase 4 — atomic swap + FATAL sidecar cleanup.
+  try {
+    try {
+      fs.renameSync(candidatePath, dbPath);
+    } catch (_renameErr) {
+      fs.copyFileSync(candidatePath, dbPath);
+      try { fs.rmSync(candidatePath, { force: true }); } catch (_e) { /* best effort */ }
+    }
+    removeWalSidecars(dbPath);
+  } catch (e) {
+    console.error('[DB] Restore replacement failed, rolling back:', e.message);
+    const rollback = rollbackToSafetyCopy(safetyTaken ? safetyPath : null);
+    return {
+      success: false,
+      error: 'Database replacement failed: ' + e.message
+        + (rollback.ok ? ' — your previous data was automatically restored.' : ' — automatic rollback failed; your pre-restore copy is at ' + safetyPath),
+      safetyBackupPath: safetyTaken ? safetyPath : undefined,
+      rollback,
+    };
+  }
+
+  // Phase 5 — reopen and VERIFY. Unverifiable restores are rolled back.
+  let initResult = null;
+  try {
+    initResult = initializeDatabase();
+  } catch (e) {
+    initResult = { success: false, error: { message: e.message } };
+  }
+  const verify = verifyRestoredDatabase(db, opts.manifest);
+  const initOk = !!(initResult && initResult.success === true);
+  if (!initOk || !verify.ok) {
+    const reason = !initOk
+      ? 'the database failed to reopen'
+      : verify.error;
+    console.error('[DB] Restore verification failed, rolling back:', reason);
+    const rollback = rollbackToSafetyCopy(safetyTaken ? safetyPath : null);
+    return {
+      success: false,
+      error: `Restore verification failed: ${reason}`
+        + (rollback.ok ? ' — your previous data was automatically restored.' : ` — automatic rollback failed; your pre-restore copy is at ${safetyPath}`),
+      safetyBackupPath: safetyTaken ? safetyPath : undefined,
+      rollback,
+    };
+  }
+
+  console.log('[DB] Restore completed and verified.');
+  return { success: true, safetyBackupPath: safetyTaken ? safetyPath : undefined, manifest: opts.manifest, verification: verify };
 }
 
 module.exports = { initializeDatabase, query, queryOne, execute, transaction, closeDatabase, runIntegrityCheck, backupDatabase, runDailyBackup, exportBackupToPath, importBackupFromPath, exportUnifiedBackupToPath, importUnifiedBackupFromPath, createUpdateSafeBackup, restoreFromUpdateSafeBackup };
