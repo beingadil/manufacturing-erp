@@ -47,10 +47,16 @@ export function historicalWeightedAverageCost(
   let totalValue = 0;
   let totalPcs = 0;
   for (const b of batches) {
-    if (b.materialId !== materialId || b.initialPcs <= 0) continue;
-    if (b.date > asOfDate) continue;
-    totalValue += b.amount || 0;
-    totalPcs += b.initialPcs;
+    if (!b || typeof b !== 'object') continue;
+    if (b.materialId !== materialId) continue;
+    // Skip batches with unusable quantity or date data instead of producing NaN.
+    const pcs = Number(b.initialPcs);
+    const amount = Number(b.amount ?? 0);
+    if (!Number.isFinite(pcs) || pcs <= 0) continue;
+    if (!Number.isFinite(amount)) continue;
+    if (typeof b.date !== 'string' || b.date > asOfDate) continue;
+    totalValue += amount;
+    totalPcs += pcs;
   }
   return totalPcs > 0 ? totalValue / totalPcs : 0;
 }
@@ -132,9 +138,11 @@ export function fixHistoricalPostings(state: any): { state: any; report: Posting
     const product = sale ? products.find(p => p.id === sale.productId) : undefined;
     const materialId = product?.materialId;
     const costPerPiece = materialId ? historicalWeightedAverageCost(materialId, batches, v.date) : 0;
-    const cogsAmount = costPerPiece * (sale?.pcsSold || 0);
+    const cogsAmount = costPerPiece * (Number(sale?.pcsSold) || 0);
 
-    if (cogsAmount <= 0) {
+    // Fail closed on non-finite costs: a NaN here would append NaN legs to
+    // the ledger on every boot.
+    if (!Number.isFinite(cogsAmount) || cogsAmount <= 0) {
       report.salesSkippedNoCost += 1;
       return v;
     }

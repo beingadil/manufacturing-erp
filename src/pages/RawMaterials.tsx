@@ -214,10 +214,14 @@ export function RawMaterials() {
 
   const enrichedMaterials = useMemo(() => materials.map(m => {
     const stages = InventoryCalculationService.getMaterialStageValues(m.id, batches);
-    // Raw stock value at ACTUAL purchase cost: Σ remainingPcs × batch purchase rate
-    const value = stages.raw.value;
-    // Average purchase rate for display (weighted across the raw batches on hand)
-    const costPerPiece = stages.raw.pcs > 0 ? stages.raw.value / stages.raw.pcs : 0;
+    // Stock value of EVERYTHING this material has on hand at ACTUAL purchase
+    // cost. raw + atProcessor (pipeline incl. waiting-for-next-stage) + finished
+    // are disjoint buckets by construction, so the sum never double-counts and
+    // a ready-made (finished) purchase is valued like any other stock.
+    const value = stages.raw.value + stages.atProcessor.value + stages.finished.value;
+    // Average purchase rate for display (weighted across every batch on hand)
+    const onHandPcs = stages.raw.pcs + stages.atProcessor.pcs + stages.finished.pcs;
+    const costPerPiece = onHandPcs > 0 ? value / onHandPcs : 0;
     return {
       ...m,
       categoryName: getCategoryName(m.categoryId),
@@ -404,7 +408,7 @@ export function RawMaterials() {
           iconClassName="text-emerald-500"
           accent="text-success"
           size="sm"
-          description="Raw stock valued at actual purchase cost (per batch)"
+          description="Everything on hand valued at actual purchase cost (per batch), incl. WIP and finished"
         />
       </div>
 

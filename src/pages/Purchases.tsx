@@ -348,7 +348,15 @@ export function Purchases() {
           )}
 
           {effectiveMode === 'pcs' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Ready-made items (lids/handles/kalsi hardware) also need a date —
+                  the purchase form always records one. Without this field the
+                  datepicker never rendered for pcs-mode materials and the form
+                  cannot be submitted (date is required). */}
+              <div className="space-y-2">
+                <label htmlFor="purchase-date" className="text-sm font-semibold">Date *</label>
+                <DatePicker id="purchase-date" value={date} onChange={setDate} />
+              </div>
               <div className="space-y-2">
                 <label htmlFor="purchase-pcs" className="text-sm font-semibold">Quantity (PCS) *</label>
                 <input id="purchase-pcs" name="purchase-pcs" type="number" min="1" step="1" required value={directPcs} onChange={e => setDirectPcs(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 h-12" placeholder="Number of pieces bought" />

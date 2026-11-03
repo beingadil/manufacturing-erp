@@ -184,17 +184,26 @@ export function migrateERPState(state: any): any {
       // Pass the material's path config so single_stage/ready_made trails replay
       // under their own rules (batch path snapshots take precedence inside).
       const mat = materialsArr.find((m: any) => m.id === mid);
-      trail = InventoryCalculationService.recomputeFinishedPcsForMaterial(
-        String(mid),
-        trail,
-        receipts,
-        sends,
-        salesArr,
-        products,
-        undefined,
-        processingStages,
-        mat ? { processingPath: mat.processingPath, fixedStageId: mat.fixedStageId, allowedStageIds: mat.allowedStageIds } : undefined
-      );
+      try {
+        trail = InventoryCalculationService.recomputeFinishedPcsForMaterial(
+          String(mid),
+          trail,
+          receipts,
+          sends,
+          salesArr,
+          products,
+          undefined,
+          processingStages,
+          mat ? { processingPath: mat.processingPath, fixedStageId: mat.fixedStageId, allowedStageIds: mat.allowedStageIds } : undefined
+        );
+      } catch (e: any) {
+        // One material whose history cannot be safely replayed (stage-chain
+        // gap, a corrupt batch record, a malformed date) must NEVER take the
+        // whole ERP state down with it. Keep the material's stored trail
+        // unchanged — the rest of the replay is unaffected, and the fail-closed
+        // rehydration gate in main.tsx can still load everything else.
+        console.warn(`[erpMigration] Batch trail replay failed for material ${mid} — keeping stored batches unchanged: ${e && e.message ? e.message : e}`);
+      }
     }
     // Scrub the legacy scalar availability fields — the per-source map
     // (stageAvailableBySource) replaced them and stale values must never

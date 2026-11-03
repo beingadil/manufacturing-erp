@@ -697,19 +697,34 @@ export class InventoryCalculationService {
     // the pcs were BOUGHT under, even if the material's path was edited later.
     const pathSource = (batches.find(b => b.materialId === materialId && b.processingPath)) || material;
     const pathMaterial = pathSource ? { processingPath: pathSource.processingPath, fixedStageId: pathSource.fixedStageId, allowedStageIds: pathSource.allowedStageIds } : undefined;
+    const pathOfBatch = (b: Batch): string => b.processingPath ?? pathMaterial?.processingPath ?? 'full_chain';
     // 1. Reset this material's batches to the purchase baseline (all raw).
-    let trail: Batch[] = batches.map(b =>
-      b.materialId === materialId
-        ? {
-            ...b,
-            remainingPcs: b.initialPcs > 0 ? b.initialPcs : b.remainingPcs,
-            atProcessorPcs: 0,
-            processedPcs: 0,
-            stageAvailableBySource: {},
-            currentStageId: undefined,
-          }
-        : b
-    );
+    //    Ready-made batches are FINISHED at purchase by definition — they are
+    //    reset straight into the finished bucket, so ready-made pcs never
+    //    masquerade as raw stock (and sales FIFO can consume them) after a
+    //    restart or replay. This also self-heals pre-existing ready-made
+    //    batches that were written as raw-bucket batches.
+    let trail: Batch[] = batches.map(b => {
+      if (b.materialId !== materialId) return b;
+      if (pathOfBatch(b) === 'ready_made') {
+        return {
+          ...b,
+          remainingPcs: 0,
+          atProcessorPcs: 0,
+          processedPcs: b.initialPcs > 0 ? b.initialPcs : (b.processedPcs || 0),
+          stageAvailableBySource: {},
+          currentStageId: undefined,
+        };
+      }
+      return {
+        ...b,
+        remainingPcs: b.initialPcs > 0 ? b.initialPcs : b.remainingPcs,
+        atProcessorPcs: 0,
+        processedPcs: 0,
+        stageAvailableBySource: {},
+        currentStageId: undefined,
+      };
+    });
 
     // 2. Dispatches: stage-1/legacy draw RAW; intermediate draws are WIP→WIP
     //    (bucket-to-bucket) and never touch raw.

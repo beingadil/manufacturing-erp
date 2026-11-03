@@ -713,7 +713,11 @@ export const useERPStore = create<ERPState>()(
           ratePerUnit: data.ratePerUnit,
           weightPerPiece: data.weightPerPiece,
           initialPcs: calculatedPcs,
-          remainingPcs: calculatedPcs,
+          // Ready-made goods are FINISHED at purchase — write the batch into
+          // the finished bucket (remainingPcs 0) so the LIVE state matches
+          // what the restart replay derives, and sales FIFO consumes them.
+          remainingPcs: isReadyMade ? 0 : calculatedPcs,
+          ...(isReadyMade ? { processedPcs: calculatedPcs } : {}),
           amount,
           status: "Active",
           // Path snapshot: the trail must replay under the path pcs were BOUGHT
