@@ -98,7 +98,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isHydrated) return;
 
-    seedDefaults();
+    // Fail closed: if the access rehydration failed (or the DB never came
+    // up), the existing users/permissions are still safely in the database.
+    // Seeding factory defaults now would OVERWRITE them via persist.
+    if ((window as any).__ACCESS_REHYDRATION_FAILED__) {
+      console.warn('[Auth] Skipping default seeding — store rehydration failed; existing users preserved. Restore from backup if the app is empty.');
+    } else {
+      seedDefaults();
+    }
 
     // Check localStorage for offline session (needs hydrated stores to restore)
     const storedSession = localStorage.getItem('offline-session');

@@ -1,9 +1,39 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const { autoUpdater } = require('electron-updater');
 const db = require('./database.cjs');
 const ai = require('./ai.cjs');
 const { detectLegacyInstall } = require('./legacy-install-detector.cjs');
+
+// Test hook (e2e/CI only): redirect userData to a scratch directory so the
+// app NEVER touches the real database during automated verification. Never
+// set this in production.
+if (process.env.WRA_USER_DATA_DIR) {
+  try {
+    app.setPath('userData', process.env.WRA_USER_DATA_DIR);
+    console.log('[Main] WRA_USER_DATA_DIR override active — userData =', app.getPath('userData'));
+  } catch (e) {
+    console.warn('[Main] WRA_USER_DATA_DIR override failed (non-fatal):', e.message);
+  }
+}
+
+// Single-instance lock. Two copies of the app opening the same database file
+// is exactly how checkpoints go busy and backups silently miss committed
+// frames — so a second copy must NEVER open the database; it focuses the
+// existing window instead.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  console.warn('[Main] Another instance is already running — quitting this copy.');
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const w = BrowserWindow.getAllWindows()[0];
+    if (w) {
+      if (w.isMinimized()) w.restore();
+      w.focus();
+    }
+  });
+}
 
 const createWindow = () => {
   const mainWindow = new BrowserWindow({
@@ -43,7 +73,8 @@ const createWindow = () => {
   }
 };
 
-app.whenReady().then(() => {
+// Only the lock holder may proceed with startup wiring and window creation.
+if (gotSingleInstanceLock) app.whenReady().then(() => {
   console.log('[Main] App ready, userData:', app.getPath('userData'));
 
   // AI gateway config lives in userData (key never in renderer/SQLite).
@@ -65,7 +96,47 @@ app.whenReady().then(() => {
     if (recoveryResult.success) {
       console.log('[Main] Database recovered successfully from update-safe backup');
     } else {
-      console.log('[Main] No update-safe backup found — will create new database');
+      // LOUD — but only when there is evidence this machine previously had
+      // data. On a genuine first install there is nothing to lose, and
+      // showing an alarming dialog to every new user would be wrong too.
+      // Evidence of prior data, scoped to THIS profile's own artifacts — the
+      // userData backups folder (survives uninstalls with deleteAppDataOnUninstall:false)
+      // and the update-safe backup next to the EXE. A Documents-folder copy is
+      // deliberately NOT used as a signal: it belongs to the machine, not to
+      // this profile, and would false-positive on every fresh install and in
+      // isolated test profiles.
+      const backupsDir = path.join(app.getPath('userData'), 'backups');
+      const hasUserBackups = (() => {
+        try {
+          return fs.existsSync(backupsDir)
+            && fs.readdirSync(backupsDir).some(f =>
+              (f.startsWith('manufacturing-erp-') && f.endsWith('.sqlite.bak'))
+              || f.startsWith('pre-restore-safety-')
+              || f.startsWith('pre-import-safety-'));
+        } catch { return false; }
+      })();
+      const updateSafeBackup = (() => {
+        try {
+          return fs.existsSync(path.join(path.dirname(app.getPath('exe')), 'pre-update-backup.sqlite'));
+        } catch { return false; }
+      })();
+      const hadPriorData = hasUserBackups || updateSafeBackup;
+      const reason = (recoveryResult && recoveryResult.error) ? recoveryResult.error : 'no usable update-safe backup found';
+      if (hadPriorData) {
+        // LOUD, not silent: a missing production database previously holding
+        // data almost certainly means it disappeared UNEXPECTEDLY.
+        console.error('[Main] Database missing and recovery failed — backups exist but no database was found:', reason);
+        dialog.showErrorBox(
+          'Your data file is missing',
+          `The application could not find its database at:\n${dbPath}\n\n` +
+          `This computer HAS previous backups, so a missing database is not a fresh install.\n\n` +
+          `A NEW, EMPTY database will now be created. Your previous data was NOT deleted — it is simply not being opened by this copy of the app.\n\n` +
+          `To recover your records, close the app and restore your most recent backup (.merpbak) via Settings → System Maintenance → Restore from file.\n\n` +
+          `Recovery detail: ${reason}`
+        );
+      } else {
+        console.log('[Main] First launch (or no prior backups anywhere) — creating a new empty database.');
+      }
     }
   }
 
@@ -73,8 +144,22 @@ app.whenReady().then(() => {
   const initResult = db.initializeDatabase();
   if (!initResult.success) {
     console.error('[Main] Database initialization failed');
+    dialog.showErrorBox(
+      'Database initialization failed',
+      'The application could not open or initialize its database. It will now close.\n\n' +
+      'If this keeps happening, restore from your most recent backup (.merpbak).'
+    );
     app.quit();
     return;
+  }
+  if (initResult.integrity && initResult.integrity !== 'ok') {
+    // Corrupt database: keep the app open so the user can restore from a
+    // backup, but make unmistakably clear that nothing should be saved.
+    dialog.showErrorBox(
+      'Database integrity check FAILED',
+      'The integrity check of your database FAILED, which means the stored data may be corrupt.\n\n' +
+      'DO NOT enter or change any records. Close the app and restore your most recent backup (.merpbak) via Settings → System Maintenance → Restore from file.'
+    );
   }
 
   // Daily backup: one snapshot per calendar day (startup + hourly re-check so
@@ -379,8 +464,22 @@ app.whenReady().then(() => {
   ai.registerAiHandlers(ipcMain);
 });
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
+// Close the database cleanly on shutdown: pending WAL frames are checkpointed
+// and the connection is closed before the process exits — never rely on the
+// native addon's exit destructor.
+app.on('before-quit', () => {
+  try {
+    db.closeDatabase();
+    console.log('[Main] Database closed cleanly on quit');
+  } catch (e) {
+    console.warn('[Main] Database close on quit failed (WAL will be replayed on next open):', e.message);
   }
 });
+
+if (gotSingleInstanceLock) {
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+      app.quit();
+    }
+  });
+}
