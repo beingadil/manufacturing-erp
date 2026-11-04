@@ -1,4 +1,4 @@
-import { Boxes, Package, Pencil, Plus, Trash2 } from "lucide-react";
+import { Boxes, FileText, Layers, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import React, { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
@@ -6,7 +6,12 @@ import { DeleteConfirmationModal } from "../components/DeleteConfirmationModal";
 import { QuickAddMaterial } from "../components/QuickAddModals";
 import { SearchableSelect } from "../components/SearchableSelect";
 import { KpiCard } from '../components/ui/KpiCard';
-import { PageModal } from "../components/ui/PageModal";
+import { FormModal } from '../components/form/FormModal';
+import { FormSection } from '../components/form/FormSection';
+import { FormGrid } from '../components/form/FormGrid';
+import { FormField } from '../components/form/FormField';
+import { FormFooter } from '../components/form/FormFooter';
+import { formInputClass } from '../components/form/formStyles';
 import { formatCurrency, formatNumber } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
 import type { ProductComponent, ProductUsageType } from "../types/erp";
@@ -16,107 +21,97 @@ export function FinishedGoods() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAddMaterialOpen, setIsAddMaterialOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
-  const [name, setName] = useState("");
-  // 'simple' = made from one material (sold from its own finished stock).
-  // 'assembled' = made from several materials; each sale consumes them all.
-  const [usageType, setUsageType] = useState<ProductUsageType>('simple');
+  const [formData, setFormData] = useState<{
+    name: string;
+    sku: string;
+    sellingPrice: string;
+    usageType: ProductUsageType;
+    materialId: string;
+    description: string;
+  }>({
+    name: '',
+    sku: '',
+    sellingPrice: '',
+    usageType: 'simple',
+    materialId: '',
+    description: '',
+  });
   const [components, setComponents] = useState<ProductComponent[]>([]);
-  const [materialId, setMaterialId] = useState("");
-  const [sellingPrice, setSellingPrice] = useState("");
-  const [sku, setSku] = useState("");
-  const [description, setDescription] = useState("");
-  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; id: string; no: string }>({ isOpen: false, id: "", no: "" });
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; id: string; no: string }>({ isOpen: false, id: '', no: '' });
+
+  const { name, sku, sellingPrice, usageType, materialId, description } = formData;
 
   const openEditModal = (product: any) => {
     setEditingProduct(product);
-    setName(product.name);
-    // Pre-existing products have no usageType; they were always single-material.
-    setUsageType(product.usageType === 'assembled' ? 'assembled' : 'simple');
+    setFormData({
+      name: product.name,
+      sku: product.sku || '',
+      sellingPrice: product.sellingPrice != null ? String(product.sellingPrice) : '',
+      usageType: product.usageType === 'assembled' ? 'assembled' : 'simple',
+      materialId: product.materialId || '',
+      description: product.description || '',
+    });
     setComponents((product.components ?? []).map((c: ProductComponent) => ({ ...c })));
-    setMaterialId(product.materialId || "");
-    setSellingPrice(product.sellingPrice != null ? String(product.sellingPrice) : "");
-    setSku(product.sku || "");
-    setDescription(product.description || "");
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingProduct(null);
-    setName("");
-    setUsageType('simple');
+    setFormData({
+      name: '',
+      sku: '',
+      sellingPrice: '',
+      usageType: 'simple',
+      materialId: '',
+      description: '',
+    });
     setComponents([]);
-    setMaterialId("");
-    setSellingPrice("");
-    setSku("");
-    setDescription("");
   };
 
   // Category is inherited from the linked material — never entered separately.
   const linkedMaterial = materials.find(m => m.id === materialId);
-  const categoryId = linkedMaterial?.categoryId || "";
+  const categoryId = linkedMaterial?.categoryId || '';
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !sellingPrice) return;
+    const isAssembled = usageType === 'assembled';
     if (isAssembled) {
       if (components.length === 0) return toast.error('Pick at least one material this product is made from.');
     } else if (!materialId) {
       return;
     }
 
-    try {
-      addProduct({
-        name,
-        // An assembled product holds no stock of its own, so it must not also
-        // claim a single material — clearing it keeps the two models exclusive.
-        materialId: isAssembled ? undefined : materialId,
-        usageType: isAssembled ? 'assembled' : 'simple',
-        components: isAssembled ? components : undefined,
-        categoryId,
-        sellingPrice: parseFloat(sellingPrice),
-        sku: sku.trim() || undefined,
-        description
-      });
-    } catch (error: any) {
-      return toast.error(error.message || 'Failed to create product');
-    }
-
-    toast.success('Product created successfully');
-    closeModal();
-  };
-
-  const handleEdit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingProduct || !name || !sellingPrice) return;
-    if (isAssembled) {
-      if (components.length === 0) return toast.error('Pick at least one material this product is made from.');
-    } else if (!materialId) {
-      return;
-    }
+    const payload = {
+      name: name.trim(),
+      materialId: isAssembled ? undefined : materialId,
+      usageType: (isAssembled ? 'assembled' : 'simple') as ProductUsageType,
+      components: isAssembled ? components : undefined,
+      categoryId,
+      sellingPrice: parseFloat(sellingPrice),
+      sku: sku.trim() || undefined,
+      description,
+    };
 
     try {
-      updateModuleItem('products', editingProduct.id, {
-        name,
-        materialId: isAssembled ? undefined : materialId,
-        usageType: isAssembled ? 'assembled' : 'simple',
-        components: isAssembled ? components : undefined,
-        categoryId,
-        sellingPrice: parseFloat(sellingPrice),
-        sku: sku.trim() || undefined,
-        description
-      });
-      toast.success('Product updated successfully');
+      if (editingProduct) {
+        updateModuleItem('products', editingProduct.id, payload);
+        toast.success('Product updated successfully');
+      } else {
+        addProduct(payload);
+        toast.success('Product created successfully');
+      }
       closeModal();
     } catch (error: any) {
-      toast.error(error.message || 'Failed to update product');
+      return toast.error(error.message || 'Failed to save product');
     }
   };
 
   const handleDelete = () => {
     const saleCount = sales.filter(s => s.productId === deleteModal.id).length;
     if (saleCount > 0) {
-      toast.error(`Cannot delete — this product is referenced by ${saleCount} sale record(s). Deactivate it instead if it is no longer sold.`);
+      toast.error('Cannot delete — this product is referenced by ${saleCount} sale record(s). Deactivate it instead if it is no longer sold.');
       setDeleteModal({ isOpen: false, id: '', no: '' });
       return;
     }
@@ -125,14 +120,7 @@ export function FinishedGoods() {
     setDeleteModal({ isOpen: false, id: '', no: '' });
   };
 
-  // Only materials the shop has marked as parts can go into a product. Anything
-  // marked sellable is linked 1:1 instead, so a product can never quietly eat
-  // another product's own stock.
   const componentMaterials = materials.filter(m => m.usageType === 'component' && m.status !== 'Inactive');
-
-  // The mirror image: a "One material" product must not be linked to a part,
-  // because that would sell the part on its own -- the exact thing the part
-  // toggle exists to prevent.
   const sellableMaterials = materials.filter(m => m.usageType !== 'component' && m.status !== 'Inactive');
 
   const addComponent = (materialId: string) => {
@@ -188,8 +176,6 @@ export function FinishedGoods() {
     { key: "sellingPrice", label: "Selling Price (PKR)", align: "right", sortable: true, render: (item) => <span className="font-medium">{formatCurrency(item.sellingPrice)}</span> },
     { key: "availableStock", label: "Available Stock (PCS)", align: "right", sortable: true,
       render: (item) => {
-        // An assembled product holds no stock of its own — it is made from the
-        // stock of its components, so a single number here would be a fiction.
         if (item.usageType === 'assembled' && (item.components?.length ?? 0) > 0) {
           return <span className="text-xs text-muted-foreground">Made on sale</span>;
         }
@@ -282,146 +268,205 @@ export function FinishedGoods() {
         description="Are you sure you want to permanently delete this product? This cannot be undone."
       />
 
-      <PageModal isOpen={isModalOpen && !isAddMaterialOpen} onClose={closeModal} title={editingProduct ? 'Edit Product' : 'Add Finished Product'}>
-        <form onSubmit={editingProduct ? handleEdit : handleCreate} className="space-y-4">
-          <div className="space-y-1">
-            <label htmlFor="product-name" className="text-sm font-medium text-foreground">Product Name</label>
-            <input id="product-name" name="product-name" type="text" required placeholder="Product Name" value={name} onChange={e => setName(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" />
-          </div>
+      <FormModal
+        isOpen={isModalOpen && !isAddMaterialOpen}
+        onClose={closeModal}
+        title={editingProduct ? 'Edit Product' : 'Add Finished Product'}
+        description="Manage final products linked to raw materials."
+        icon={editingProduct ? <Pencil /> : <Package />}
+        size="lg"
+        accent="from-sky-500 to-blue-600"
+        footer={
+          <FormFooter
+            onCancel={closeModal}
+            submitLabel={editingProduct ? 'Save Changes' : 'Save Product'}
+          />
+        }
+      >
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <FormSection icon={<Package />} eyebrow="Product Identity" first>
+            <FormGrid cols={2}>
+              <FormField id="product-name" label="Product Name" required className="sm:col-span-2">
+                <input
+                  id="product-name"
+                  name="product-name"
+                  type="text"
+                  required
+                  autoComplete="off"
+                  value={name}
+                  onChange={e => setFormData({ ...formData, name: e.target.value })}
+                  className={formInputClass}
+                  placeholder="Product Name"
+                />
+              </FormField>
+              <FormField id="product-sku" label="SKU (Optional)">
+                <input
+                  id="product-sku"
+                  name="product-sku"
+                  type="text"
+                  spellCheck={false}
+                  autoComplete="off"
+                  value={sku}
+                  onChange={e => setFormData({ ...formData, sku: e.target.value })}
+                  className={formInputClass}
+                  placeholder="SKU (Optional)"
+                />
+              </FormField>
+              <FormField id="product-price" label="Selling Price (PKR)" required>
+                <input
+                  id="product-price"
+                  name="product-price"
+                  type="number"
+                  step="0.01"
+                  required
+                  autoComplete="off"
+                  value={sellingPrice}
+                  onChange={e => setFormData({ ...formData, sellingPrice: e.target.value })}
+                  className={formInputClass}
+                  placeholder="Selling Price (PKR)"
+                />
+              </FormField>
+            </FormGrid>
+          </FormSection>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label htmlFor="product-sku" className="text-sm font-medium text-foreground">SKU (Optional)</label>
-              <input id="product-sku" name="product-sku" type="text" placeholder="SKU (Optional)" spellCheck={false} autoComplete="off" value={sku} onChange={e => setSku(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" />
-            </div>
-            <div className="space-y-1">
-              <label htmlFor="product-price" className="text-sm font-medium text-foreground">Selling Price (PKR)</label>
-              <input id="product-price" name="product-price" type="number" step="0.01" required placeholder="Selling Price (PKR)" value={sellingPrice} onChange={e => setSellingPrice(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" />
-            </div>
-          </div>
-
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-semibold text-foreground">This product is made from…</legend>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {([
-                { v: 'simple', t: 'One material', d: 'Sold straight from that material\u2019s finished stock.' },
-                { v: 'assembled', t: 'Several materials', d: 'A jug = circle + no.4 + handle. Each sale deducts all of them.' },
-              ] as const).map(o => (
-                <button
-                  key={o.v}
-                  type="button"
-                  onClick={() => setUsageType(o.v)}
-                  aria-pressed={usageType === o.v}
-                  className={`rounded-xl border px-4 py-3 text-left transition-colors ${usageType === o.v ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}
-                >
-                  <span className={`block text-sm font-medium ${usageType === o.v ? 'text-primary' : 'text-foreground'}`}>{o.t}</span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">{o.d}</span>
-                </button>
-              ))}
-            </div>
-          </fieldset>
-
-          {isAssembled ? (
-            <div className="space-y-2">
-              <label htmlFor="product-component" className="text-sm font-medium text-foreground">Made from these materials</label>
-              <SearchableSelect
-                options={componentMaterials
-                  .filter(m => !components.some(c => c.materialId === m.id))
-                  .map(m => ({ id: m.id, label: m.name, secondaryLabel: m.code }))}
-                value=""
-                onChange={addComponent}
-                placeholder="Add Material..."
-              />
-
-              {components.length === 0 ? (
-                <p className="rounded-lg border border-border bg-muted/30 px-3 py-3 text-xs text-muted-foreground">
-                  {componentMaterials.length === 0
-                    ? 'No materials are marked as "a part of another product" yet. Set that on the Raw Materials page first.'
-                    : 'Add the materials above. One Jug, for example, might take 1 Circle, 1 No.4 and 1 Handle.'}
-                </p>
-              ) : (
-                <div className="overflow-hidden rounded-xl border border-border">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/50 text-xs text-muted-foreground">
-                      <tr>
-                        <th className="px-3 py-2 text-left font-medium">Material</th>
-                        <th className="px-3 py-2 text-right font-medium">Qty per unit</th>
-                        <th className="px-3 py-2 text-right font-medium" />
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/50">
-                      {components.map(c => {
-                        const m = materials.find(x => x.id === c.materialId);
-                        return (
-                          <tr key={c.materialId}>
-                            <td className="px-3 py-2">
-                              <span className="font-medium text-foreground">{m?.name ?? '(deleted material)'}</span>
-                              {m?.code && <span className="ml-2 font-mono text-xs text-muted-foreground">{m.code}</span>}
-                            </td>
-                            <td className="px-3 py-2 text-right">
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.000001"
-                                aria-label={`Quantity of ${m?.name ?? c.materialId} per product`}
-                                value={c.quantity}
-                                onChange={e => setComponentQty(c.materialId, parseFloat(e.target.value) || 0)}
-                                className="w-24 rounded-lg border border-border bg-background px-2 py-1 text-right text-sm tabular-nums"
-                              />
-                            </td>
-                            <td className="px-3 py-2 text-right">
-                              <button
-                                type="button"
-                                onClick={() => removeComponent(c.materialId)}
-                                aria-label={`Remove ${m?.name ?? c.materialId}`}
-                                className="text-muted-foreground/80 hover:text-destructive"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          ) : (
-          <div>
-            <label className="text-sm font-medium text-foreground">Linked Material</label>
-            <SearchableSelect 
-              options={sellableMaterials.map(m => ({ id: m.id, label: m.name, secondaryLabel: m.code }))}
-              value={materialId}
-              onChange={setMaterialId}
-              placeholder="Select Linked Material..."
-              onAdd={() => setIsAddMaterialOpen(true)}
-              required
-            />
-          </div>
-          )}
-
-          {linkedMaterial && (
-            <div className="rounded-xl bg-muted/40 border border-border px-4 py-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Category (from material)</span>
-                <span className="font-medium text-foreground">{categories.find(c => c.id === linkedMaterial.categoryId)?.name || '—'}</span>
+          <FormSection icon={<Boxes />} eyebrow="Product Type">
+            <fieldset className="space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {([
+                  { v: 'simple', t: 'One material', d: 'Sold straight from that material\u2019s finished stock.' },
+                  { v: 'assembled', t: 'Several materials', d: 'A jug = circle + no.4 + handle. Each sale deducts all of them.' },
+                ] as const).map(o => (
+                  <button
+                    key={o.v}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, usageType: o.v })}
+                    aria-pressed={usageType === o.v}
+                    className={`rounded-xl border px-4 py-3 text-left transition-colors ${usageType === o.v ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}
+                  >
+                    <span className={`block text-sm font-medium ${usageType === o.v ? 'text-primary' : 'text-foreground'}`}>{o.t}</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">{o.d}</span>
+                  </button>
+                ))}
               </div>
-            </div>
-          )}
+            </fieldset>
+          </FormSection>
 
-          <div className="space-y-1">
-            <label htmlFor="product-description" className="text-sm font-medium text-foreground">Description (Optional)</label>
-            <input id="product-description" name="product-description" type="text" placeholder="Description (Optional)" value={description} onChange={e => setDescription(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" />
-          </div>
-          <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">{editingProduct ? 'Save Changes' : 'Save Product'}</button>
+          <FormSection icon={<Layers />} eyebrow="Materials">
+            {isAssembled ? (
+              <div className="space-y-2">
+                <FormField id="product-component" label="Made from these materials">
+                  <SearchableSelect
+                    options={componentMaterials
+                      .filter(m => !components.some(c => c.materialId === m.id))
+                      .map(m => ({ id: m.id, label: m.name, secondaryLabel: m.code }))}
+                    value=""
+                    onChange={addComponent}
+                    placeholder="Add Material..."
+                  />
+                </FormField>
+
+                {components.length === 0 ? (
+                  <p className="rounded-lg border border-border bg-muted/30 px-3 py-3 text-xs text-muted-foreground">
+                    {componentMaterials.length === 0
+                      ? 'No materials are marked as "a part of another product" yet. Set that on the Raw Materials page first.'
+                      : 'Add the materials above. One Jug, for example, might take 1 Circle, 1 No.4 and 1 Handle.'}
+                  </p>
+                ) : (
+                  <div className="overflow-hidden rounded-xl border border-border">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 text-xs text-muted-foreground">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">Material</th>
+                          <th className="px-3 py-2 text-right font-medium">Qty per unit</th>
+                          <th className="px-3 py-2 text-right font-medium" />
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/50">
+                        {components.map(c => {
+                          const m = materials.find(x => x.id === c.materialId);
+                          return (
+                            <tr key={c.materialId}>
+                              <td className="px-3 py-2">
+                                <span className="font-medium text-foreground">{m?.name ?? '(deleted material)'}</span>
+                                {m?.code && <span className="ml-2 font-mono text-xs text-muted-foreground">{m.code}</span>}
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.000001"
+                                  aria-label={`Quantity of ${m?.name ?? c.materialId} per product`}
+                                  value={c.quantity}
+                                  onChange={e => setComponentQty(c.materialId, parseFloat(e.target.value) || 0)}
+                                  className="w-24 rounded-lg border border-border bg-background px-2 py-1 text-right text-sm tabular-nums"
+                                />
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => removeComponent(c.materialId)}
+                                  aria-label={`Remove ${m?.name ?? c.materialId}`}
+                                  className="text-muted-foreground/80 hover:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>
+                <FormField id="product-material" label="Linked Material" required>
+                  <SearchableSelect
+                    options={sellableMaterials.map(m => ({ id: m.id, label: m.name, secondaryLabel: m.code }))}
+                    value={materialId}
+                    onChange={(id: string) => setFormData({ ...formData, materialId: id })}
+                    placeholder="Select Linked Material..."
+                    onAdd={() => setIsAddMaterialOpen(true)}
+                    required
+                  />
+                </FormField>
+              </div>
+            )}
+
+            {linkedMaterial && (
+              <div className="rounded-xl bg-muted/40 border border-border px-4 py-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Category (from material)</span>
+                  <span className="font-medium text-foreground">{categories.find(c => c.id === linkedMaterial.categoryId)?.name || '—'}</span>
+                </div>
+              </div>
+            )}
+          </FormSection>
+
+          <FormSection icon={<FileText />} eyebrow="Details">
+            <FormGrid cols={2}>
+              <FormField id="product-description" label="Description (Optional)" className="sm:col-span-2">
+                <textarea
+                  id="product-description"
+                  name="product-description"
+                  placeholder="Description (Optional)"
+                  value={description}
+                  onChange={e => setFormData({ ...formData, description: e.target.value })}
+                  autoComplete="off"
+                  className={formInputClass}
+                  rows={2}
+                />
+              </FormField>
+            </FormGrid>
+          </FormSection>
         </form>
-      </PageModal>
+      </FormModal>
 
-      <QuickAddMaterial 
-        isOpen={isAddMaterialOpen} 
-        onClose={() => setIsAddMaterialOpen(false)} 
-        onSuccess={(id) => setMaterialId(id)} 
+      <QuickAddMaterial
+        isOpen={isAddMaterialOpen}
+        onClose={() => setIsAddMaterialOpen(false)}
+        onSuccess={(id: string) => setFormData({ ...formData, materialId: id })}
       />
     </div>
   );
