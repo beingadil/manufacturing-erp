@@ -13,6 +13,7 @@ import { WipBoard } from '../components/processing/WipBoard';
 import { WipStageStrip } from '../components/processing/WipStageStrip';
 import { KpiCard } from "../components/ui/KpiCard";
 import { PageModal } from "../components/ui/PageModal";
+import { formInputClass } from "../components/form/formStyles";
 import { VoucherHistoryTab } from "../components/VoucherHistoryTab";
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
 import { generateDispatchSlipPDF, generateProcessorBillPDF } from "../lib/documentGenerators";
@@ -337,7 +338,7 @@ export function JobWork() {
             <select
               value={sendStageFilter}
               onChange={e => setSendStageFilter(e.target.value)}
-              className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+              className={formInputClass}
             >
               <option value="">All stages</option>
               {sortedStages.map(s => <option key={s.id} value={s.id}>{s.name}{s.isFinalStage ? ' (Final)' : ''}</option>)}

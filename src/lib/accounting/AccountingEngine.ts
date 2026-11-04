@@ -12,6 +12,57 @@ export interface VoucherLine {
 }
 
 /**
+ * Total chronological order for ledger rows:
+ *   voucher date asc → voucher sequence number asc → voucher createdAt asc → id.
+ *
+ * Sorting by date alone left same-day entries in reverse-insertion order, so a
+ * ledger's running balance walked BACKWARDS through the day and its closing
+ * balance did not match the chronological stream. Every ledger-like
+ * derivation (General Ledger, party/processor Ledgers, Cash Book and report
+ * lists) shares this one order so entries sort identically everywhere and the
+ * closing balance is exactly the last running balance.
+ *
+ * Voucher numbers like "PV-2026-0007" are sequenced by their trailing digits;
+ * rows without a numeric suffix sort last within their date (then by id) so
+ * the order is still fully deterministic.
+ */
+export interface LedgerComparable {
+  date?: string;
+  voucherNo?: string;
+  createdAt?: string;
+  id?: string;
+}
+
+function voucherSequence(voucherNo?: string): number {
+  if (!voucherNo) return Number.MAX_SAFE_INTEGER;
+  const m = String(voucherNo).match(/(\d+)(?!.*\d)/);
+  return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER - 1;
+}
+
+export function compareLedgerEntries(a: LedgerComparable, b: LedgerComparable): number {
+  const d = (a.date || '').localeCompare(b.date || '');
+  if (d !== 0) return d;
+  const qa = voucherSequence(a.voucherNo);
+  const qb = voucherSequence(b.voucherNo);
+  if (qa !== qb) return qa - qb;
+  const ca = a.createdAt || '';
+  const cb = b.createdAt || '';
+  if (ca !== cb) return ca.localeCompare(cb);
+  return (a.id || '').localeCompare(b.id || '');
+}
+
+/** Convenience for rows already carrying a voucher-like object. */
+export function compareVoucherRows(
+  a: { date?: string; voucher?: Voucher | undefined; id?: string },
+  b: { date?: string; voucher?: Voucher | undefined; id?: string }
+): number {
+  return compareLedgerEntries(
+    { date: a.voucher?.date ?? a.date, voucherNo: a.voucher?.voucherNo, createdAt: a.voucher?.createdAt, id: a.voucher?.id ?? a.id },
+    { date: b.voucher?.date ?? b.date, voucherNo: b.voucher?.voucherNo, createdAt: b.voucher?.createdAt, id: b.voucher?.id ?? b.id }
+  );
+}
+
+/**
  * ONE authoritative double-entry accounting engine (spec §17, §24).
  * Every user transaction resolves to a balanced Voucher + JournalEntries;
  * all reports, ledgers, cash book and party balances derive from here.
@@ -137,7 +188,10 @@ export class AccountingEngine {
       .map(je => ({ je, v: vouchers.find(x => x.id === je.voucherId) }))
       .filter(({ v }) => v && v.status !== 'Cancelled' && v.status !== 'Deleted')
       .filter(({ v }) => (!dateFrom || (v!.date >= dateFrom)) && (!dateTo || (v!.date <= dateTo)))
-      .sort((a, b) => a.v!.date.localeCompare(b.v!.date));
+      .sort((a, b) => compareLedgerEntries(
+        { date: a.v!.date, voucherNo: a.v!.voucherNo, createdAt: a.v!.createdAt, id: a.v!.id },
+        { date: b.v!.date, voucherNo: b.v!.voucherNo, createdAt: b.v!.createdAt, id: b.v!.id }
+      ));
 
     const isDebitNormal = isDebitNormalAccount(account);
     let opening = account.openingBalance || 0;

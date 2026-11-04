@@ -4,6 +4,7 @@ import { useERPStore } from '../store/useERPStore';
 import { AccountType, } from '../types/erp';
 import { SearchableSelect } from './SearchableSelect';
 import { ModalOverlay } from './ui/ModalOverlay';
+import { formInputClass } from '../components/form/formStyles';
 
 interface Props {
   isOpen: boolean;
@@ -125,13 +126,13 @@ export function AddAccountModal({ isOpen, onClose, onSave, editAccountId, quickA
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-muted-foreground mb-1">Account Type</label>
-              <select required value={type} onChange={e => { setType(e.target.value as AccountType); setSubtypeId(''); }} className="w-full rounded-xl border border-border px-4 py-2.5 text-sm focus:border-primary bg-background text-foreground">
+              <select required value={type} onChange={e => { setType(e.target.value as AccountType); setSubtypeId(''); }} className={formInputClass}>
                 {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-muted-foreground mb-1">Sub-Type</label>
-              <select required value={subtypeId} onChange={e => setSubtypeId(e.target.value)} className="w-full rounded-xl border border-border px-4 py-2.5 text-sm focus:border-primary bg-background text-foreground">
+              <select required value={subtypeId} onChange={e => setSubtypeId(e.target.value)} className={formInputClass}>
                 <option value="">Select Subtype...</option>
                 {validSubtypes.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
               </select>
@@ -162,7 +163,7 @@ export function AddAccountModal({ isOpen, onClose, onSave, editAccountId, quickA
             </div>
             <div>
               <label className="block text-sm font-medium text-muted-foreground mb-1">Balance Type</label>
-              <select value={openingBalanceType} onChange={e => setOpeningBalanceType(e.target.value as 'Debit' | 'Credit')} className="w-full rounded-xl border border-border px-4 py-2.5 text-sm focus:border-primary bg-background text-foreground">
+              <select value={openingBalanceType} onChange={e => setOpeningBalanceType(e.target.value as 'Debit' | 'Credit')} className={formInputClass}>
                 <option value="Debit">Debit (Dr)</option>
                 <option value="Credit">Credit (Cr)</option>
               </select>

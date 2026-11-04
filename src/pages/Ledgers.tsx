@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Column, DataTable } from "../components/DataTable";
 import { SearchableSelect } from "../components/SearchableSelect";
-import { AccountingEngine } from "../lib/accounting/AccountingEngine";
+import { AccountingEngine, compareLedgerEntries } from "../lib/accounting/AccountingEngine";
 import { cn, formatCurrency } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
 
@@ -104,7 +104,13 @@ export function Ledgers() {
       })
       // Cancelled vouchers never affect ledgers (spec §14)
       .filter(e => e.voucher?.status === 'Posted')
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      // Chronological order shared with every other ledger view (date →
+      // voucherNo sequence → createdAt → id) so same-day rows keep issuance
+      // order and the running balance is correct.
+      .sort((a, b) => compareLedgerEntries(
+        { date: a.date, voucherNo: a.voucher?.voucherNo, createdAt: a.voucher?.createdAt, id: a.voucher?.id ?? a.id },
+        { date: b.date, voucherNo: b.voucher?.voucherNo, createdAt: b.voucher?.createdAt, id: b.voucher?.id ?? b.id }
+      ));
       
     let runningBalance = activeAccount.openingBalanceType === 'Debit' ? activeAccount.openingBalance : -activeAccount.openingBalance;
     if (activeAccount.type === 'Liabilities' || activeAccount.type === 'Equity' || activeAccount.type === 'Revenue' || activeAccount.type === 'Other Income') {

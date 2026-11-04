@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { useAccessStore } from '@/store/useAccessStore';
 import { AuditLog } from '@/types/access';
 import { SearchInput } from '../ui/SearchInput';
+import { formInputClass } from '../../components/form/formStyles';
 
 export function AuditLogsTab() {
   const storeLogs = useAccessStore((state) => state.auditLogs);
@@ -95,7 +96,7 @@ export function AuditLogsTab() {
         <select
           value={moduleFilter}
           onChange={(e) => setModuleFilter(e.target.value)}
-          className="h-10 px-3 rounded-md border border-input bg-background text-sm"
+          className={formInputClass}
         >
           <option value="">All Modules</option>
           {modules.map((m) => (

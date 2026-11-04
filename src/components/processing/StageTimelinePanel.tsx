@@ -5,6 +5,7 @@ import { getSortedStages } from '../../lib/processing/stageProgress';
 import { formatCurrency, formatDate, formatNumber } from '../../lib/utils';
 import type { Batch, ProcessingReceipt, ProcessingSend, ProcessingStage, Processor, RawMaterial } from '../../types/erp';
 import { StageProgressStepper } from './StageProgressStepper';
+import { formInputClass } from '../../components/form/formStyles';
 
 interface StageTimelinePanelProps {
   batches: Batch[];
@@ -75,7 +76,7 @@ export function StageTimelinePanel({
           id="timeline-batch"
           value={selectedBatchId}
           onChange={e => onSelectBatch(e.target.value)}
-          className="w-full sm:max-w-md rounded-xl border border-border bg-background p-3 text-sm"
+          className={formInputClass}
         >
           <option value="">Select a batch…</option>
           {(batches || []).map(b => {

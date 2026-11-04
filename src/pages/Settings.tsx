@@ -1,6 +1,6 @@
 import {
   AlertCircle,Bell,Bot, CheckCircle2, ChevronDown, ChevronRight, 
-  Database, DownloadCloud,ExternalLink, Hash, Image as ImageIcon, Info, Monitor, Palette, RotateCw, 
+  Database, DownloadCloud,ExternalLink, Hash, Image as ImageIcon, Info, Layout, Monitor, Palette, RotateCw, 
   Save, Settings as SettingsIcon,
   Sparkles, Trash2,
   User, 
@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { AccessManagementPanel } from "@/components/access/AccessManagementPanel";
 import { SystemMaintenancePanel } from "@/components/maintenance/SystemMaintenancePanel";
 import { AiAssistantTab } from "@/components/settings/AiAssistantTab";
+import { CompanyPrintTab } from "@/components/settings/CompanyPrintTab";
 import { SeedChartOfAccountsButton } from "@/components/settings/SeedChartOfAccountsButton";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
@@ -44,6 +45,7 @@ export function Settings() {
     { id: 'maintenance', label: 'System Maintenance', icon: Wrench },
     { id: 'advanced', label: 'Advanced Features', icon: Monitor },
     { id: 'voucher', label: 'Voucher Numbering', icon: Hash },
+    { id: 'print', label: 'Print & PDF', icon: Layout },
     { id: 'ai', label: 'AI Assistant', icon: Bot },
     { id: 'about', label: 'About & Updates', icon: Info },
   ];
@@ -97,6 +99,7 @@ export function Settings() {
           <TabsContent value="maintenance" className="mt-0"><SystemMaintenancePanel /></TabsContent>
           <TabsContent value="advanced" className="mt-0"><AdvancedTab /></TabsContent>
           <TabsContent value="voucher" className="mt-0"><VoucherNumberingTab onSave={handleSave} showSavedToast={showSavedToast} /></TabsContent>
+          <TabsContent value="print" className="mt-0"><CompanyPrintTab /></TabsContent>
           <TabsContent value="ai" className="mt-0"><AiAssistantTab showSavedToast={false} /></TabsContent>
           <TabsContent value="about" className="mt-0"><AboutUpdatesTab /></TabsContent>
         </div>

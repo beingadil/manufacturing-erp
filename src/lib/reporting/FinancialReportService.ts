@@ -1,6 +1,6 @@
 import { useERPStore } from '../../store/useERPStore';
 import type { Account } from '../../types/erp';
-import { AccountingEngine } from '../accounting/AccountingEngine';
+import { AccountingEngine, compareLedgerEntries } from '../accounting/AccountingEngine';
 import { InventoryCalculationService } from '../business/InventoryCalculationService';
 import { ReportEngine } from './ReportEngine';
 
@@ -68,6 +68,7 @@ export class FinancialReportService {
         voucherId: voucher?.id || '',
         date: voucher?.date || '',
         voucherNo: voucher?.voucherNo || '',
+        createdAt: voucher?.createdAt,
         accountCode: account?.code || '',
         accountName: account?.name || '',
         partyName,
@@ -78,7 +79,9 @@ export class FinancialReportService {
     });
 
     const filteredEntries = ReportEngine.filterByDateRange(mappedEntries, 'date', dateRange);
-    return ReportEngine.search(filteredEntries, searchQuery, ['accountName', 'voucherNo', 'partyName', 'description']);
+    // Chronological order shared with every other ledger view.
+    const ordered = [...filteredEntries].sort(compareLedgerEntries);
+    return ReportEngine.search(ordered, searchQuery, ['accountName', 'voucherNo', 'partyName', 'description']);
   }
 
 

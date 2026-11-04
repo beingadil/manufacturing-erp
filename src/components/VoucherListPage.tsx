@@ -13,6 +13,7 @@ import { SearchInput } from './ui/SearchInput';
 import { VoucherDetailModal } from './VoucherDetailModal';
 import { VoucherEditorModal, VoucherPageKind } from './VoucherEditorModal';
 import { ACCENT_BAR, ACCENT_BTN, ACCENT_HEAD, ACCENT_SOFT, KIND_ICON } from './voucherAccents';
+import { formInputClass } from './form/formStyles';
 
 interface VoucherListPageProps {
   kind: VoucherPageKind;
@@ -173,7 +174,7 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
         <select
           value={accountFilter}
           onChange={e => setAccountFilter(e.target.value)}
-          className="w-56 px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+          className={formInputClass}
           title="Filter by account"
         >
           <option value="all">All Accounts</option>

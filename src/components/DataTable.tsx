@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import React, { memo, useEffect, useMemo, useState } from "react";
 import { cn } from "../lib/utils";
+import { formInputClass } from "./form/formStyles";
 
 export interface Column<T> {
   key: string;
@@ -183,7 +184,7 @@ function DataTableInner<T extends Record<string, any>>({
               aria-label="Rows per page"
               value={itemsPerPage}
               onChange={(e) => setItemsPerPage(Number(e.target.value))}
-              className="h-10 px-3 bg-muted/40 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className={formInputClass}
             >
               {itemsPerPageOptions.map(opt => (
                 <option key={opt} value={opt}>{opt}</option>

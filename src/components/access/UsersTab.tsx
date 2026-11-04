@@ -11,6 +11,7 @@ import { SearchInput } from '../ui/SearchInput';
 import { ConfirmDialog } from './ConfirmDialog';
 import { PasswordDialog, PasswordFormValues } from './PasswordDialog';
 import { UserFormDialog, UserFormValues } from './UserFormDialog';
+import { formInputClass } from '../../components/form/formStyles';
 
 const statusVariant: Record<string, 'default' | 'secondary' | 'destructive'> = {
   active: 'default',
@@ -275,7 +276,7 @@ export function UsersTab() {
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
-            className="h-10 px-3 rounded-md border border-input bg-background text-sm"
+            className={formInputClass}
           >
             <option value="">All Roles</option>
             {roles.map((r) => (

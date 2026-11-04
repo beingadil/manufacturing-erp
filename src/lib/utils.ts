@@ -5,11 +5,32 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatCurrency(amount: number) {
+export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("en-PK", {
     style: "currency",
     currency: "PKR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(amount);
+}
+
+export function formatDocDate(date: string | Date | undefined | null): string {
+  if (!date) return '—';
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(d.getTime())) return '—';
+  const parts = new Intl.DateTimeFormat('en-PK', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).formatToParts(d);
+  const map: Record<string, string> = {};
+  for (const p of parts) map[p.type] = p.value;
+  return `${map.day}-${map.month}-${map.year}`;
+}
+
+export function formatDocNumber(num: number | undefined | null): string {
+  if (num == null) return '—';
+  return num.toLocaleString('en-PK');
 }
 
 

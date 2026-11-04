@@ -1048,7 +1048,7 @@ export const useERPStore = create<ERPState>()(
                 } : m
               );
               updatedBatches = InventoryCalculationService.attributeReceiptFIFO(
-                data.materialId, data.pcsReceived, updatedBatches, send.batchId || undefined
+                data.materialId, data.pcsReceived, updatedBatches, send.batchId || undefined, billAmount
               );
             } else {
               // LAW 2 transfer: AT_stage → AVAILABLE(source = this stage).

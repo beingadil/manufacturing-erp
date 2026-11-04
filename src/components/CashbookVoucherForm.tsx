@@ -12,6 +12,7 @@ import { useERPStore } from '../store/useERPStore';
 import type { SourceModule, VoucherType } from '../types/erp';
 import { SearchableSelect } from './SearchableSelect';
 import { DatePicker } from './ui/date-picker';
+import { formInputClass } from '../components/form/formStyles';
 
 /**
  * Purpose-specific voucher form (spec §4–8).
@@ -659,7 +660,7 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
                       <select
                         value={row.type}
                         onChange={e => updateCounterparty(row.uid, { type: e.target.value as RowType, counterpartyId: '', parentAccountId: undefined })}
-                        className="w-full rounded-lg border border-border bg-background px-2.5 py-2 text-sm text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary"
+                        className={formInputClass}
                       >
                         {ROW_TYPES[direction].map(t => (
                           <option key={t.value} value={t.value}>{t.label}</option>

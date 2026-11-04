@@ -69,7 +69,7 @@ export interface Batch {
   materialId: string;
   date: string;
   weight: number;
-  weightUnit: "KGs" | "Tons";
+  weightUnit: "KG" | "PCS";
   ratePerUnit: number;
   weightPerPiece: number;
   initialPcs: number;
@@ -78,8 +78,10 @@ export interface Batch {
   status: "Active" | "Depleted";
   /** Pcs of this batch physically at a processor (WIP) — valued at this batch's purchase cost. */
   atProcessorPcs?: number;
-  /** Pcs of this batch finished/processed and on hand (unsold) — valued at this batch's purchase cost. */
+  /** Pcs of this batch finished/processed and on hand (unsold) — valued at this batch's total cost (purchase + processing charges). */
   processedPcs?: number;
+  /** Accumulated processing charges allocated to this batch (processor bills for pcs that came back from processing). */
+  processingCost?: number;
   /** The processing stage this batch is currently at (informational; derived from movements). */
   currentStageId?: string;
   /**
@@ -199,7 +201,7 @@ export interface Purchase {
   materialId: string;
   date: string;
   weight: number;
-  weightUnit: "KGs" | "Tons";
+  weightUnit: "KG" | "PCS";
   ratePerUnit: number;
   weightPerPiece: number;
   calculatedPcs: number;

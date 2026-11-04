@@ -1,11 +1,16 @@
-import { CircleDollarSign, Pencil, Plus, Users, Wallet } from "lucide-react";
+import { CircleDollarSign, MapPin, Pencil, Plus, Users, Wallet } from "lucide-react";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
 import { PartyLedgerModal } from "../components/PartyLedgerModal";
 import { KpiCard } from '../components/ui/KpiCard';
-import { PageModal } from "../components/ui/PageModal";
+import { FormModal } from "../components/form/FormModal";
+import { FormField } from "../components/form/FormField";
+import { FormSection } from "../components/form/FormSection";
+import { FormGrid } from "../components/form/FormGrid";
+import { FormFooter } from "../components/form/FormFooter";
+import { formInputClass } from "../components/form/formStyles";
 import { cn, formatCurrency, formatNumber } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
 
@@ -134,7 +139,7 @@ export function Customers() {
           </div>
           <div>
             <h2 className="text-2xl font-bold tracking-tight text-foreground">Customers</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">Manage buyers and accounts receivable.</p>
+            <p className="text-sm text-muted-foreground mt-0.5">Manage customers and what they owe you.</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -184,41 +189,106 @@ export function Customers() {
         defaultSortKey="name"
       />
 
-      <PageModal isOpen={isModalOpen} onClose={closeModal} title={editingCustomer ? 'Edit Customer' : 'Add Customer'}>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1">
-            <label htmlFor="customer-name" className="text-sm font-medium text-foreground">Customer Name</label>
-            <input id="customer-name" name="customer-name" type="text" required value={name} onChange={e => setName(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Customer Name *" />
-          </div>
-          <div className="space-y-1">
-            <label htmlFor="customer-contact" className="text-sm font-medium text-foreground">Contact Person</label>
-            <input id="customer-contact" name="customer-contact" type="text" value={contactPerson} onChange={e => setContactPerson(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Contact Person" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label htmlFor="customer-phone" className="text-sm font-medium text-foreground">Phone</label>
-              <input id="customer-phone" name="customer-phone" type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={e => setPhone(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Phone" />
-            </div>
-            <div className="space-y-1">
-              <label htmlFor="customer-ntn" className="text-sm font-medium text-foreground">NTN Number</label>
-              <input id="customer-ntn" name="customer-ntn" type="text" spellCheck={false} autoComplete="off" value={ntn} onChange={e => setNtn(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="NTN Number" />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <label htmlFor="customer-email" className="text-sm font-medium text-foreground">Email</label>
-            <input id="customer-email" name="customer-email" type="email" autoComplete="email" spellCheck={false} value={email} onChange={e => setEmail(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Email" />
-          </div>
-          <div className="space-y-1">
-            <label htmlFor="customer-address" className="text-sm font-medium text-foreground">Address</label>
-            <textarea id="customer-address" name="customer-address" value={address} onChange={e => setAddress(e.target.value)} rows={2} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Address" />
-          </div>
-          <div className="space-y-1">
-            <label htmlFor="customer-notes" className="text-sm font-medium text-foreground">Notes</label>
-            <textarea id="customer-notes" name="customer-notes" value={notes} onChange={e => setNotes(e.target.value)} rows={2} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Notes" />
-          </div>
-          <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">{editingCustomer ? 'Save Changes' : 'Add Customer'}</button>
+      <FormModal
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        title={editingCustomer ? 'Edit Customer' : 'Add Customer'}
+        description="Someone you sell to, with contact details, NTN, address and notes."
+        icon={editingCustomer ? <Pencil /> : <Users />}
+        size="md"
+        footer={<FormFooter onCancel={closeModal} submitLabel={editingCustomer ? 'Save Changes' : 'Add Customer'} />}>
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <FormSection icon={<Users />} eyebrow="Details" first>
+            <FormGrid cols={2}>
+              <FormField id="customer-name" label="Customer Name" required className="col-span-2">
+                <input
+                  id="customer-name"
+                  name="customer-name"
+                  type="text"
+                  required
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  autoComplete="off"
+                  className={formInputClass}
+                />
+              </FormField>
+              <FormField id="customer-contact" label="Contact Person">
+                <input
+                  id="customer-contact"
+                  name="customer-contact"
+                  type="text"
+                  value={contactPerson}
+                  onChange={e => setContactPerson(e.target.value)}
+                  autoComplete="off"
+                  className={formInputClass}
+                />
+              </FormField>
+              <FormField id="customer-phone" label="Phone">
+                <input
+                  id="customer-phone"
+                  name="customer-phone"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  className={formInputClass}
+                />
+              </FormField>
+              <FormField id="customer-email" label="Email">
+                <input
+                  id="customer-email"
+                  name="customer-email"
+                  type="email"
+                  autoComplete="email"
+                  spellCheck={false}
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  className={formInputClass}
+                />
+              </FormField>
+              <FormField id="customer-ntn" label="NTN Number">
+                <input
+                  id="customer-ntn"
+                  name="customer-ntn"
+                  type="text"
+                  spellCheck={false}
+                  autoComplete="off"
+                  value={ntn}
+                  onChange={e => setNtn(e.target.value)}
+                  className={formInputClass}
+                />
+              </FormField>
+            </FormGrid>
+          </FormSection>
+          <FormSection icon={<MapPin />} eyebrow="Address & notes">
+            <FormGrid cols={2}>
+              <FormField id="customer-address" label="Address" className="col-span-2">
+                <textarea
+                  id="customer-address"
+                  name="customer-address"
+                  value={address}
+                  onChange={e => setAddress(e.target.value)}
+                  rows={2}
+                  autoComplete="off"
+                  className={formInputClass}
+                />
+              </FormField>
+              <FormField id="customer-notes" label="Notes" className="col-span-2">
+                <textarea
+                  id="customer-notes"
+                  name="customer-notes"
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  rows={2}
+                  autoComplete="off"
+                  className={formInputClass}
+                />
+              </FormField>
+            </FormGrid>
+          </FormSection>
         </form>
-      </PageModal>
+      </FormModal>
 
       {ledgerParty && <PartyLedgerModal party={ledgerParty} onClose={() => setLedgerParty(null)} />}
     </div>

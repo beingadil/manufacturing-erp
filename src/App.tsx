@@ -28,6 +28,7 @@ import { Login } from './pages/Login';
 import { MaterialDetail } from './pages/MaterialDetail';
 import { MonitorScreen } from './pages/MonitorScreen';
 import { Processors } from './pages/Processors';
+import PurchaseFormPage from './pages/PurchaseFormPage';
 import { Purchases } from './pages/Purchases';
 import { RawMaterials } from './pages/RawMaterials';
 import { Reports } from './pages/Reports';
@@ -130,6 +131,8 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="job-work" element={<Navigate to="/processing" replace />} />
           <Route path="purchases" element={<RouteGuard requireModule="Purchases" requireAction="View"><Purchases /></RouteGuard>} />
+          <Route path="purchases/new" element={<RouteGuard requireModule="Purchases" requireAction="View"><PurchaseFormPage /></RouteGuard>} />
+          <Route path="purchases/edit/:id" element={<RouteGuard requireModule="Purchases" requireAction="View"><PurchaseFormPage /></RouteGuard>} />
           <Route path="processing" element={<RouteGuard requireModule="Processing" requireAction="View"><JobWork /></RouteGuard>} />
           <Route path="sales" element={<RouteGuard requireModule="Sales" requireAction="View"><Sales /></RouteGuard>} />
           <Route path="categories" element={<RouteGuard requireModule="Master Data" requireAction="View"><Categories /></RouteGuard>} />

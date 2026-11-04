@@ -9,6 +9,7 @@ import { SearchableSelect } from '../SearchableSelect';
 import { DatePicker } from '../ui/date-picker';
 import { PageModal } from '../ui/PageModal';
 import { StageProgressStepper } from './StageProgressStepper';
+import { formInputClass } from '../../components/form/formStyles';
 
 interface SendToProcessorFormProps {
   isOpen: boolean;
@@ -437,7 +438,7 @@ export function SendToProcessorForm({
           <select
             value={batchId}
             onChange={e => { setBatchId(e.target.value); setStageId(''); setError(null); }}
-            className="w-full rounded-xl border border-border bg-background p-3 text-sm"
+            className={formInputClass}
             disabled={!materialId}
           >
             <option value="">Auto (oldest batch first)</option>
@@ -462,7 +463,7 @@ export function SendToProcessorForm({
           <select
             value={editSendId ? stageId : (effectiveStageId || '')}
             onChange={e => { setStageId(e.target.value); setBatchId(''); setError(null); }}
-            className="w-full rounded-xl border border-border bg-background p-3 text-sm"
+            className={formInputClass}
             disabled={!materialId || (isSingleStage && !!fixedStage && !editSendId)}
           >
             {!materialId && <option value="">Select material first</option>}

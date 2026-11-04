@@ -94,9 +94,9 @@ export class InventoryCalculationService {
     return totalPcs > 0 ? totalValue / totalPcs : 0;
   }
 
-  /** Actual purchase cost per piece of one batch (amount ÷ initial pcs). */
+  /** Actual cost per piece of one batch — (purchase amount + accumulated processing charges) ÷ initial pcs. */
   static getBatchCostPerPiece(batch: Batch): number {
-    return batch && batch.initialPcs > 0 ? batch.amount / batch.initialPcs : 0;
+    return batch && batch.initialPcs > 0 ? (batch.amount + (batch.processingCost || 0)) / batch.initialPcs : 0;
   }
 
   /**
@@ -351,7 +351,8 @@ export class InventoryCalculationService {
     materialId: string,
     pcsReceived: number,
     batches: Batch[],
-    preferredBatchId?: string
+    preferredBatchId?: string,
+    billAmount?: number
   ): Batch[] {
     let remaining = pcsReceived;
     const candidates = batches
@@ -371,7 +372,9 @@ export class InventoryCalculationService {
     return batches.map(b => {
       const take = takeByBatch.get(b.id) || 0;
       if (take <= 0) return b;
-      return { ...b, atProcessorPcs: Math.max(0, (b.atProcessorPcs || 0) - take), processedPcs: (b.processedPcs || 0) + take };
+      // Allocate processing charges proportionally to the pcs each batch contributed.
+      const allocatedCost = billAmount ? (take / pcsReceived) * billAmount : 0;
+      return { ...b, atProcessorPcs: Math.max(0, (b.atProcessorPcs || 0) - take), processedPcs: (b.processedPcs || 0) + take, processingCost: (b.processingCost || 0) + allocatedCost };
     });
   }
 
@@ -712,6 +715,7 @@ export class InventoryCalculationService {
           remainingPcs: 0,
           atProcessorPcs: 0,
           processedPcs: b.initialPcs > 0 ? b.initialPcs : (b.processedPcs || 0),
+          processingCost: 0,
           stageAvailableBySource: {},
           currentStageId: undefined,
         };
@@ -721,6 +725,7 @@ export class InventoryCalculationService {
         remainingPcs: b.initialPcs > 0 ? b.initialPcs : b.remainingPcs,
         atProcessorPcs: 0,
         processedPcs: 0,
+        processingCost: 0,
         stageAvailableBySource: {},
         currentStageId: undefined,
       };
@@ -810,7 +815,7 @@ export class InventoryCalculationService {
         const { r, send } = ev;
         const stageId = r.stageId ?? send?.stageId;
         if (this.receiptProducesFinished(stageId, stages, pathMaterial)) {
-          trail = this.attributeReceiptFIFO(materialId, r.pcsReceived, trail, send?.batchId || undefined);
+          trail = this.attributeReceiptFIFO(materialId, r.pcsReceived, trail, send?.batchId || undefined, r.billAmount);
         } else {
           trail = this.moveProcessorToAvailable(materialId, stageId || 'legacy', r.pcsReceived, trail, send?.batchId || undefined).batches;
         }

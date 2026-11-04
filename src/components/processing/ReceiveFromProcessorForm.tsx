@@ -7,6 +7,7 @@ import { QuickAddProcessor } from '../QuickAddModals';
 import { SearchableSelect } from '../SearchableSelect';
 import { DatePicker } from '../ui/date-picker';
 import { PageModal } from '../ui/PageModal';
+import { formInputClass } from '../../components/form/formStyles';
 
 interface ReceiveFromProcessorFormProps {
   isOpen: boolean;
@@ -140,7 +141,7 @@ export function ReceiveFromProcessorForm({
             required
             value={sendId}
             onChange={e => { setSendId(e.target.value); setError(null); }}
-            className="w-full rounded-xl border border-border bg-background p-3 text-sm"
+            className={formInputClass}
             disabled={!processorId}
           >
             <option value="">Select Pending Send Entry</option>

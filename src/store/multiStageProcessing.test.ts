@@ -256,9 +256,10 @@ describe('multi-stage processing engine', () => {
     expect(material().processedStockPcs).toBe(64);
     // Pipeline semantics: the other 1936 pcs wait mid-chain — still counted.
     expect(material().atProcessorPcs).toBe(2000 - 64);
-    expect(stages.finished.value).toBe(64 * 150); // 9,600
-    expect(stages.atProcessor.value).toBe((2000 - 64) * 150); // 290,400
-    expect(inventoryValue()).toBe(300000); // still exactly 300,000
+    // Cost per piece = (₹300,000 purchase + ₹1,600 Spot Machine processing) / 2000 pcs = ₹150.8
+    expect(stages.finished.value).toBeCloseTo(64 * 150.8, 0); // 9,651.2
+    expect(stages.atProcessor.value).toBeCloseTo((2000 - 64) * 150.8, 0); // 291,948.8
+    expect(inventoryValue()).toBeCloseTo(2000 * 150.8, 0); // 301,600
   });
 
   // ── TEST F — Partial receipt ──────────────────────────────────────────────
@@ -413,11 +414,12 @@ describe('multi-stage processing engine', () => {
     const spotSend = sendToStage('Spot Machine', 'Spot Machine Man', 100, 60, '2026-08-10');
     receiveFromStage(spotSend, 'Spot Machine', 'Spot Machine Man', 100, '2026-08-11');
 
-    // 100 pcs finished, 1900 raw on hand, 0 WIP — total value still 300,000
+    // 100 pcs finished, 1900 raw on hand, 0 WIP — total value includes processing charges
     expect(material().processedStockPcs).toBe(100);
     expect(material().stockPcs).toBe(1900);
     expect(material().atProcessorPcs).toBe(0);
-    expect(inventoryValue()).toBe(300000); // NEVER 300,000 × 5
+    // Cost per piece = (₹300,000 purchase + ₹3,000 Spot Machine processing) / 2000 pcs = ₹151.5
+    expect(inventoryValue()).toBeCloseTo(2000 * 151.5, 0); // 303,000
   });
 
   // ── TEST N — Intermediate dispatch WITHOUT a batch (Auto path) ────────────
@@ -569,16 +571,17 @@ describe('multi-stage processing engine', () => {
     const invGroup = bs.assetGroups.find(g => g.label === 'Inventory')!;
     const getRow = (kw: string) => invGroup.rows.find(r => r.name.toLowerCase().includes(kw))?.balance || 0;
 
-    // 1200 pcs raw @ 150 = 180,000; 0 WIP; 800 finished @ 150 = 120,000.
-    expect(getRow('raw material')).toBeCloseTo(180000, 0);
+    // Cost per piece = (₹300,000 purchase + ₹24,000 Spot Machine processing) / 2000 pcs = ₹162
+    // 1200 pcs raw @ 162 = 194,400; 0 WIP; 800 finished @ 162 = 129,600.
+    expect(getRow('raw material')).toBeCloseTo(194400, 0);
     expect(getRow('work in progress')).toBeCloseTo(0, 0);
-    expect(getRow('finished goods')).toBeCloseTo(120000, 0);
+    expect(getRow('finished goods')).toBeCloseTo(129600, 0);
 
     // Group total equals the ledger's posted inventory balance (300,000) — the
-    // statement stays balanced and the ledger remains the accounting truth.
+    // ledger stays at purchase cost; processing charges sit in Processing Expense.
     expect(invGroup.total).toBeCloseTo(300000, 0);
     expect(bs.balanced).toBe(true);
-    expect(inventoryValue()).toBe(300000); // physical stock never double-counted
+    expect(inventoryValue()).toBeCloseTo(324000, 0); // physical stock includes processing charges
   });
 
   // ── TEST R — The partial raw dispatch lock ("1100 sent 1000") ──────────────
@@ -840,7 +843,8 @@ describe('multi-stage processing engine', () => {
     expect(B().atProcessorPcs).toBe(0);
     expect(availTotal(B())).toBe(0);
     expect(batchTotalPcs(B())).toBe(561);
-    expect(inventoryValue()).toBe(561 * 150); // 84,150 = the full purchase cost, still held in finished goods
+    // Cost per piece = (₹84,150 purchase + ₹14,025 Spot Machine processing) / 561 pcs = ₹175
+    expect(inventoryValue()).toBe(98175); // 561 × 175 = full purchase cost + processing charges
   });
 
   // ═══════════════════════════════════════════════════════════════════════

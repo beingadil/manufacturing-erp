@@ -1,19 +1,17 @@
 import { Layers, PackageSearch, Pencil, Plus, Trash2, Wallet } from "lucide-react";
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from 'sonner';
 import { InlineEditInput } from '../components/common/InlineEditInput';
 import { SafeDeleteDialog } from '../components/common/SafeDeleteDialog';
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
-import { SearchableSelect } from "../components/SearchableSelect";
 import { KpiCard } from '../components/ui/KpiCard';
-import { PageModal } from "../components/ui/PageModal";
+import { FormModal } from '../components/form/FormModal';
+import { MaterialForm } from '../components/forms/MaterialForm';
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
-import { findMaterialCodeConflict } from '../lib/business/ProductAssemblyService';
 import { cn, formatCurrency, formatNumber } from "../lib/utils";
 import { MaterialService } from '../services/MaterialService';
 import { useERPStore } from "../store/useERPStore";
-import type { MaterialUsageType, ProcessingPath } from '../types/erp';
 
 export function RawMaterials() {
   const { materials, categories, purchases, processingSends, processingReceipts, batches } = useERPStore();
@@ -90,121 +88,14 @@ export function RawMaterials() {
     }
   };
 
-  const [name, setName] = useState("");
-  // The "No." a person reads out with the name — "Circle 12½ Inch, No. 4 No".
-  // Free text: it is a designation the shop already uses, not a system code.
-  const [code, setCode] = useState("");
-  // Sellable on its own, or a part consumed by a product made of several
-  // materials (a steel dhakkan on a steel jug, a handle).
-  const [usageType, setUsageType] = useState<MaterialUsageType>('sellable');
-  const [categoryId, setCategoryId] = useState("");
-  const [description, setDescription] = useState("");
-  const [status, setStatus] = useState<'Active' | 'Inactive'>("Active");
-  const { processingStages } = useERPStore();
-  const sortedStagesForForm = useMemo(() =>
-    [...(processingStages || [])].sort((a, b) => a.sequence - b.sequence),
-    [processingStages]
-  );
-  const [processingPath, setProcessingPath] = useState<ProcessingPath>('full_chain');
-  const [fixedStageId, setFixedStageId] = useState('');
-  const [allowedStageIds, setAllowedStageIds] = useState<string[]>([]);
-
-  // Category prefill: a category with a defaultProcessingPath seeds the selector.
-  const handleCategoryChange = (id: string) => {
-    setCategoryId(id);
-    const catDefault = categories.find(c => c.id === id)?.defaultProcessingPath;
-    if (catDefault) setProcessingPath(catDefault);
-  };
-
   const openEditModal = (material: any) => {
     setEditingMaterial(material);
-    setName(material.name);
-    setCode(material.code || '');
-    // Older materials have no usageType; they behave exactly as before.
-    setUsageType(material.usageType === 'component' ? 'component' : 'sellable');
-    setCategoryId(material.categoryId);
-    setDescription(material.description || '');
-    setStatus(material.status === 'Inactive' ? 'Inactive' : 'Active');
-    setProcessingPath(material.processingPath ?? 'full_chain');
-    setFixedStageId(material.fixedStageId || '');
-    setAllowedStageIds(material.allowedStageIds || []);
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingMaterial(null);
-    setName("");
-    setCode("");
-    setUsageType('sellable');
-    setCategoryId("");
-    setDescription("");
-    setStatus("Active");
-    setProcessingPath('full_chain');
-    setFixedStageId('');
-    setAllowedStageIds([]);
-  };
-
-  const handleCreate = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim() || !categoryId) return;
-    if (processingPath === 'single_stage' && !fixedStageId) return;
-    if (processingPath === 'custom_stages' && allowedStageIds.length === 0) return;
-
-    const clash = findMaterialCodeConflict(materials, code);
-    if (clash) {
-      toast.error(`No. "${code.trim()}" is already used by "${clash}". Pick a different one.`);
-      return;
-    }
-
-    try {
-      MaterialService.create({
-        name,
-        code: code.trim() || undefined,
-        usageType,
-        categoryId,
-        description,
-        status,
-        processingPath,
-        fixedStageId: processingPath === 'single_stage' ? fixedStageId : undefined,
-        allowedStageIds: processingPath === 'custom_stages' ? allowedStageIds : undefined
-      });
-      toast.success('Material created successfully');
-      closeModal();
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to create material');
-    }
-  };
-
-  const handleEdit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingMaterial || !name.trim() || !categoryId) return;
-    if (processingPath === 'single_stage' && !fixedStageId) return;
-    if (processingPath === 'custom_stages' && allowedStageIds.length === 0) return;
-
-    const clash = findMaterialCodeConflict(materials, code, editingMaterial.id);
-    if (clash) {
-      toast.error(`No. "${code.trim()}" is already used by "${clash}". Pick a different one.`);
-      return;
-    }
-
-    try {
-      MaterialService.update(editingMaterial.id, {
-        name,
-        code: code.trim() || undefined,
-        usageType,
-        categoryId,
-        description,
-        status,
-        processingPath,
-        fixedStageId: processingPath === 'single_stage' ? fixedStageId : undefined,
-        allowedStageIds: processingPath === 'custom_stages' ? allowedStageIds : undefined
-      });
-      toast.success('Material updated successfully');
-      closeModal();
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to update material');
-    }
   };
 
   const getCategoryName = (id: string) => {
@@ -421,131 +312,17 @@ export function RawMaterials() {
         defaultSortKey="name"
       />
 
-      <PageModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingMaterial ? 'Edit Material' : 'Add Material'}>
-        <form onSubmit={editingMaterial ? handleEdit : handleCreate} className="space-y-4">
-          <div className="space-y-2">
-            <label htmlFor="material-name" className="text-sm font-semibold text-foreground">Material Name *</label>
-            <input id="material-name" name="material-name" type="text" required value={name} onChange={e => setName(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors" placeholder="e.g. Circle 12½ Inch" />
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="material-code" className="text-sm font-semibold text-foreground">No.</label>
-            <input id="material-code" name="material-code" type="text" value={code} onChange={e => setCode(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors" placeholder="e.g. 4 No" />
-            <p className="text-xs text-muted-foreground">Shown next to the name everywhere, and searchable.</p>
-          </div>
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-semibold text-foreground">This material is used as…</legend>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {([
-                { v: 'sellable', t: 'A product on its own', d: 'Processing makes it saleable; the Products form links it directly.' },
-                { v: 'component', t: 'A part of another product', d: 'A steel dhakkan on a steel jug, a handle. Never sold on its own.' },
-              ] as const).map(o => (
-                <button
-                  key={o.v}
-                  type="button"
-                  onClick={() => setUsageType(o.v)}
-                  aria-pressed={usageType === o.v}
-                  className={`rounded-xl border px-4 py-3 text-left transition-colors ${usageType === o.v ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}
-                >
-                  <span className={`block text-sm font-medium ${usageType === o.v ? 'text-primary' : 'text-foreground'}`}>{o.t}</span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">{o.d}</span>
-                </button>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Only materials marked as a part can be picked in the Products form.
-            </p>
-          </fieldset>
-          <div className="space-y-2">
-            <label htmlFor="material-category" className="text-sm font-semibold text-foreground">Category *</label>
-            <SearchableSelect
-              options={categories.map(c => ({ id: c.id, label: c.name }))}
-              value={categoryId}
-              onChange={handleCategoryChange}
-              placeholder="Select Category..."
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="material-path" className="text-sm font-semibold text-foreground">Processing Path *</label>
-            <select
-              id="material-path"
-              required
-              value={processingPath}
-              onChange={e => setProcessingPath(e.target.value as ProcessingPath)}
-              className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors bg-card"
-            >
-              <option value="full_chain">Through all processors ({sortedStagesForForm.length || 5} stages)</option>
-              <option value="single_stage">One processor only — becomes final product</option>
-              <option value="custom_stages">Selected processors only — pick stages below</option>
-              <option value="ready_made">Ready-made — no processing, straight to stock</option>
-            </select>
-            <p className="text-xs text-muted-foreground">
-              {processingPath === 'full_chain' && 'Material goes through every processor in sequence before becoming a final product.'}
-              {processingPath === 'single_stage' && 'Material is sent to exactly one processor below; what comes back is the final product.'}
-              {processingPath === 'custom_stages' && 'Tick the processors this material passes through (in chain order). What comes back from the LAST ticked processor is the final product.'}
-              {processingPath === 'ready_made' && 'Purchased already finished (e.g. lids, handles) — enters sellable stock directly, never dispatched.'}
-            </p>
-          </div>
-          {processingPath === 'custom_stages' && (
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-foreground">Selected Processors *</label>
-              <div className="rounded-xl border border-border bg-card p-3 space-y-2">
-                {sortedStagesForForm.map(s => (
-                  <label key={s.id} className="flex items-center gap-3 text-sm cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={allowedStageIds.includes(s.id)}
-                      onChange={(e) => setAllowedStageIds(prev =>
-                        e.target.checked ? [...prev, s.id] : prev.filter(id => id !== s.id)
-                      )}
-                      className="accent-primary"
-                    />
-                    <span className="text-foreground">{s.sequence}. {s.name}{s.isFinalStage ? ' (Final)' : ''}</span>
-                  </label>
-                ))}
-                {sortedStagesForForm.length === 0 && (
-                  <p className="text-xs text-muted-foreground">No processor stages configured yet.</p>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Sends always follow the chain order among the selected processors; the last selected one produces the final product.
-              </p>
-            </div>
-          )}
-          {processingPath === 'single_stage' && (
-            <div className="space-y-2">
-              <label htmlFor="material-fixed-stage" className="text-sm font-semibold text-foreground">The One Processor *</label>
-              <select
-                id="material-fixed-stage"
-                required
-                value={fixedStageId}
-                onChange={e => setFixedStageId(e.target.value)}
-                className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors bg-card"
-              >
-                <option value="">Select the processor stage...</option>
-                {sortedStagesForForm.map(s => (
-                  <option key={s.id} value={s.id}>{s.name}{s.isFinalStage ? ' (Final)' : ''}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div className="space-y-2">
-            <label htmlFor="material-description" className="text-sm font-semibold text-foreground">Description</label>
-            <textarea id="material-description" name="material-description" value={description} onChange={e => setDescription(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors" placeholder="Optional notes" rows={2} />
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="material-status" className="text-sm font-semibold text-foreground">Status</label>
-            <select id="material-status" name="material-status" required value={status} onChange={e => setStatus(e.target.value as 'Active' | 'Inactive')} className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors bg-card">
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
-          </div>
-          <div className="pt-4 flex gap-3">
-            <button type="button" onClick={closeModal} className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground/80 hover:bg-muted/40 transition-colors">Cancel</button>
-            <button type="submit" className="flex-1 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-md">{editingMaterial ? 'Save Changes' : 'Save Material'}</button>
-          </div>
-        </form>
-      </PageModal>
+      {/* onClose now calls closeModal (was setIsModalOpen(false)), so Escape/backdrop also resets form state. */}
+      <FormModal
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        title={editingMaterial ? 'Edit Material' : 'Add Material'}
+        description="Raw material identity, how it's used, and how it moves through processors."
+        icon={editingMaterial ? <Pencil /> : <PackageSearch />}
+        accent="from-emerald-500 to-teal-600"
+        size="lg">
+        <MaterialForm material={editingMaterial} onSaved={closeModal} onCancel={closeModal} />
+      </FormModal>
     </div>
   );
 }

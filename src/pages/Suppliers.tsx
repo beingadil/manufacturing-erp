@@ -1,78 +1,29 @@
 import { CircleDollarSign, Pencil, Plus, Truck, Wallet } from "lucide-react";
-import React, { useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
 import { PartyLedgerModal } from "../components/PartyLedgerModal";
 import { KpiCard } from '../components/ui/KpiCard';
-import { PageModal } from "../components/ui/PageModal";
+import { FormModal } from "../components/form/FormModal";
+import { SupplierForm } from "../components/forms/SupplierForm";
 import { cn, formatCurrency, formatNumber } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
 
 export function Suppliers() {
-  const { suppliers, addSupplier, updateSupplier } = useERPStore();
+  const { suppliers } = useERPStore();
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [ledgerParty, setLedgerParty] = useState<{ id: string; name: string; kind: 'Supplier' } | null>(null);
   const [editingSupplier, setEditingSupplier] = useState<any | null>(null);
-  const [name, setName] = useState("");
-  const [contactPerson, setContactPerson] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
-  const [address, setAddress] = useState("");
-  const [ntn, setNtn] = useState("");
-  const [notes, setNotes] = useState("");
 
   const openEditModal = (supplier: any) => {
     setEditingSupplier(supplier);
-    setName(supplier.name);
-    setContactPerson(supplier.contactPerson || "");
-    setPhone(supplier.phone || "");
-    setEmail(supplier.email || "");
-    setAddress(supplier.address || "");
-    setNtn(supplier.ntn || "");
-    setNotes(supplier.notes || "");
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingSupplier(null);
-    setName("");
-    setContactPerson("");
-    setPhone("");
-    setEmail("");
-    setAddress("");
-    setNtn("");
-    setNotes("");
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) return;
-
-    const data = {
-      name,
-      contactPerson,
-      phone,
-      email,
-      address,
-      ntn,
-      notes
-    };
-
-    try {
-      if (editingSupplier) {
-        updateSupplier(editingSupplier.id, data);
-        toast.success("Supplier updated successfully");
-      } else {
-        addSupplier(data);
-        toast.success("Supplier created successfully");
-      }
-      closeModal();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to save supplier");
-    }
   };
 
   const columns: Column<typeof suppliers[0]>[] = [
@@ -128,7 +79,7 @@ export function Suppliers() {
           </div>
           <div>
             <h2 className="text-2xl font-bold tracking-tight text-foreground">Suppliers</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">Manage vendors and accounts payable.</p>
+            <p className="text-sm text-muted-foreground mt-0.5">Manage suppliers and what you owe them.</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -174,41 +125,15 @@ export function Suppliers() {
         defaultSortKey="name"
       />
 
-      <PageModal isOpen={isModalOpen} onClose={closeModal} title={editingSupplier ? 'Edit Supplier' : 'Add Supplier'}>
-  <form onSubmit={handleSubmit} className="space-y-4">
-    <div className="space-y-1">
-      <label htmlFor="supplier-name" className="text-sm font-medium text-foreground">Supplier Name</label>
-      <input id="supplier-name" name="supplier-name" type="text" required value={name} onChange={e => setName(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Supplier Name *" />
-    </div>
-    <div className="space-y-1">
-      <label htmlFor="supplier-contact" className="text-sm font-medium text-foreground">Contact Person</label>
-      <input id="supplier-contact" name="supplier-contact" type="text" value={contactPerson} onChange={e => setContactPerson(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Contact Person" />
-    </div>
-    <div className="grid grid-cols-2 gap-3">
-      <div className="space-y-1">
-        <label htmlFor="supplier-phone" className="text-sm font-medium text-foreground">Phone</label>
-        <input id="supplier-phone" name="supplier-phone" type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={e => setPhone(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Phone" />
-      </div>
-      <div className="space-y-1">
-        <label htmlFor="supplier-ntn" className="text-sm font-medium text-foreground">NTN Number</label>
-        <input id="supplier-ntn" name="supplier-ntn" type="text" spellCheck={false} autoComplete="off" value={ntn} onChange={e => setNtn(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="NTN Number" />
-      </div>
-    </div>
-    <div className="space-y-1">
-      <label htmlFor="supplier-email" className="text-sm font-medium text-foreground">Email</label>
-      <input id="supplier-email" name="supplier-email" type="email" autoComplete="email" spellCheck={false} value={email} onChange={e => setEmail(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Email" />
-    </div>
-    <div className="space-y-1">
-      <label htmlFor="supplier-address" className="text-sm font-medium text-foreground">Address</label>
-      <textarea id="supplier-address" name="supplier-address" value={address} onChange={e => setAddress(e.target.value)} rows={2} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Address" />
-    </div>
-    <div className="space-y-1">
-      <label htmlFor="supplier-notes" className="text-sm font-medium text-foreground">Notes</label>
-      <textarea id="supplier-notes" name="supplier-notes" value={notes} onChange={e => setNotes(e.target.value)} rows={2} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Notes" />
-    </div>
-    <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">{editingSupplier ? 'Save Changes' : 'Add Supplier'}</button>
-  </form>
-</PageModal>
+      <FormModal
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        title={editingSupplier ? 'Edit Supplier' : 'Add Supplier'}
+        description="Someone you buy from, with contact details, NTN, address and notes."
+        icon={editingSupplier ? <Pencil /> : <Truck />}
+        size="md">
+        <SupplierForm supplier={editingSupplier} onSaved={closeModal} onCancel={closeModal} />
+      </FormModal>
 
       {ledgerParty && <PartyLedgerModal party={ledgerParty} onClose={() => setLedgerParty(null)} />}
     </div>

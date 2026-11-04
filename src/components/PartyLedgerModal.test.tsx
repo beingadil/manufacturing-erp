@@ -81,7 +81,7 @@ describe('PartyLedgerModal', () => {
     renderModal({ party: { id: 'cus-1', name: 'Adil Traders', kind: 'Customer' }, onClose: () => {} });
     // Balance Receivable card (opening 1000 + 500 debit = 1500 Dr)
     expect(screen.getByText('Balance Receivable')).toBeTruthy();
-    expect(screen.getAllByText(/1,500 Dr/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Rs 1,500\.00 Dr/).length).toBeGreaterThan(0);
     // Posted voucher appears
     expect(screen.getByText('CR-0001')).toBeTruthy();
   });
