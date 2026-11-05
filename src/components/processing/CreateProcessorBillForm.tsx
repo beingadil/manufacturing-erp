@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { formatCurrency, formatNumber } from '../../lib/utils';
+import { adaptiveAmountClass, formatCurrency, formatNumber } from '../../lib/utils';
 import { ProcessingService } from '../../services/ProcessingService';
 import { useERPStore } from '../../store/useERPStore';
 import { QuickAddProcessor } from '../QuickAddModals';
@@ -193,7 +193,7 @@ export function CreateProcessorBillForm({
         {selectedIds.length > 0 && (
           <div className="flex justify-between items-center p-4 bg-muted/40 rounded-xl">
             <span className="font-medium text-foreground/80">Total Selected: {selectedIds.length} receipts</span>
-            <span className="text-xl font-bold text-foreground">{formatCurrency(totalSelected)}</span>
+            <span className={adaptiveAmountClass(formatCurrency(totalSelected), 'md') + ' font-bold tabular-nums text-foreground'}>{formatCurrency(totalSelected)}</span>
           </div>
         )}
 

@@ -118,6 +118,7 @@ async function bootstrap() {
             const { useERPStore } = await import('./store/useERPStore');
             const { migrateERPState } = await import('./store/erpMigration');
             const { fixHistoricalPostings } = await import('./lib/accounting/historicalPostingFix');
+            const { fixReheadedPurchases } = await import('./store/reheadedPurchaseFix');
 
             // Apply persist v3 migration: legacy voucher-type remap, AR/AP
             // control-account nesting, and legacy ledgerEntries trail removal.
@@ -137,13 +138,23 @@ async function bootstrap() {
             } catch (e: any) {
               Logger.warn('Startup', `Historical postings fix skipped: ${e.message}`);
             }
+
+            // Repair purchase entries re-headed to a different material — the
+            // batch (and its stock) moves onto the purchase's chosen head.
+            // Batches that reached the processor pipeline are left untouched.
+            let reheadReport: any = null;
+            try {
+              const reheaded = fixReheadedPurchases(fixedState);
+              fixedState = reheaded.state;
+              reheadReport = reheaded.report;
+            } catch (e: any) {
+              Logger.warn('Startup', `Re-headed purchase repair skipped: ${e.message}`);
+            }
             validateERPPayload(fixedState);
 
             useERPStore.setState(fixedState);
             erpLoadState = 'ok';
-            Logger.info('Startup', fixReport
-              ? `ERP state rehydrated from SQLite key_value_store (v3 migration applied; postings fix: ${fixReport.purchasesRemapped} purchases remapped, ${fixReport.salesCogsAdded} sales COGS back-filled, ${fixReport.salesSkippedNoCost} sales skipped-no-cost)`
-              : 'ERP state rehydrated from SQLite key_value_store (v3 migration applied; postings fix skipped)');
+            Logger.info('Startup', `ERP state rehydrated from SQLite key_value_store (v3 migration applied; postings fix: ${fixReport ? `${fixReport.purchasesRemapped} purchases remapped, ${fixReport.salesCogsAdded} sales COGS back-filled, ${fixReport.salesSkippedNoCost} skipped-no-cost` : 'skipped'}; purchase repair: ${reheadReport ? `${reheadReport.batchesRehead} head(s) moved, ${reheadReport.supplierSynced} supplier(s) synced, ${reheadReport.movementsRepaired} movement qty repaired, ${reheadReport.balancesReplayed} material balance replay(s), ${reheadReport.pipelineSkipped} pipeline-skipped` : 'skipped'})`);
           } catch (e: any) {
             erpLoadState = 'failed';
             (window as any).__ERP_REHYDRATION_FAILED__ = true;

@@ -314,3 +314,190 @@ describe('deleteProcessorBill', () => {
     expect(s.journalEntries).toHaveLength(0);
   });
 });
+
+describe('updatePurchase — material change fallback', () => {
+  const purchase = {
+    id: 'p1', purchaseNo: 'PUR-1', supplierId: 's1', materialId: 'm1',
+    date: '2026-01-01', weight: 1000, weightUnit: 'KG', ratePerUnit: 100,
+    weightPerPiece: 0.25, calculatedPcs: 4000, amount: 100000, invoiceNo: undefined
+  };
+  const baseMaterials = () => [
+    { id: 'm1', name: 'Circle', stockPcs: 4000, atProcessorPcs: 0, processedStockPcs: 0 },
+    { id: 'm2', name: 'Disk', stockPcs: 0, atProcessorPcs: 0, processedStockPcs: 0 },
+  ];
+  const baseBatch = () => makeBatch({
+    weightUnit: 'KG', ratePerUnit: 100, weightPerPiece: 0.25,
+    initialPcs: 4000, remainingPcs: 4000, amount: 100000
+  });
+  const baseState = (overrides: any = {}) => ({
+    materials: baseMaterials(),
+    batches: [baseBatch()],
+    purchases: [{ ...purchase }],
+    processingSends: [], processingReceipts: [], processorBills: [],
+    sales: [], products: [], inventoryMovements: [],
+    suppliers: [], customers: [], processors: [],
+    accounts: [], accountSubtypes: [], vouchers: [], journalEntries: [],
+    processingStages: [],
+    ...overrides
+  });
+
+  it('never dispatched → moves the lot to raw stock of the new material (no confirmation needed)', () => {
+    const { actions, getState } = setup(baseState({
+      inventoryMovements: [
+        { id: 'im1', materialId: 'm1', batchId: 'b1', referenceNo: 'PUR-1', module: 'Purchase', transactionType: 'IN', quantity: 4000, runningBalance: 4000, date: '2026-01-01' }
+      ]
+    }));
+
+    actions.updatePurchase('p1', {
+      supplierId: 's1', materialId: 'm2', date: '2026-01-01',
+      weight: 1000, weightUnit: 'KG', ratePerUnit: 100, weightPerPiece: 0.25,
+    });
+
+    const s = getState();
+    expect(s.purchases[0].materialId).toBe('m2');
+    expect(s.batches[0].materialId).toBe('m2');
+    expect(s.batches[0].remainingPcs).toBe(4000);
+    expect(s.materials.find((m: any) => m.id === 'm1').stockPcs).toBe(0);
+    expect(s.materials.find((m: any) => m.id === 'm2').stockPcs).toBe(4000);
+    // Purchase movement re-attributed to the new material
+    expect(s.inventoryMovements[0].materialId).toBe('m2');
+  });
+
+  it('already dispatched → refuses without the confirmation flag', () => {
+    const withSend = baseState({
+      materials: [
+        { id: 'm1', stockPcs: 0, atProcessorPcs: 4000, processedStockPcs: 0 },
+        { id: 'm2', stockPcs: 0, atProcessorPcs: 0, processedStockPcs: 0 },
+      ],
+      batches: [baseBatch({ remainingPcs: 0, atProcessorPcs: 4000 })],
+      processingSends: [
+        { id: 'send1', dispatchNo: 'DSP-1', materialId: 'm1', processorId: 'pr1', batchId: 'b1', pcsSent: 4000, pcsReceived: 0, ratePerPiece: 5, status: 'Pending', date: '2026-01-05' }
+      ],
+    });
+    const { actions, getState } = setup(withSend);
+
+    expect(() =>
+      actions.updatePurchase('p1', {
+        supplierId: 's1', materialId: 'm2', date: '2026-01-01',
+        weight: 1000, weightUnit: 'KG', ratePerUnit: 100, weightPerPiece: 0.25,
+      })
+    ).toThrow(/processor/i);
+    // Nothing was changed
+    expect(getState().purchases[0].materialId).toBe('m1');
+    expect(getState().processingSends).toHaveLength(1);
+  });
+
+  it('already dispatched + received → confirmed change deletes dispatch and receipts and falls back to raw', () => {
+    const { actions, getState } = setup(baseState({
+      materials: [
+        { id: 'm1', stockPcs: 0, atProcessorPcs: 0, processedStockPcs: 4000 },
+        { id: 'm2', stockPcs: 0, atProcessorPcs: 0, processedStockPcs: 0 },
+      ],
+      batches: [baseBatch({ remainingPcs: 0, atProcessorPcs: 0, processedPcs: 4000 })],
+      processingSends: [
+        { id: 'send1', dispatchNo: 'DSP-1', materialId: 'm1', processorId: 'pr1', batchId: 'b1', pcsSent: 4000, pcsReceived: 4000, ratePerPiece: 5, status: 'Closed', date: '2026-01-05' }
+      ],
+      processingReceipts: [
+        { id: 'rec1', receiveNo: 'REC-1', sendId: 'send1', materialId: 'm1', pcsReceived: 4000, date: '2026-01-06', billedStatus: 'Unbilled', billAmount: 20000 }
+      ],
+      inventoryMovements: [
+        { id: 'im1', materialId: 'm1', batchId: 'b1', referenceNo: 'PUR-1', module: 'Purchase', transactionType: 'IN', quantity: 4000, runningBalance: 4000, date: '2026-01-01' },
+        { id: 'im2', materialId: 'm1', batchId: 'b1', referenceNo: 'DSP-1', module: 'Dispatch', transactionType: 'OUT', quantity: 4000, runningBalance: 0, date: '2026-01-05' },
+        { id: 'im3', materialId: 'm1', batchId: 'b1', referenceNo: 'REC-1', module: 'Receipt', transactionType: 'IN', quantity: 4000, runningBalance: 4000, date: '2026-01-06' },
+      ],
+    }));
+
+    actions.updatePurchase('p1', {
+      supplierId: 's1', materialId: 'm2', date: '2026-01-01',
+      weight: 1000, weightUnit: 'KG', ratePerUnit: 100, weightPerPiece: 0.25,
+      confirmProcessorEntryDeletion: true,
+    });
+
+    const s = getState();
+    expect(s.purchases[0].materialId).toBe('m2');
+    expect(s.batches[0].materialId).toBe('m2');
+    expect(s.processingSends).toHaveLength(0);
+    expect(s.processingReceipts).toHaveLength(0);
+    // Lot is raw stock of the new material; old material zeroed
+    expect(s.batches[0].remainingPcs).toBe(4000);
+    expect(s.batches[0].processedPcs).toBe(0);
+    expect(s.materials.find((m: any) => m.id === 'm1').stockPcs).toBe(0);
+    expect(s.materials.find((m: any) => m.id === 'm1').processedStockPcs).toBe(0);
+    expect(s.materials.find((m: any) => m.id === 'm2').stockPcs).toBe(4000);
+    // Movements: purchase re-attributed, dispatch/receipt gone
+    expect(s.inventoryMovements.map((im: any) => im.referenceNo)).toEqual(['PUR-1']);
+    expect(s.inventoryMovements[0].materialId).toBe('m2');
+    // Confirmation flag is not stored on the purchase row
+    expect(s.purchases[0].confirmProcessorEntryDeletion).toBeUndefined();
+  });
+
+  it('refuses even when confirmed if a processor bill covers the receipt', () => {
+    const { actions, getState } = setup(baseState({
+      materials: [
+        { id: 'm1', stockPcs: 0, atProcessorPcs: 0, processedStockPcs: 4000 },
+        { id: 'm2', stockPcs: 0, atProcessorPcs: 0, processedStockPcs: 0 },
+      ],
+      batches: [baseBatch({ remainingPcs: 0, processedPcs: 4000 })],
+      processingSends: [
+        { id: 'send1', dispatchNo: 'DSP-1', materialId: 'm1', processorId: 'pr1', batchId: 'b1', pcsSent: 4000, pcsReceived: 4000, ratePerPiece: 5, status: 'Closed', date: '2026-01-05' }
+      ],
+      processingReceipts: [
+        { id: 'rec1', receiveNo: 'REC-1', sendId: 'send1', materialId: 'm1', pcsReceived: 4000, date: '2026-01-06', billedStatus: 'Unbilled', billAmount: 20000 }
+      ],
+      processorBills: [
+        { id: 'bill1', billNo: 'PB-1', processorId: 'pr1', receiptIds: ['rec1'], totalAmount: 20000, date: '2026-01-07' }
+      ],
+    }));
+
+    expect(() =>
+      actions.updatePurchase('p1', {
+        supplierId: 's1', materialId: 'm2', date: '2026-01-01',
+        weight: 1000, weightUnit: 'KG', ratePerUnit: 100, weightPerPiece: 0.25,
+        confirmProcessorEntryDeletion: true,
+      })
+    ).toThrow(/processor bill/i);
+    expect(getState().purchases[0].materialId).toBe('m1');
+    expect(getState().processingReceipts).toHaveLength(1);
+  });
+
+  it('ready-made lot re-headed → automatic fallback (no confirmation demanded)', () => {
+    const { actions, getState } = setup(baseState({
+      materials: [
+        { id: 'm1', name: 'Kalsii', stockPcs: 0, atProcessorPcs: 0, processedStockPcs: 1000, processingPath: 'ready_made' },
+        { id: 'm2', name: 'Kalsii new', stockPcs: 0, atProcessorPcs: 0, processedStockPcs: 0, processingPath: 'ready_made' },
+      ],
+      batches: [baseBatch({
+        processingPath: 'ready_made', pathSnapshot: undefined,
+        weight: 0, weightUnit: 'PCS', weightPerPiece: 0,
+        initialPcs: 1000, remainingPcs: 0, processedPcs: 1000,
+      })],
+      purchases: [{ ...purchase, weight: 0, weightUnit: 'PCS', weightPerPiece: 0, calculatedPcs: 1000, amount: 250000 }],
+    }));
+
+    actions.updatePurchase('p1', {
+      supplierId: 's1', materialId: 'm2', date: '2026-01-01',
+      weight: 0, weightUnit: 'PCS', ratePerUnit: 250, weightPerPiece: 0, directPcs: 1000,
+    });
+
+    const s = getState();
+    expect(s.purchases[0].materialId).toBe('m2');
+    expect(s.batches[0].materialId).toBe('m2');
+    expect(s.batches[0].processedPcs).toBe(1000);
+    expect(s.batches[0].remainingPcs).toBe(0);
+    expect(s.processingSends).toHaveLength(0);
+    expect(s.materials.find((m: any) => m.id === 'm1').processedStockPcs).toBe(0);
+    expect(s.materials.find((m: any) => m.id === 'm2').processedStockPcs).toBe(1000);
+  });
+
+  it('weight edited but material unchanged → ordinary diff path still works', () => {
+    const { actions, getState } = setup(baseState());
+    actions.updatePurchase('p1', {
+      supplierId: 's1', materialId: 'm1', date: '2026-01-01',
+      weight: 2000, weightUnit: 'KG', ratePerUnit: 100, weightPerPiece: 0.25,
+    });
+    const s = getState();
+    expect(s.purchases[0].calculatedPcs).toBe(8000);
+    expect(s.batches[0].remainingPcs).toBe(8000);
+    expect(s.materials.find((m: any) => m.id === 'm1').stockPcs).toBe(8000);
+  });
+});

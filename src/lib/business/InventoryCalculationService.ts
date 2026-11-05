@@ -912,20 +912,25 @@ export class InventoryCalculationService {
    * Per-stage WIP: Σ sent − Σ received − Σ loss for that stage — a pure
    * derivation over the movement history. Disjointness guarantees the same
    * economic pcs are never held in two stages simultaneously.
+   *
+   * Pass `materialId` to scope the figure to one material (e.g. the material
+   * detail page); omit it for the plant-wide figure (dashboard / Job Work).
    */
   static getStageWIP(
     stageId: string | undefined,
     processingSends: ProcessingSend[],
-    processingReceipts: ProcessingReceipt[]
+    processingReceipts: ProcessingReceipt[],
+    materialId?: string
   ): number {
+    const inScope = (x: { materialId?: string }) => materialId === undefined || x.materialId === materialId;
     const sent = processingSends
-      .filter(s => s.stageId === stageId && s.status !== 'Adjusted')
+      .filter(s => s.stageId === stageId && s.status !== 'Adjusted' && inScope(s))
       .reduce((sum, s) => sum + (s.pcsSent || 0), 0);
     const received = processingReceipts
-      .filter(r => r.stageId === stageId)
+      .filter(r => r.stageId === stageId && inScope(r))
       .reduce((sum, r) => sum + (r.pcsReceived || 0), 0);
     const lost = processingSends
-      .filter(s => s.stageId === stageId)
+      .filter(s => s.stageId === stageId && inScope(s))
       .reduce((sum, s) => sum + (s.lossQuantity || 0), 0);
     return Math.max(0, sent - received - lost);
   }

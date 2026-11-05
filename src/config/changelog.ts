@@ -20,6 +20,35 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.47',
+    date: '2026-11-05',
+    title: 'Purchase Edits Repair Stock Automatically',
+    sections: [
+      {
+        title: 'Re-headed purchases repair themselves',
+        items: [
+          'Editing the material on a saved purchase now moves the lot to the new material instead of leaving the quantity stuck on the old one.',
+          'If the lot never reached a processor, its pieces move into raw stock of the new material automatically — no extra steps.',
+          'If the lot already went through a processor, the edit shows a clear warning and asks you to confirm. Confirming removes the processor dispatches and receipts for that entry and returns the lot to raw stock, so it can go through the processors again.',
+          'Purchases that were re-headed before this fix are repaired automatically at startup — the material heads, the supplier on each batch, movement quantities and the ledger running balance are all brought in line with the purchase.',
+        ],
+      },
+      {
+        title: 'Supplier changes follow the purchase',
+        items: [
+          'Editing the supplier on a purchase now updates the batch too, so the Batches table on the material page always shows the same supplier as the purchase.',
+        ],
+      },
+      {
+        title: 'Numbers that scale',
+        items: [
+          'Large totals on the dashboard cards and summary strips now shrink their text to fit instead of overflowing.',
+          'The "in transit" figure on a material page shows that material’s own processing work, not the whole plant’s.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.44',
     date: '2026-10-06',
     title: 'Products Made From Your Own Parts',

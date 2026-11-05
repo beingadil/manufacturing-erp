@@ -12,7 +12,7 @@ import { filterFinancialData } from "../lib/abac";
 import { getSystemAccountBySubtype } from '../lib/accounting/accountClassification';
 import { DashboardSummaryService } from '../lib/dashboard/DashboardSummaryService';
 import { FinancialReportService } from '../lib/reporting/FinancialReportService';
-import { cn, formatCurrency, formatNumber } from "../lib/utils";
+import { adaptiveAmountClass, cn, formatCurrency, formatNumber } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
 
 type Preset = 'today' | 'week' | 'month' | 'year' | 'custom';
@@ -261,27 +261,27 @@ export function Dashboard() {
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 divide-x divide-y md:divide-y-0 divide-border/50">
           <div className="p-5">
             <div className="flex items-center gap-2 text-muted-foreground mb-2"><Building2 className="h-4 w-4 text-sky-500" /><span className="text-xs font-medium uppercase tracking-wide">Total Assets</span></div>
-            <div className="text-xl font-bold text-foreground">{formatCurrency(summary.totalAssets)}</div>
+            <div className={cn(adaptiveAmountClass(formatCurrency(summary.totalAssets), 'md'), 'font-bold tabular-nums text-foreground')}>{formatCurrency(summary.totalAssets)}</div>
             <button onClick={() => navigate('/accounting/balance-sheet')} className="mt-1 text-xs text-primary hover:underline">Balance Sheet</button>
           </div>
           <div className="p-5">
             <div className="flex items-center gap-2 text-muted-foreground mb-2"><Scale className="h-4 w-4 text-rose-500" /><span className="text-xs font-medium uppercase tracking-wide">Total Liabilities</span></div>
-            <div className="text-xl font-bold text-foreground">{formatCurrency(summary.totalLiabilities)}</div>
+            <div className={cn(adaptiveAmountClass(formatCurrency(summary.totalLiabilities), 'md'), 'font-bold tabular-nums text-foreground')}>{formatCurrency(summary.totalLiabilities)}</div>
             <button onClick={() => navigate('/accounting/balance-sheet')} className="mt-1 text-xs text-primary hover:underline">Balance Sheet</button>
           </div>
           <div className="p-5">
             <div className="flex items-center gap-2 text-muted-foreground mb-2"><Wallet className="h-4 w-4 text-amber-500" /><span className="text-xs font-medium uppercase tracking-wide">Owner's Equity</span></div>
-            <div className="text-xl font-bold text-foreground">{formatCurrency(summary.equity)}</div>
+            <div className={cn(adaptiveAmountClass(formatCurrency(summary.equity), 'md'), 'font-bold tabular-nums text-foreground')}>{formatCurrency(summary.equity)}</div>
             <button onClick={() => navigate('/accounting/balance-sheet')} className="mt-1 text-xs text-primary hover:underline">Balance Sheet</button>
           </div>
           <div className="p-5">
             <div className="flex items-center gap-2 text-muted-foreground mb-2"><ArrowLeftRight className="h-4 w-4 text-indigo-500" /><span className="text-xs font-medium uppercase tracking-wide">Net Working Capital</span></div>
-            <div className={cn("text-xl font-bold", summary.netWorkingCapital >= 0 ? "text-success" : "text-destructive")}>{formatCurrency(summary.netWorkingCapital)}</div>
+            <div className={cn(adaptiveAmountClass(formatCurrency(summary.netWorkingCapital), 'md'), 'font-bold tabular-nums', summary.netWorkingCapital >= 0 ? "text-success" : "text-destructive")}>{formatCurrency(summary.netWorkingCapital)}</div>
             <button onClick={() => navigate('/accounting/cash-flow')} className="mt-1 text-xs text-primary hover:underline">Cash Flow</button>
           </div>
           <div className="p-5 col-span-2 md:col-span-1">
             <div className="flex items-center gap-2 text-muted-foreground mb-2"><TrendingUp className="h-4 w-4 text-emerald-500" /><span className="text-xs font-medium uppercase tracking-wide">Period Profit / Loss</span></div>
-            <div className={cn("text-xl font-bold", summary.profit.net >= 0 ? "text-success" : "text-destructive")}>{formatCurrency(summary.profit.net)}</div>
+            <div className={cn(adaptiveAmountClass(formatCurrency(summary.profit.net), 'md'), 'font-bold tabular-nums', summary.profit.net >= 0 ? "text-success" : "text-destructive")}>{formatCurrency(summary.profit.net)}</div>
             <button onClick={() => navigate('/accounting/profit-loss')} className="mt-1 text-xs text-primary hover:underline">Profit &amp; Loss</button>
           </div>
         </div>
@@ -297,7 +297,7 @@ export function Dashboard() {
               <div className="text-xs text-muted-foreground/70">Period</div>
             </div>
           </div>
-          <div className="text-xl font-bold text-success">{formatCurrency(summary.periodCashReceipts)}</div>
+          <div className={cn(adaptiveAmountClass(formatCurrency(summary.periodCashReceipts), 'md'), 'font-bold tabular-nums text-success')}>{formatCurrency(summary.periodCashReceipts)}</div>
         </div>
         <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex items-center justify-between">
           <div className="flex items-center gap-3 text-muted-foreground">
@@ -307,7 +307,7 @@ export function Dashboard() {
               <div className="text-xs text-muted-foreground/70">Period</div>
             </div>
           </div>
-          <div className="text-xl font-bold text-destructive">{formatCurrency(summary.periodCashPayments)}</div>
+          <div className={cn(adaptiveAmountClass(formatCurrency(summary.periodCashPayments), 'md'), 'font-bold tabular-nums text-destructive')}>{formatCurrency(summary.periodCashPayments)}</div>
         </div>
         <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex items-center justify-between">
           <div className="flex items-center gap-3 text-muted-foreground">
@@ -317,7 +317,7 @@ export function Dashboard() {
               <div className="text-xs text-muted-foreground/70">Period</div>
             </div>
           </div>
-          <div className="text-xl font-bold text-foreground">{formatCurrency(summary.periodSales)}</div>
+          <div className={cn(adaptiveAmountClass(formatCurrency(summary.periodSales), 'md'), 'font-bold tabular-nums text-foreground')}>{formatCurrency(summary.periodSales)}</div>
         </div>
         <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex items-center justify-between">
           <div className="flex items-center gap-3 text-muted-foreground">
@@ -327,7 +327,7 @@ export function Dashboard() {
               <div className="text-xs text-muted-foreground/70">Period</div>
             </div>
           </div>
-          <div className="text-xl font-bold text-foreground">{formatCurrency(summary.periodPurchases)}</div>
+          <div className={cn(adaptiveAmountClass(formatCurrency(summary.periodPurchases), 'md'), 'font-bold tabular-nums text-foreground')}>{formatCurrency(summary.periodPurchases)}</div>
         </div>
         <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex items-center justify-between">
           <div className="flex items-center gap-3 text-muted-foreground">
@@ -337,7 +337,7 @@ export function Dashboard() {
               <div className="text-xs text-muted-foreground/70">Period</div>
             </div>
           </div>
-          <div className="text-xl font-bold text-foreground">{formatCurrency(summary.periodProcessing)}</div>
+          <div className={cn(adaptiveAmountClass(formatCurrency(summary.periodProcessing), 'md'), 'font-bold tabular-nums text-foreground')}>{formatCurrency(summary.periodProcessing)}</div>
         </div>
       </section>
 

@@ -6,7 +6,7 @@
  * shows two competing unit controls. The piece weight is carried over from the
  * material's previous purchase and stays editable when it changes.
  */
-import { ArrowLeft, Check, Plus, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Check, Info, Plus, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -14,7 +14,7 @@ import { MaterialForm } from '../components/forms/MaterialForm';
 import { SupplierForm } from '../components/forms/SupplierForm';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { DatePicker } from '../components/ui/date-picker';
-import { cn, formatCurrency } from '../lib/utils';
+import { adaptiveAmountClass, cn, formatCurrency } from '../lib/utils';
 import { PurchaseService } from '../services/PurchaseService';
 import { useERPStore } from '../store/useERPStore';
 
@@ -45,7 +45,7 @@ export default function PurchaseFormPage() {
   const isEdit = Boolean(editId);
   const deepNew = searchParams.get('new') === '1';
 
-  const { purchases, materials, suppliers, batches } = useERPStore();
+  const { purchases, materials, suppliers, batches, processingSends, processingReceipts, processorBills } = useERPStore();
 
   const [supplierId, setSupplierId] = useState('');
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -53,6 +53,8 @@ export default function PurchaseFormPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [showSupplierForm, setShowSupplierForm] = useState(false);
   const [showMaterialForm, setShowMaterialForm] = useState(false);
+  const [originalMaterialId, setOriginalMaterialId] = useState<string | null>(null);
+  const [confirmFallback, setConfirmFallback] = useState(false);
 
   // ── Last known piece weight per material, used to prefill a new line ──
   const pieceWeightByMaterial = useMemo(() => {
@@ -82,6 +84,8 @@ export default function PurchaseFormPage() {
     const ready = isReadyMade(p.materialId);
     setSupplierId(p.supplierId);
     setDate(p.date);
+    setOriginalMaterialId(p.materialId);
+    setConfirmFallback(false);
     setLines([
       {
         id: newId(),
@@ -101,6 +105,8 @@ export default function PurchaseFormPage() {
     setFormError(null);
     setShowSupplierForm(false);
     setShowMaterialForm(false);
+    setOriginalMaterialId(null);
+    setConfirmFallback(false);
   }
 
   // ── Line-level derived values ──
@@ -118,6 +124,36 @@ export default function PurchaseFormPage() {
       }),
     [lines, materials]
   );
+
+  // ── Processor-pipeline history for this purchase's batch (edit mode).
+  //    The answer decides whether changing the material is a silent fallback
+  //    (never dispatched) or a destructive, confirmed one (anything else). ──
+  const batchForPurchase = useMemo(
+    () => (editId ? batches?.find(b => b.purchaseId === editId) : undefined),
+    [batches, editId]
+  );
+  const pipelineHistory = useMemo(() => {
+    if (!batchForPurchase) return null;
+    const sends = (processingSends ?? []).filter(s => s.batchId === batchForPurchase.id);
+    const sendIds = new Set(sends.map(s => s.id));
+    const receipts = (processingReceipts ?? []).filter(r => sendIds.has(r.sendId));
+    const buckets = Object.values(batchForPurchase.stageAvailableBySource ?? {});
+    // Ready-made lots are finished at birth — processedPcs from a ready-made
+    // purchase is not processor history.
+    const hasHistory =
+      sends.length > 0 ||
+      (batchForPurchase.atProcessorPcs ?? 0) > 0 ||
+      buckets.some(v => (v ?? 0) > 0);
+    const billed =
+      receipts.some(r => r.billedStatus === 'Billed') ||
+      (processorBills ?? []).some(b => b.receiptIds.some(rid => receipts.some(r => r.id === rid)));
+    const adjusted = sends.some(s => s.status === 'Adjusted');
+    return { sends: sends.length, receipts: receipts.length, hasHistory, billed, adjusted };
+  }, [batchForPurchase, processingSends, processingReceipts, processorBills]);
+
+  const currentMaterialId = lines[0]?.materialId ?? '';
+  const materialChanged = isEdit && originalMaterialId !== null && currentMaterialId !== originalMaterialId;
+  const needsPipelineReset = materialChanged && !!pipelineHistory?.hasHistory;
 
   const summary = useMemo(() => {
     const pcs = lineView.reduce((s, v) => s + v.pcs, 0);
@@ -161,11 +197,20 @@ export default function PurchaseFormPage() {
   };
 
   const readyCount = lines.filter(lineIsReady).length;
-  const canSave = Boolean(supplierId) && readyCount > 0;
+  const fallbackBlocked = needsPipelineReset && (pipelineHistory?.billed || pipelineHistory?.adjusted || !confirmFallback);
+  const canSave = Boolean(supplierId) && readyCount > 0 && !fallbackBlocked;
 
   const handleSave = () => {
     if (!canSave) {
-      setFormError('Choose a supplier and complete at least one line before saving.');
+      setFormError(
+        fallbackBlocked
+          ? pipelineHistory?.billed
+            ? 'Delete the processor bill covering these receipts before changing the material.'
+            : pipelineHistory?.adjusted
+              ? 'Undo the merged dispatch before changing the material.'
+              : 'Check the confirmation below to delete this entry’s processor entries and change the material.'
+          : 'Choose a supplier and complete at least one line before saving.'
+      );
       return;
     }
     setFormError(null);
@@ -183,8 +228,10 @@ export default function PurchaseFormPage() {
           ratePerUnit: Number(l.rate),
           weightPerPiece: ready ? 0 : Number(l.weightPerPiece),
           ...(ready ? { directPcs: Math.round(qty) } : {}),
+          // Only ever set when the user confirmed the destructive fallback.
+          ...(needsPipelineReset && confirmFallback ? { confirmProcessorEntryDeletion: true } : {}),
         });
-        toast.success('Purchase updated.');
+        toast.success(needsPipelineReset ? 'Purchase updated — processor entries removed, lot back to raw stock.' : 'Purchase updated.');
       } else {
         for (const l of lines) {
           if (!lineIsReady(l)) continue;
@@ -302,6 +349,58 @@ export default function PurchaseFormPage() {
                 />
               </div>
             </section>
+          )}
+
+          {/* Material-change fallback — edit mode only */}
+          {materialChanged && pipelineHistory && (
+            pipelineHistory.hasHistory ? (
+              <section
+                role="alert"
+                className="rounded-xl border border-destructive/40 bg-destructive/10 p-4"
+              >
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" aria-hidden="true" />
+                  <div className="min-w-0 text-sm">
+                    <p className="font-semibold text-destructive">This purchase has been through a processor</p>
+                    <p className="mt-1 leading-relaxed text-destructive/90">
+                      {pipelineHistory.sends} dispatch{pipelineHistory.sends === 1 ? '' : 'es'}
+                      {pipelineHistory.receipts > 0 ? ` and ${pipelineHistory.receipts} receipt${pipelineHistory.receipts === 1 ? '' : 's'}` : ''} belong to this entry.
+                      Changing the material deletes them, and the lot falls back to raw stock of the new material — it has to go through the processors again.
+                    </p>
+                    {pipelineHistory.billed ? (
+                      <p className="mt-2 font-medium text-destructive">
+                        A processor bill covers these receipts — delete that bill first, then save.
+                      </p>
+                    ) : pipelineHistory.adjusted ? (
+                      <p className="mt-2 font-medium text-destructive">
+                        This batch was merged into another dispatch — undo that dispatch first, then save.
+                      </p>
+                    ) : (
+                      <label className="mt-3 flex cursor-pointer items-start gap-2 select-none">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 accent-destructive"
+                          checked={confirmFallback}
+                          onChange={e => setConfirmFallback(e.target.checked)}
+                        />
+                        <span className="font-medium text-destructive">
+                          I understand — delete the processor entries and change the material.
+                        </span>
+                      </label>
+                    )}
+                  </div>
+                </div>
+              </section>
+            ) : (
+              <section className="rounded-xl border border-border bg-muted/30 p-4">
+                <div className="flex items-start gap-3">
+                  <Info className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <p className="text-sm text-muted-foreground">
+                    This entry never reached a processor — the purchased quantity will move into raw stock of the new material automatically.
+                  </p>
+                </div>
+              </section>
+            )
           )}
 
           {/* Line items */}
@@ -536,7 +635,7 @@ export default function PurchaseFormPage() {
               </div>
               <div className="flex items-baseline justify-between gap-4 py-3.5">
                 <dt className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Total</dt>
-                <dd className="text-xl font-bold tabular-nums text-foreground">{formatCurrency(summary.amount)}</dd>
+                <dd className={cn(adaptiveAmountClass(formatCurrency(summary.amount), 'md'), 'font-bold tabular-nums text-foreground')}>{formatCurrency(summary.amount)}</dd>
               </div>
             </dl>
           </div>

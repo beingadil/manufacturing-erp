@@ -5,7 +5,7 @@ import { AppError } from '../lib/errorHandler';
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
 import { consumeComponentStock, isAssembled, perUnitRequirement, restoreComponentStock, roundQty } from '../lib/business/ProductAssemblyService';
 import { UnitConversionService } from '../lib/business/UnitConversionService';
-import type { Batch, InventoryMovement, ProcessingReceipt, ProcessingSend, Product, Sale } from '../types/erp';
+import type { Batch, InventoryMovement, ProcessingReceipt, ProcessingSend, Product, RawMaterial, Sale } from '../types/erp';
 import { ERPState } from './useERPStore';
 
 /**
@@ -33,6 +33,176 @@ function applyBatchReplayForMaterial(
     undefined,
     state.processingStages || []
   );
+}
+
+/**
+ * Fallback for a purchase whose MATERIAL is being changed ("re-headed").
+ *
+ * Rules:
+ *  1. The lot never entered the processor pipeline → it moves into raw stock
+ *     (or the finished pool, for a ready-made target material) under the NEW
+ *     material. No processor entries exist, so nothing is deleted.
+ *  2. The lot DID go through the processor pipeline → the change is refused
+ *     until the caller confirms. Confirming deletes this purchase's dispatches
+ *     and their receipts, unwinds their stock effects, and puts the lot back
+ *     into raw stock of the NEW material — it has to go through the
+ *     processors again.
+ *
+ * The change is always refused (even confirmed) when a processor bill covers
+ * any receipt that would be deleted — bills are accounting documents and must
+ * be removed by the user first — and when one of this batch's dispatches was
+ * flagged 'Adjusted' (its pieces were merged into another dispatch).
+ */
+function materialChangeFallback(
+  state: ERPState,
+  id: string,
+  purchaseData: any,
+  oldPurchase: any,
+  oldBatch: Batch | undefined,
+  oldMaterialId: string,
+  newMaterialId: string,
+  newPath: string,
+  newMaterial: RawMaterial | undefined,
+  newCalculatedPcs: number,
+  newAmount: number,
+  readyNow: boolean,
+  confirmDeletion: boolean
+): ERPState {
+  const purchaseNo = oldPurchase.purchaseNo;
+  const stages = state.processingStages ?? [];
+  const sendsForBatch = oldBatch
+    ? (state.processingSends ?? []).filter(s => s.batchId === oldBatch.id)
+    : [];
+  const sendIds = new Set(sendsForBatch.map(s => s.id));
+  const receiptsToDelete = (state.processingReceipts ?? []).filter(r => sendIds.has(r.sendId));
+  const batchBuckets = oldBatch?.stageAvailableBySource ?? {};
+  // Ready-made lots are finished at birth — a ready-made batch's processedPcs
+  // is NOT processor history. History means: dispatches for this batch, pcs
+  // currently at a processor, or stage availability buckets from receipts.
+  const inPipeline =
+    sendsForBatch.length > 0 ||
+    (oldBatch?.atProcessorPcs ?? 0) > 0 ||
+    Object.values(batchBuckets).some(v => (v ?? 0) > 0);
+
+  if (inPipeline) {
+    const adjusted = sendsForBatch.find(s => s.status === 'Adjusted');
+    if (adjusted) {
+      throw new AppError(`This batch was merged into another dispatch (${adjusted.dispatchNo}). Undo that dispatch before changing the material.`);
+    }
+    const billed = (state.processorBills ?? []).find(b =>
+      b.receiptIds.some(rid => receiptsToDelete.some(r => r.id === rid))
+    );
+    if (billed) {
+      throw new AppError(`Receipts from this purchase are covered by processor bill ${billed.billNo}. Delete that bill before changing the material.`);
+    }
+    if (!confirmDeletion) {
+      throw new AppError('This purchase went through a processor. Confirm the change to delete its processor entries.');
+    }
+  }
+
+  // Purchase row (confirmProcessorEntryDeletion is already stripped by the caller)
+  const updatedPurchases = state.purchases.map(p =>
+    p.id === id ? { ...p, ...purchaseData, materialId: newMaterialId, calculatedPcs: newCalculatedPcs, amount: newAmount } : p
+  );
+
+  // Move the batch onto the new material, reset to a clean raw (or finished,
+  // for ready-made) state.
+  let trail: Batch[] = state.batches ?? [];
+  if (oldBatch) {
+    const reset: Batch = {
+      ...oldBatch,
+      materialId: newMaterialId,
+      supplierId: purchaseData.supplierId ?? oldBatch.supplierId,
+      weight: purchaseData.weight,
+      weightUnit: purchaseData.weightUnit,
+      ratePerUnit: purchaseData.ratePerUnit,
+      weightPerPiece: purchaseData.weightPerPiece,
+      processingPath: newPath as Batch['processingPath'],
+      fixedStageId: newMaterial?.fixedStageId,
+      allowedStageIds: newMaterial?.allowedStageIds,
+      initialPcs: newCalculatedPcs,
+      remainingPcs: newPath === 'ready_made' ? 0 : newCalculatedPcs,
+      processedPcs: newPath === 'ready_made' ? newCalculatedPcs : 0,
+      atProcessorPcs: 0,
+      processingCost: 0,
+      stageAvailableBySource: {},
+      currentStageId: undefined,
+      status: 'Active',
+      amount: newAmount,
+    };
+    trail = trail.map(b => (b.id === reset.id ? reset : b));
+  }
+
+  // Pipeline case: delete this batch's dispatches + receipts and replay both
+  // materials from the remaining history so every counter re-derives.
+  let remainingSends = state.processingSends ?? [];
+  let remainingReceipts = state.processingReceipts ?? [];
+  let removedReferenceNos: string[] = [];
+  if (inPipeline) {
+    remainingSends = remainingSends.filter(s => !sendIds.has(s.id));
+    remainingReceipts = remainingReceipts.filter(r => !receiptsToDelete.some(x => x.id === r.id));
+    removedReferenceNos = [
+      ...sendsForBatch.map(s => s.dispatchNo),
+      ...receiptsToDelete.map(r => r.receiveNo),
+    ];
+    trail = InventoryCalculationService.recomputeFinishedPcsForMaterial(
+      oldMaterialId, trail, remainingReceipts, remainingSends,
+      state.sales ?? [], state.products ?? [], undefined, stages
+    );
+    trail = InventoryCalculationService.recomputeFinishedPcsForMaterial(
+      newMaterialId, trail, remainingReceipts, remainingSends,
+      state.sales ?? [], state.products ?? [], undefined, stages
+    );
+  }
+
+  const updatedMaterials = InventoryCalculationService.syncMaterialCounters(state.materials, trail);
+
+  // Inventory movements: drop the deleted pipeline entries' movements, and
+  // re-attribute the purchase movement to the new material.
+  const removedSet = new Set(removedReferenceNos);
+  const updatedInventoryMovements = (state.inventoryMovements ?? [])
+    .filter(im => !removedSet.has(im.referenceNo))
+    .map(im =>
+      im.referenceNo === purchaseNo || (oldBatch && im.batchId === oldBatch.id)
+        ? { ...im, materialId: newMaterialId }
+        : im
+    );
+
+  // Voucher + JEs narration (same math as the ordinary path)
+  const voucher = state.vouchers.find(v => v.sourceId === id && v.sourceModule === 'Purchase');
+  let updatedVouchers = state.vouchers;
+  let updatedJournalEntries = state.journalEntries;
+  if (voucher) {
+    updatedVouchers = state.vouchers.map(v =>
+      v.id === voucher.id
+        ? {
+            ...v,
+            totalDebit: newAmount,
+            totalCredit: newAmount,
+            narration: readyNow
+              ? `Ready-made purchase: ${newCalculatedPcs} PCS from Supplier`
+              : `Purchase of ${purchaseData.weight} ${purchaseData.weightUnit} from Supplier`,
+          }
+        : v
+    );
+    updatedJournalEntries = state.journalEntries.map(je =>
+      je.voucherId === voucher.id
+        ? { ...je, debit: je.debit > 0 ? newAmount : 0, credit: je.credit > 0 ? newAmount : 0 }
+        : je
+    );
+  }
+
+  return {
+    ...state,
+    purchases: updatedPurchases,
+    batches: trail,
+    materials: updatedMaterials,
+    inventoryMovements: updatedInventoryMovements,
+    processingSends: remainingSends,
+    processingReceipts: remainingReceipts,
+    vouchers: updatedVouchers,
+    journalEntries: updatedJournalEntries,
+  };
 }
 
 /**
@@ -112,30 +282,61 @@ export const createCRUDActions = (
       const oldPurchase = state.purchases.find(p => p.id === id);
       if (!oldPurchase) return state;
 
+      // ── Material change ("re-head" the purchase) — fallback rules:
+      //   • Batch never reached a processor → the whole lot moves into raw
+      //     stock of the NEW material (automatic, no ceremony).
+      //   • Batch already went through the processor pipeline → the change is
+      //     REFUSED unless the caller passes confirmProcessorEntryDeletion:true.
+      //     The confirmation deletes this batch's dispatches/receipts and falls
+      //     the lot back to raw stock of the NEW material — it has to go
+      //     through the processors again.
+      const oldMaterialId = oldPurchase.materialId;
+      const newMaterialId = (data?.materialId !== undefined ? data.materialId : oldMaterialId) as string;
+      const materialChanged = newMaterialId !== oldMaterialId;
+      const newMaterial = materialChanged ? state.materials.find(m => m.id === newMaterialId) : undefined;
+      if (materialChanged && !newMaterial) {
+        throw new AppError('Choose a valid material before saving.');
+      }
+      const newPath = newMaterial?.processingPath ?? 'full_chain';
+      const { confirmProcessorEntryDeletion, ...purchaseData } = data ?? {};
+
       // Ready-made purchases keep their direct-pcs entry mode (pcs × rate/pc);
-      // everything else derives pcs from weight ÷ weightPerPiece.
+      // everything else derives pcs from weight ÷ weightPerPiece. When the
+      // material is being changed, the NEW material's path decides the pool
+      // the pcs land in, so the two stay consistent with the UI line model.
       const oldBatch = state.batches.find(b => b.purchaseId === id);
       const wasReadyMade = (oldBatch?.processingPath ?? 'full_chain') === 'ready_made';
-      const newCalculatedPcs = wasReadyMade && data.directPcs
-        ? Math.max(0, Math.round(data.directPcs))
-        : UnitConversionService.calculatePcsFromWeight(data.weight, data.weightUnit, data.weightPerPiece);
-      const newAmount = wasReadyMade && data.directPcs
-        ? Math.round(data.directPcs) * data.ratePerUnit
-        : data.weight * data.ratePerUnit;
+      const readyNow = materialChanged ? newPath === 'ready_made' : wasReadyMade;
+      const newCalculatedPcs = readyNow && purchaseData.directPcs
+        ? Math.max(0, Math.round(purchaseData.directPcs))
+        : UnitConversionService.calculatePcsFromWeight(purchaseData.weight, purchaseData.weightUnit, purchaseData.weightPerPiece);
+      const newAmount = readyNow && purchaseData.directPcs
+        ? Math.round(purchaseData.directPcs) * purchaseData.ratePerUnit
+        : purchaseData.weight * purchaseData.ratePerUnit;
 
       const diffPcs = newCalculatedPcs - oldPurchase.calculatedPcs;
 
+      if (materialChanged) {
+        return materialChangeFallback(
+          state, id, purchaseData, oldPurchase, oldBatch,
+          oldMaterialId, newMaterialId, newPath, newMaterial,
+          newCalculatedPcs, newAmount, readyNow, confirmProcessorEntryDeletion === true
+        );
+      }
+
       // Update Purchase
       const updatedPurchases = state.purchases.map(p => 
-        p.id === id ? { ...p, ...data, calculatedPcs: newCalculatedPcs, amount: newAmount } : p
+        p.id === id ? { ...p, ...purchaseData, calculatedPcs: newCalculatedPcs, amount: newAmount } : p
       );
 
-      // Update Batch
+      // Update Batch — supplier follows the purchase (editing the purchase's
+      // supplier used to leave the batch on the old one).
       let updatedBatches = state.batches;
+      const nextSupplierId = purchaseData.supplierId ?? oldPurchase.supplierId;
       if (oldBatch) {
         updatedBatches = state.batches.map(b => 
           b.id === oldBatch.id 
-            ? { ...b, weight: data.weight, weightUnit: data.weightUnit, ratePerUnit: data.ratePerUnit, weightPerPiece: data.weightPerPiece, initialPcs: newCalculatedPcs, remainingPcs: b.remainingPcs + diffPcs, amount: newAmount } 
+            ? { ...b, weight: purchaseData.weight, weightUnit: purchaseData.weightUnit, ratePerUnit: purchaseData.ratePerUnit, weightPerPiece: purchaseData.weightPerPiece, initialPcs: newCalculatedPcs, remainingPcs: b.remainingPcs + diffPcs, amount: newAmount, supplierId: nextSupplierId } 
             : b
         );
       }
@@ -143,7 +344,7 @@ export const createCRUDActions = (
       // Update Material stock — ready-made pcs live in the FINISHED pool.
       const updatedMaterials = state.materials.map(m => 
         m.id === oldPurchase.materialId 
-          ? wasReadyMade
+          ? readyNow
             ? { ...m, processedStockPcs: Math.max(0, (m.processedStockPcs || 0) + diffPcs) }
             : { ...m, stockPcs: m.stockPcs + diffPcs }
           : m
@@ -163,7 +364,7 @@ export const createCRUDActions = (
                 ...v,
                 totalDebit: newAmount,
                 totalCredit: newAmount,
-                narration: wasReadyMade
+                narration: readyNow
                   ? `Ready-made purchase: ${newCalculatedPcs} PCS from Supplier`
                   : `Purchase of ${data.weight} ${data.weightUnit} from Supplier`,
               }

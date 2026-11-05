@@ -18,7 +18,7 @@ import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { InventoryCalculationService, stageAvailableEntries } from '../lib/business/InventoryCalculationService';
 import { getMaterialBatchProgress, getSortedStages } from '../lib/processing/stageProgress';
-import { cn, formatCurrency, formatNumber } from '../lib/utils';
+import { adaptiveAmountClass, cn, formatCurrency, formatNumber } from '../lib/utils';
 import { useERPStore } from '../store/useERPStore';
 
 /**
@@ -108,13 +108,14 @@ export function MaterialDetail() {
     return pos;
   }, [batchProgress, sortedStages]);
 
-  // Per-stage WIP from the movement history (same basis as the dashboard).
+  // Per-stage WIP from the movement history (same basis as the dashboard) —
+  // scoped to THIS material, so the page never shows another material's WIP.
   const stageWip = useMemo(() => sortedStages
     .filter(s => !s.isFinalStage)
     .map(stage => ({
       stage,
-      pcs: InventoryCalculationService.getStageWIP(stage.id, processingSends, processingReceipts),
-    })), [sortedStages, processingSends, processingReceipts]);
+      pcs: InventoryCalculationService.getStageWIP(stage.id, processingSends || [], processingReceipts || [], id),
+    })), [sortedStages, processingSends, processingReceipts, id]);
 
   // Loss / yield analytics across the whole chain.
   const totals = useMemo(() => {
@@ -214,7 +215,7 @@ export function MaterialDetail() {
             <Wallet className="h-5 w-5 text-blue-500" />
             <span className="text-sm font-medium">Lifetime Processing Cost</span>
           </div>
-          <div className="text-3xl font-bold text-info">{formatCurrency(totals.processingCost)}</div>
+          <div className={cn(adaptiveAmountClass(formatCurrency(totals.processingCost), 'lg'), 'font-bold tabular-nums text-info')}>{formatCurrency(totals.processingCost)}</div>
           <div className="text-xs text-muted-foreground mt-1">Σ processor bills for this material</div>
         </div>
       </div>

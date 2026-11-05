@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import React from 'react';
-import { cn } from '../../lib/utils';
+import { adaptiveAmountClass, cn } from '../../lib/utils';
 
 /**
  * Canonical KPI card — the single card pattern for headline metrics across
@@ -36,11 +36,7 @@ export interface KpiCardProps {
   iconPosition?: 'left' | 'right';
 }
 
-const VALUE_SIZES = {
-  sm: 'text-lg',
-  md: 'text-2xl',
-  lg: 'text-3xl',
-} as const;
+
 
 export function KpiCard({
   label,
@@ -79,7 +75,7 @@ export function KpiCard({
       </div>
 
       <div className="mt-2 flex items-baseline gap-2">
-        <span className={cn(VALUE_SIZES[size], 'font-bold tracking-tight tabular-nums', accent || 'text-foreground', valueClassName)}>
+        <span className={cn(adaptiveAmountClass(value, size), 'font-bold tracking-tight tabular-nums leading-none min-w-0 break-words', accent || 'text-foreground', valueClassName)}>
           {value}
         </span>
         {trend && (
