@@ -307,26 +307,7 @@ export default function Categories() {
                     rows={2}
                   />
                 </FormField>
-                <FormField
-                  id="category-path"
-                  label="Default Processing Path"
-                  hint="Pre-selected when creating a material in this category."
-                  className="sm:col-span-2"
-                >
-                  <select
-                    id="category-path"
-                    value={formData.defaultProcessingPath}
-                    onChange={(e) =>
-                      setFormData({ ...formData, defaultProcessingPath: e.target.value as ProcessingPath })
-                    }
-                    className={formInputClass}
-                  >
-                    <option value="full_chain">Through all processors</option>
-                    <option value="single_stage">One processor only</option>
-                    <option value="custom_stages">Selected processors (stages picked on each material)</option>
-                    <option value="ready_made">Ready-made (no processing)</option>
-                  </select>
-                </FormField>
+
               </FormGrid>
             </FormSection>
           </form>

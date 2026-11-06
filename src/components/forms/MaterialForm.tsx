@@ -131,7 +131,13 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
                 <button
                   key={o.v}
                   type="button"
-                  onClick={() => setUsageType(o.v)}
+                  onClick={() => {
+                    setUsageType(o.v);
+                    if (o.v === 'component') setProcessingPath('ready_made');
+                    else setProcessingPath('full_chain');
+                    setFixedStageId('');
+                    setAllowedStageIds([]);
+                  }}
                   aria-pressed={usageType === o.v}
                   className={`rounded-xl border px-4 py-4 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring ${usageType === o.v ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:bg-muted/40'}`}
                 >
@@ -156,27 +162,29 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
               required
             />
           </FormField>
+{usageType !== 'component' && (
           <FormField id="material-path" label="Processing Path" required className="sm:col-span-1">
-            <select
-              id="material-path"
-              required
+            <SearchableSelect
+              options={[
+                { id: 'full_chain', label: `Through all processors (${sortedStagesForForm.length || 5} stages)` },
+                { id: 'single_stage', label: 'One processor only - becomes final product' },
+                { id: 'custom_stages', label: 'Selected processors only - pick stages below' },
+                { id: 'ready_made', label: 'Ready-made - no processing, straight to stock' },
+              ]}
               value={processingPath}
-              onChange={e => setProcessingPath(e.target.value as ProcessingPath)}
-              className={formInputClass}
-            >
-              <option value="full_chain">Through all processors ({sortedStagesForForm.length || 5} stages)</option>
-              <option value="single_stage">One processor only — becomes final product</option>
-              <option value="custom_stages">Selected processors only — pick stages below</option>
-              <option value="ready_made">Ready-made — no processing, straight to stock</option>
-            </select>
+              onChange={(v) => setProcessingPath(v as ProcessingPath)}
+              placeholder="Select processing path..."
+              required
+            />
             <p className="text-xs text-muted-foreground">
               {processingPath === 'full_chain' && 'Material goes through every processor in sequence before becoming a final product.'}
               {processingPath === 'single_stage' && 'Material is sent to exactly one processor below; what comes back is the final product.'}
               {processingPath === 'custom_stages' && 'Tick the processors this material passes through (in chain order). What comes back from the LAST ticked processor is the final product.'}
-              {processingPath === 'ready_made' && 'Purchased already finished (e.g. lids, handles) — enters sellable stock directly, never dispatched.'}
+              {processingPath === 'ready_made' && 'Purchased already finished (e.g. lids, handles) - enters sellable stock directly, never dispatched.'}
             </p>
           </FormField>
-          {processingPath === 'custom_stages' && (
+          )}
+          {usageType !== 'component' && processingPath === 'custom_stages' && (
             <div className="space-y-2 sm:col-span-2">
               <label className="text-sm font-semibold text-foreground">Selected Processors *</label>
               <div className="space-y-2 rounded-xl border border-border bg-card p-3">
@@ -203,7 +211,7 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
               </p>
             </div>
           )}
-          {processingPath === 'single_stage' && (
+          {usageType !== 'component' && processingPath === 'single_stage' && (
             <div className="space-y-2 sm:col-span-1">
               <label htmlFor="material-fixed-stage" className="text-sm font-semibold text-foreground">
                 The One Processor *
@@ -225,6 +233,7 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
               </select>
             </div>
           )}
+
         </FormGrid>
       </FormSection>
 
@@ -242,17 +251,15 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
             />
           </FormField>
           <FormField id="material-status" label="Status" className="sm:col-span-1">
-            <select
-              id="material-status"
-              name="material-status"
-              required
+            <SearchableSelect
+              options={[
+                { id: 'Active', label: 'Active' },
+                { id: 'Inactive', label: 'Inactive' },
+              ]}
               value={status}
-              onChange={e => setStatus(e.target.value as 'Active' | 'Inactive')}
-              className={formInputClass}
-            >
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
+              onChange={(v) => setStatus(v as 'Active' | 'Inactive')}
+              placeholder="Select status..."
+            />
           </FormField>
         </FormGrid>
       </FormSection>
