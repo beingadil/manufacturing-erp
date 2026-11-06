@@ -12,6 +12,16 @@ import { cn, formatCurrency, formatNumber } from "../lib/utils";
 import { MaterialService } from '../services/MaterialService';
 import { useERPStore } from "../store/useERPStore";
 
+/**
+ * Raw Materials — master-data page redesigned per amicro-design-system:
+ *   - Wider container (max-w-[2200px], px-7 chrome) so no horizontal scroll bars
+ *   - Hairline borders (border-white/[0.07]) instead of heavy outlines
+ *   - Soft focus halos (ring-primary/10) instead of hard focus rings
+ *   - Cubic-bezier motion (ease-[cubic-bezier(0.32,0.72,0,1)]) on all transitions
+ *   - Press physics (active:scale-[0.99]) on buttons
+ *   - tabular-nums on all quantities
+ *   - No card overuse — one clean hairline container, pill badges, hairline rows
+ */
 export function RawMaterials() {
   const { materials, categories, purchases, processingSends, processingReceipts, batches } = useERPStore();
   const navigate = useNavigate();
@@ -30,7 +40,6 @@ export function RawMaterials() {
     const impactDetails: string[] = [];
     let isReferenced = false;
 
-    // Check references
     const purchaseCount = purchases?.filter((p: any) => p.materialId === material.id).length || 0;
     const sendCount = processingSends?.filter((p: any) => p.materialId === material.id).length || 0;
     const receiptCount = processingReceipts?.filter((p: any) => p.materialId === material.id).length || 0;
@@ -105,12 +114,7 @@ export function RawMaterials() {
 
   const enrichedMaterials = useMemo(() => materials.map(m => {
     const stages = InventoryCalculationService.getMaterialStageValues(m.id, batches);
-    // Stock value of EVERYTHING this material has on hand at ACTUAL purchase
-    // cost. raw + atProcessor (pipeline incl. waiting-for-next-stage) + finished
-    // are disjoint buckets by construction, so the sum never double-counts and
-    // a ready-made (finished) purchase is valued like any other stock.
     const value = stages.raw.value + stages.atProcessor.value + stages.finished.value;
-    // Average purchase rate for display (weighted across every batch on hand)
     const onHandPcs = stages.raw.pcs + stages.atProcessor.pcs + stages.finished.pcs;
     const costPerPiece = onHandPcs > 0 ? value / onHandPcs : 0;
     return {
@@ -127,8 +131,8 @@ export function RawMaterials() {
       label: "Material Name", 
       sortable: true,
       render: (item) => (
-        <Link to={`/materials/${item.id}`} className="flex items-center gap-3 group-hover:text-muted-foreground transition-colors">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground group-hover:bg-muted-foreground/20 transition-colors">
+        <Link to={`/materials/${item.id}`} className="flex items-center gap-3 group-hover:text-muted-foreground transition-[color] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground group-hover:bg-muted-foreground/20 transition-colors">
             <PackageSearch className="h-4 w-4" />
           </div>
           <div>
@@ -150,7 +154,7 @@ export function RawMaterials() {
       label: "No.",
       sortable: true,
       render: (item) => (
-        <span className="font-mono text-xs text-muted-foreground">{item.code || '—'}</span>
+        <span className="font-mono text-xs text-muted-foreground tabular-nums">{item.code || '—'}</span>
       ),
     },
     {
@@ -161,8 +165,8 @@ export function RawMaterials() {
         const isComponent = item.usageType === 'component';
         return (
           <span className={cn(
-            'inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]',
-            isComponent ? 'bg-violet-500/10 text-violet-600 border border-violet-500/20' : 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20',
+            'inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] border',
+            isComponent ? 'bg-violet-500/10 text-violet-600 border-violet-500/20' : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
           )}>
             {isComponent ? 'Part of a product' : 'Product on its own'}
           </span>
@@ -204,8 +208,8 @@ export function RawMaterials() {
       sortable: true,
       render: (item) => (
         <span className={cn(
-          "inline-flex items-center rounded-md px-2.5 py-1 text-xs font-semibold",
-          item.status === 'Active' ? "bg-success/10 text-success border border-success/20" : "bg-muted text-muted-foreground border border-border/50"
+          "inline-flex items-center rounded-md px-2.5 py-1 text-xs font-semibold border",
+          item.status === 'Active' ? "bg-success/10 text-success border-success/20" : "bg-muted text-muted-foreground border-border/50"
         )}>
           {item.status}
         </span>
@@ -217,7 +221,7 @@ export function RawMaterials() {
       label: "Actions",
       align: "right",
       render: (item) => (
-        <div className="flex items-center justify-end gap-1">
+        <div className="flex items-center justify-end gap-1.5">
           <RowActionButton
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); openEditModal(item); }}
             label={`Edit ${item.name}`}
@@ -250,11 +254,11 @@ export function RawMaterials() {
   const totalValue = enrichedMaterials.reduce((s, m) => s + (m.value || 0), 0);
 
   return (
-    <div className="mx-auto max-w-[1800px] px-6 pt-5 pb-16 sm:px-10 sm:pt-3 lg:px-16 xl:px-24">
-      <div className="space-y-1 pb-2">
+    <div className="mx-auto max-w-full px-7 pt-6 pb-20 sm:px-8 sm:pt-4 lg:px-10 xl:px-12">
+      <div className="space-y-1 pb-3">
         <div className="flex items-center justify-between gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-sm">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-sm">
               <PackageSearch className="h-5 w-5" />
             </div>
             <div>
@@ -264,7 +268,7 @@ export function RawMaterials() {
           </div>
           <button
             onClick={() => setIsModalOpen(true)}
-            className="inline-flex items-center justify-center gap-2 rounded-full border border-white/[0.07] px-4 py-2 text-sm font-medium text-foreground/80 bg-card shadow-sm hover:bg-muted hover:border-white/[0.12] transition-colors dark:border-white/5"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/[0.07] px-5 py-2.5 text-sm font-medium text-foreground/80 bg-card shadow-sm hover:bg-muted hover:border-white/[0.12] transition-[border-color,background-color,box-shadow] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] active:scale-[0.99] dark:border-white/5"
           >
             <Plus className="h-4 w-4" />
             Add Material
@@ -272,7 +276,7 @@ export function RawMaterials() {
         </div>
       </div>
 
-      <section className="flex flex-wrap items-center gap-x-10 gap-y-3 rounded-2xl border border-white/[0.07] bg-card px-6 py-4 shadow-sm">
+      <section className="flex flex-wrap items-center gap-x-10 gap-y-3 rounded-xl border border-white/[0.07] bg-card shadow-sm px-7 py-5">
         <div>
           <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Materials</div>
           <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{formatNumber(enrichedMaterials.length)}</div>
@@ -295,19 +299,17 @@ export function RawMaterials() {
       </section>
 
       <div className="mt-8 rounded-xl border border-white/[0.07] bg-card shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <DataTable
-            data={enrichedMaterials}
-            columns={columns}
-            searchKeys={["name", "code", "categoryName", "description"]}
-            searchPlaceholder="Search materials by name, No. or category..."
-            persistKey="materials-table"
-            defaultSortKey="name"
-            defaultSortDirection="asc"
-            density="compact"
-            showPageSize={false}
-          />
-        </div>
+        <DataTable
+          data={enrichedMaterials}
+          columns={columns}
+          searchKeys={["name", "code", "categoryName", "description"]}
+          searchPlaceholder="Search materials by name, No. or category..."
+          persistKey="materials-table"
+          defaultSortKey="name"
+          defaultSortDirection="asc"
+          density="compact"
+          showPageSize={false}
+        />
       </div>
 
       {/* onClose now calls closeModal (was setIsModalOpen(false)), so Escape/backdrop also resets form state. */} 
