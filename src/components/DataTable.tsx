@@ -39,6 +39,8 @@ interface DataTableProps<T> {
   summaryRow?: React.ReactNode[];
   /** Hide the rows-per-page selector (compact lists). */
   showPageSize?: boolean;
+  /** Dense row density for long ledgers (px-4 py-2 cells, tighter empty state). */
+  density?: 'compact' | 'normal';
 }
 
 /**
@@ -62,7 +64,8 @@ function DataTableInner<T extends Record<string, any>>({
   itemsPerPageOptions = [10, 25, 50, 100],
   embedded = false,
   summaryRow,
-  showPageSize = true
+  showPageSize = true,
+  density = 'normal'
 }: DataTableProps<T>) {
   // Try to load state from localStorage if persistKey is provided
   const loadState = (key: string, defaultValue: any) => {
@@ -211,7 +214,7 @@ function DataTableInner<T extends Record<string, any>>({
                       ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending')
                       : 'none'
                   }
-                  className={`px-6 py-4 font-medium ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : ''}`}
+                  className={`${density === 'compact' ? 'px-4 py-2' : 'px-6 py-4'} font-medium ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : ''}`}
                 >
                   {col.sortable ? (
                     <button
@@ -237,7 +240,7 @@ function DataTableInner<T extends Record<string, any>>({
                 {columns.map((col) => (
                   <td 
                     key={col.key} 
-                    className={`px-6 py-4 ${col.align === 'right' ? 'text-right tabular-nums' : col.align === 'center' ? 'text-center' : ''}`}
+                    className={`${density === 'compact' ? 'px-4 py-2' : 'px-6 py-4'} ${col.align === 'right' ? 'text-right tabular-nums' : col.align === 'center' ? 'text-center' : ''}`}
                   >
                     {col.render ? col.render(item) : item[col.key]}
                   </td>
@@ -247,7 +250,7 @@ function DataTableInner<T extends Record<string, any>>({
             {summaryRow && (
               <tr className="border-t-2 border-border bg-muted/40 font-semibold text-foreground">
                 {summaryRow.map((cell, i) => (
-                  <td key={i} className={`px-6 py-4 ${columns[i]?.align === 'right' ? 'text-right tabular-nums' : ''}`}>
+                  <td key={i} className={`${density === 'compact' ? 'px-4 py-2' : 'px-6 py-4'} ${columns[i]?.align === 'right' ? 'text-right tabular-nums' : ''}`}>
                     {cell}
                   </td>
                 ))}
@@ -255,7 +258,7 @@ function DataTableInner<T extends Record<string, any>>({
             )}
             {paginatedData.length === 0 && (
               <tr>
-                <td colSpan={columns.length} className="px-6 py-12 text-center text-muted-foreground">
+                <td colSpan={columns.length} className={density === 'compact' ? 'px-4 py-6 text-center text-muted-foreground' : 'px-6 py-12 text-center text-muted-foreground'}>
                   {emptyStateIcon}
                   <p className="text-sm font-medium text-foreground">{emptyStateMessage}</p>
                   {emptyStateHint && (
@@ -269,7 +272,7 @@ function DataTableInner<T extends Record<string, any>>({
       </div>
 
       {sortedData.length > 0 && (
-        <div className="px-6 py-4 border-t border-border/50 flex flex-col sm:flex-row items-center justify-between gap-4 bg-card">
+        <div className={`${density === 'compact' ? 'px-4 py-2' : 'px-6 py-4'} border-t border-border/50 flex flex-col sm:flex-row items-center justify-between gap-4 bg-card`}>
           <div className="text-sm text-muted-foreground">
             Showing <span className="font-medium text-foreground">{(safeCurrentPage - 1) * itemsPerPage + 1}</span> to <span className="font-medium text-foreground">{Math.min(safeCurrentPage * itemsPerPage, sortedData.length)}</span> of <span className="font-medium text-foreground">{sortedData.length}</span> results
           </div>

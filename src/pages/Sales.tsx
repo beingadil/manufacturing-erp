@@ -154,6 +154,7 @@ export function Sales() {
             searchPlaceholder="Search sales by invoice, customer or product..."
             persistKey="sales-table"
             defaultSortKey="date"
+            density="compact"
           />
         </>
       ) : (

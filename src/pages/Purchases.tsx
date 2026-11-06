@@ -163,6 +163,7 @@ export function Purchases() {
             searchPlaceholder="Search purchases by PO, supplier, material, date, weight, pcs or amount..."
             persistKey="purchases-table"
             defaultSortKey="date"
+            density="compact"
           />
         </>
       ) : (
