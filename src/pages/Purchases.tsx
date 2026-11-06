@@ -37,7 +37,9 @@ export function Purchases() {
       supplierName: s?.name || 'Unknown',
       materialName: m?.name || 'Unknown',
       formattedDate: new Date(p.date).toLocaleDateString(),
-      voucherNo: voucher?.voucherNo || null
+      voucherNo: voucher?.voucherNo || null,
+        weightDisplay: `${p.weight} ${p.weightUnit || ''}`.trim(),
+        amountDisplay: formatCurrency(p.amount || 0)
     };
   }), [purchases, suppliers, materials, vouchers]);
 
@@ -159,10 +161,11 @@ export function Purchases() {
           <DataTable 
             data={enrichedPurchases} 
             columns={columns} 
-            searchKeys={["purchaseNo", "supplierName", "materialName", "formattedDate", "weight", "calculatedPcs", "amount"]} 
+            searchKeys={["purchaseNo", "supplierName", "materialName", "formattedDate", "weight", "weightDisplay", "calculatedPcs", "amount", "amountDisplay"]}
             searchPlaceholder="Search purchases by PO, supplier, material, date, weight, pcs or amount..."
             persistKey="purchases-table"
             defaultSortKey="date"
+            defaultSortDirection="asc"
             density="compact"
           />
         </>

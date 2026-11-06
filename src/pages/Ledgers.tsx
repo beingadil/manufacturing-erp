@@ -287,6 +287,7 @@ export function Ledgers() {
             searchPlaceholder="Search goods records..."
             persistKey="ledgers-goods-table"
             defaultSortKey="date"
+            defaultSortDirection="asc"
             showPageSize={false}
           />
         ) : (
@@ -297,6 +298,7 @@ export function Ledgers() {
             searchPlaceholder="Search journal entries..."
             persistKey="ledgers-financial-table"
             defaultSortKey="date"
+            defaultSortDirection="asc"
             showPageSize={false}
           />
         )}

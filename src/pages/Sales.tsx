@@ -37,7 +37,8 @@ export function Sales() {
       customerName: c?.name || 'Unknown',
       productName: p?.name || 'Unknown',
       formattedDate: new Date(s.date).toLocaleDateString(),
-      voucherNo: voucher?.voucherNo || null
+      voucherNo: voucher?.voucherNo || null,
+        amountDisplay: formatCurrency(s.totalAmount || 0)
     };
   }), [sales, customers, products, vouchers]);
 
@@ -150,10 +151,11 @@ export function Sales() {
           <DataTable
             data={enrichedSales}
             columns={columns}
-            searchKeys={["invoiceNo", "customerName", "productName"]}
+            searchKeys={["invoiceNo", "customerName", "productName", "formattedDate", "pcsSold", "pricePerPiece", "totalAmount", "amountDisplay"]}
             searchPlaceholder="Search sales by invoice, customer or product..."
             persistKey="sales-table"
             defaultSortKey="date"
+            defaultSortDirection="asc"
             density="compact"
           />
         </>

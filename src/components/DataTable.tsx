@@ -32,7 +32,9 @@ interface DataTableProps<T> {
   /** Optional secondary hint rendered under the empty-state message. */
   emptyStateHint?: string;
   defaultSortKey?: string;
+  defaultSortDirection?: 'asc' | 'desc';
   itemsPerPageOptions?: number[];
+  defaultRowsPerPage?: number;
   /** Render without the card chrome (used when wrapped in an outer card). */
   embedded?: boolean;
   /** Optional footer row rendered after the data rows (e.g. column totals). */
@@ -62,10 +64,12 @@ function DataTableInner<T extends Record<string, any>>({
   emptyStateHint,
   defaultSortKey,
   itemsPerPageOptions = [10, 25, 50, 100],
+  defaultRowsPerPage = 25,
   embedded = false,
   summaryRow,
   showPageSize = true,
-  density = 'normal'
+  density = 'normal',
+  defaultSortDirection = 'desc'
 }: DataTableProps<T>) {
   // Try to load state from localStorage if persistKey is provided
   const loadState = (key: string, defaultValue: any) => {
@@ -80,10 +84,10 @@ function DataTableInner<T extends Record<string, any>>({
 
   const [searchTerm, setSearchTerm] = useState(() => loadState('search', ''));
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(() => 
-    loadState('sort', defaultSortKey ? { key: defaultSortKey, direction: 'desc' } : null)
+    loadState('sort', defaultSortKey ? { key: defaultSortKey, direction: defaultSortDirection ?? 'desc' } : null)
   );
   const [currentPage, setCurrentPage] = useState(() => loadState('page', 1));
-  const [itemsPerPage, setItemsPerPage] = useState(() => loadState('itemsPerPage', itemsPerPageOptions[0]));
+  const [itemsPerPage, setItemsPerPage] = useState(() => loadState('itemsPerPage', defaultRowsPerPage));
 
   // Save state when it changes
   useEffect(() => {
