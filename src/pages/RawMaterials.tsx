@@ -276,32 +276,22 @@ export function RawMaterials() {
         </button>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <KpiCard
-          label="Total Materials"
-          value={formatNumber(enrichedMaterials.length)}
-          icon={<PackageSearch className="h-5 w-5" />}
-          iconClassName="text-emerald-500"
-          size="sm"
-        />
-        <KpiCard
-          label="Total Raw Stock"
-          value={formatNumber(enrichedMaterials.reduce((s, m) => s + (m.stockPcs || 0), 0))}
-          icon={<Layers className="h-5 w-5" />}
-          iconClassName="text-teal-500"
-          size="sm"
-          description="PCS in raw stock across all materials"
-        />
-        <KpiCard
-          label="Total Inventory Value"
-          value={formatCurrency(enrichedMaterials.reduce((s, m) => s + (m.value || 0), 0))}
-          icon={<Wallet className="h-5 w-5" />}
-          iconClassName="text-emerald-500"
-          accent="text-success"
-          size="sm"
-          description="Everything on hand valued at actual purchase cost (per batch), incl. WIP and finished"
-        />
-      </div>
+      <section className="flex flex-wrap items-center gap-x-10 gap-y-3 rounded-2xl border border-border bg-card px-6 py-4 shadow-sm">
+        <div>
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Materials</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{formatNumber(enrichedMaterials.length)}</div>
+        </div>
+        <div className="border-l border-border/60 pl-10">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Raw Stock</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{formatNumber(enrichedMaterials.reduce((s, m) => s + (m.stockPcs || 0), 0))}</div>
+          <div className="text-xs text-muted-foreground">PCS in raw stock</div>
+        </div>
+        <div className="border-l border-border/60 pl-10">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Inventory Value</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-success">{formatCurrency(enrichedMaterials.reduce((s, m) => s + (m.value || 0), 0))}</div>
+          <div className="text-xs text-muted-foreground">At purchase cost, incl. WIP & finished</div>
+        </div>
+      </section>
 
       <DataTable
         data={enrichedMaterials}
