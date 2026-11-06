@@ -17,23 +17,23 @@ const RECEIPTS: ProcessingReceipt[] = [
 
 describe('stageCostBreakdown', () => {
   it('material totals cover every stage with activity, sorted by sequence', () => {
-    const { rows, totals } = stageCostBreakdown(SENDS, RECEIPTS, STAGES);
+    const { rows, totals: _totals } = stageCostBreakdown(SENDS, RECEIPTS, STAGES);
     expect(rows.map(r => r.name)).toEqual(rows.map(r => r.name).sort());
     expect(rows.map(r => r.sequence)).toEqual([...rows.map(r => r.sequence)].sort((a, b) => a - b));
-    expect(totals.dispatches).toBe(3);
-    expect(totals.sent).toBe(1900);
-    expect(totals.received).toBe(1895);
-    expect(totals.loss).toBe(5);
-    expect(totals.pending).toBe(0);
-    expect(totals.billed).toBe(26900);
+    expect(_totals.dispatches).toBe(3);
+    expect(_totals.sent).toBe(1900);
+    expect(_totals.received).toBe(1895);
+    expect(_totals.loss).toBe(5);
+    expect(_totals.pending).toBe(0);
+    expect(_totals.billed).toBe(26900);
   });
 
   it('scopes to one purchase when batchId is passed', () => {
-    const { rows, totals } = stageCostBreakdown(SENDS, RECEIPTS, STAGES, 'b1');
+    const { rows, totals: _totals } = stageCostBreakdown(SENDS, RECEIPTS, STAGES, 'b1');
     expect(rows.map(r => r.sequence)).toEqual([1, 2]);
-    expect(totals.dispatches).toBe(2);
-    expect(totals.sent).toBe(1600);
-    expect(totals.billed).toBe(23900);
+    expect(_totals.dispatches).toBe(2);
+    expect(_totals.sent).toBe(1600);
+    expect(_totals.billed).toBe(23900);
   });
 
   it('surfaces stage-less legacy rows as an Unstaged line instead of dropping them', () => {
@@ -43,16 +43,16 @@ describe('stageCostBreakdown', () => {
     const receipts: ProcessingReceipt[] = [
       { id: 'u1r', receiveNo: 'REC-U', sendId: 'u1', processorId: 'p', materialId: 'm', date: '2026-01-06', pcsReceived: 118, billAmount: 1770, billedStatus: 'Unbilled' } as any,
     ];
-    const { rows, totals } = stageCostBreakdown(sends, receipts, STAGES, 'b9');
+    const { rows, totals: _totals } = stageCostBreakdown(sends, receipts, STAGES, 'b9');
     expect(rows).toHaveLength(1);
     expect(rows[0].name).toContain('Unstaged');
-    expect(totals.dispatches).toBe(1);
-    expect(totals.received).toBe(118);
-    expect(totals.billed).toBe(1770);
+    expect(_totals.dispatches).toBe(1);
+    expect(_totals.received).toBe(118);
+    expect(_totals.billed).toBe(1770);
   });
 
   it('rolls a loss into pending-zero and drops fully-idle stages', () => {
-    const { rows, totals } = stageCostBreakdown(SENDS, RECEIPTS, STAGES);
+    const { rows, totals: _totals } = stageCostBreakdown(SENDS, RECEIPTS, STAGES);
     const stage2 = rows.find(r => r.sequence === 2)!;
     expect(stage2.loss).toBe(5);
     expect(stage2.pending).toBe(0);
