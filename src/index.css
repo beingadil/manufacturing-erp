@@ -1,4 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* Montserrat is the project's specified face (docs/DESIGN.md). It is loaded
+   here and bound to Tailwind's `font-sans` in tailwind.config.js — before
+   this, the app imported Inter but themed everything through the platform
+   sans stack, so neither face was actually in use. */
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -52,12 +56,28 @@
     --education-blue: 217 91% 60%;
     --education-green: 142 71% 45%;
 
+    /* Shell cap. The floating panels are `fixed`, so they cannot be centred
+       by a max-width wrapper — this inset is applied to each of them (and
+       subtracted from main's left gutter) so the whole shell grows to at
+       most --shell-max and stays centred on ultrawide. 100% resolves
+       against the containing block rather than 100vw, so a classic
+       scrollbar cannot push the shell past the viewport edge. */
+    --shell-max: 1600px;
+    --shell-inset: max(0.75rem, calc((100% - var(--shell-max)) / 2 + 0.75rem));
+
     /* Floating glass surfaces (light): translucent card + blur + hairline
-       border + soft diffuse shadow. Used by top bar, sidebar, popovers. */
-    --glass-bg: hsl(var(--card) / 0.55);
+       border + soft diffuse shadow. Used by top bar, sidebar, popovers.
+       The fill stays genuinely see-through — the .app-ambient layer behind
+       the shell is what the blur refracts, so raising this alpha flattens
+       the glass back into an opaque panel. */
+    --glass-bg: hsl(var(--card) / 0.5);
+    /* Overlays (menus, dialogs, popovers, palette) sit on top of live
+       content, so they take a denser fill than the shell chrome — same
+       material, legibility weighted over transparency. */
+    --glass-overlay-bg: hsl(var(--popover) / 0.8);
     --glass-border: 240 5.9% 90%;
-    --glass-highlight: rgb(255 255 255 / 0.4);
-    --glass-blur: 14px;
+    --glass-highlight: rgb(255 255 255 / 0.55);
+    --glass-blur: 18px;
     --shadow-float: 0 1px 2px 0 rgb(0 0 0 / 0.03), 0 6px 20px -6px rgb(0 0 0 / 0.07), 0 12px 40px -12px rgb(0 0 0 / 0.04);
   }
  
@@ -108,12 +128,15 @@
     --education-blue: 217 91% 65%;
     --education-green: 142 71% 50%;
 
-    /* Floating glass surfaces (dark): slightly denser translucency so text
-       stays readable over the muted app canvas. */
-    --glass-bg: hsl(var(--card) / 0.62);
+    /* Floating glass surfaces (dark): low-alpha so the ambient colour behind
+       the shell reads through the panel, with a brighter top rim to catch
+       the light. Text contrast is carried by the panel's own surface tokens,
+       not by this fill. */
+    --glass-bg: hsl(var(--card) / 0.45);
+    --glass-overlay-bg: hsl(var(--popover) / 0.8);
     --glass-border: 240 3.7% 15.9%;
-    --glass-highlight: rgb(255 255 255 / 0.06);
-    --glass-blur: 14px;
+    --glass-highlight: rgb(255 255 255 / 0.1);
+    --glass-blur: 20px;
     --shadow-float: 0 1px 2px 0 rgb(0 0 0 / 0.25), 0 6px 20px -6px rgb(0 0 0 / 0.4), 0 12px 40px -12px rgb(0 0 0 / 0.28);
   }
 }
@@ -164,11 +187,69 @@
 @layer components {
   .glass-panel {
     background: var(--glass-bg);
-    backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.6);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.6);
     border: 1px solid hsl(var(--glass-border) / 0.6);
     box-shadow: var(--shadow-float), inset 0 1px 0 0 var(--glass-highlight);
   }
+
+  /* Same material as .glass-panel with a denser fill, for surfaces that
+     float over live content: menus, dialogs, popovers, command palette.
+     Pairs with each primitive's text-* token — it supplies no foreground. */
+  .glass-overlay {
+    background: var(--glass-overlay-bg);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.6);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.6);
+    border: 1px solid hsl(var(--glass-border) / 0.6);
+    box-shadow: var(--shadow-float), inset 0 1px 0 0 var(--glass-highlight);
+  }
+
+  /* Ambient colour field behind the whole shell. Blur and saturate are
+     no-ops over a uniform fill — this is what gives the glass panels
+     something to actually refract. Low saturation keeps it a surface,
+     not a feature. Fixed, inert, and clipped so it never scrolls. */
+  .app-ambient {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .app-ambient::before,
+  .app-ambient::after {
+    content: "";
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(90px);
+  }
+  .app-ambient::before {
+    top: -12%;
+    left: -8%;
+    width: 46vw;
+    height: 46vw;
+    background: radial-gradient(circle, hsl(var(--info) / 0.16), transparent 68%);
+  }
+  .app-ambient::after {
+    right: -10%;
+    bottom: -14%;
+    width: 42vw;
+    height: 42vw;
+    background: radial-gradient(circle, hsl(var(--education-green) / 0.12), transparent 68%);
+  }
+  .dark .app-ambient::before {
+    background: radial-gradient(circle, hsl(var(--info) / 0.22), transparent 68%);
+  }
+  .dark .app-ambient::after {
+    background: radial-gradient(circle, hsl(var(--education-green) / 0.16), transparent 68%);
+  }
+
+  /* No per-heading inset rule: the whole content column clears the sidebar
+     by construction (see main's left gutter), so headings, subtitles, filter
+     chips, and chart labels all sit clear of the panel. Pulling the column
+     back to let content tuck under the glass would put any bare text at the
+     column edge back behind the sidebar — measured at 7 hidden strings on the
+     Dashboard alone. The glass reads from the ambient backdrop and from
+     content passing beneath the top bar instead. */
 
   /* Icon buttons (theme toggle, bell, mic, sign out): consistent 40px hit
      target, hairline ring on hover, spring-fast transition. */

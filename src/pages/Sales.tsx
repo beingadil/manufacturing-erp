@@ -78,7 +78,7 @@ export function Sales() {
     () =>
       materials.map(m => ({
         materialId: m.id,
-        availablePcs: InventoryCalculationService.calculateRawMaterialStock(m.id, batches),
+        availablePcs: InventoryCalculationService.calculateRawMaterialStock(m.id, batches) + (m.processedStockPcs || 0),
         unitCost: InventoryCalculationService.getWeightedAverageCostPerPiece(m.id, batches),
       })),
     [materials, batches],
@@ -285,8 +285,8 @@ export function Sales() {
       <PageModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditSaleId(undefined) }} title={editSaleId ? 'Edit Sale' : 'Add Sale'} maxWidth="max-w-3xl">
         <form onSubmit={handleCreate} className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="sale-customer" className="block text-sm font-medium text-foreground/80 mb-1">Customer</label>
+            <div className="space-y-2">
+              <label htmlFor="sale-customer" className="text-sm font-semibold">Customer *</label>
               <SearchableSelect 
                 options={customers.map(c => ({ id: c.id, label: c.name, searchValue: c.phone }))}
                 value={customerId}
@@ -296,8 +296,8 @@ export function Sales() {
                 required
               />
             </div>
-            <div>
-              <label htmlFor="sale-product" className="block text-sm font-medium text-foreground/80 mb-1">Product</label>
+            <div className="space-y-2">
+              <label htmlFor="sale-product" className="text-sm font-semibold">Product *</label>
               <SearchableSelect 
                 options={products.map(p => {
                   if (isAssembled(p)) {
@@ -316,8 +316,8 @@ export function Sales() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label htmlFor="sale-pcs" className="block text-sm font-medium text-foreground/80 mb-1">PCS to Sell *</label>
+            <div className="space-y-2">
+              <label htmlFor="sale-pcs" className="text-sm font-semibold">PCS to Sell *</label>
               <input id="sale-pcs" name="sale-pcs" type="number" required placeholder="Quantity" value={pcsSold} onChange={e => setPcsSold(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 h-12" />
               {breakdown ? (
                 <p className={`mt-1 text-xs ${shortfall ? 'text-destructive font-medium' : runningLow.length > 0 ? 'text-amber-600 dark:text-amber-500 font-medium' : 'text-muted-foreground'}`}>
@@ -331,13 +331,24 @@ export function Sales() {
                 )
               )}
             </div>
-            <div>
-              <label htmlFor="sale-price" className="block text-sm font-medium text-foreground/80 mb-1">Price Per Piece (PKR) *</label>
+            <div className="space-y-2">
+              <label htmlFor="sale-price" className="text-sm font-semibold">Price Per Piece (PKR) *</label>
               <input id="sale-price" name="sale-price" type="number" step="0.01" required placeholder="Rate" value={pricePerPiece} onChange={e => setPricePerPiece(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 h-12" />
             </div>
-            <div>
-              <label htmlFor="sale-date" className="block text-sm font-medium text-foreground/80 mb-1">Date *</label>
+            <div className="space-y-2">
+              <label htmlFor="sale-date" className="text-sm font-semibold">Date *</label>
               <DatePicker id="sale-date" value={date} onChange={setDate} />
+            </div>
+          </div>
+
+          <div className="p-4 rounded-xl bg-muted/40 border border-border flex flex-col gap-2">
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">PCS to Sell:</span>
+              <span className="text-sm font-bold text-foreground">{Math.max(0, parseInt(pcsSold) || 0)} PCS</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Total Amount:</span>
+              <span className="text-sm font-bold text-foreground">{formatCurrency((Math.max(0, parseInt(pcsSold) || 0)) * (parseFloat(pricePerPiece) || 0))}</span>
             </div>
           </div>
           {breakdown && (
@@ -413,9 +424,9 @@ export function Sales() {
               )}
             </div>
           )}
-          <div className="pt-2 flex gap-3">
+          <div className="pt-4 flex gap-3">
             <button type="button" onClick={() => { setIsModalOpen(false); setEditSaleId(undefined); }} className="flex-1 rounded-xl border border-border bg-card px-4 py-3 font-semibold text-foreground/80 hover:bg-muted/40 transition-colors">Cancel</button>
-            <button type="submit" className="flex-1 rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-md">{editSaleId ? "Update Sale" : "Confirm Sale"}</button>
+            <button type="submit" className="flex-1 rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-md">Save Sale</button>
           </div>
         </form>
       </PageModal>

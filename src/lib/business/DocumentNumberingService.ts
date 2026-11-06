@@ -28,6 +28,48 @@ export class DocumentNumberingService {
   }
 
   /**
+   * Lookup prefix for a document class (PO / INV / DSP / REC / BILL / PRD) —
+   * custom Settings override first, then the canonical default. Falls back to
+   * the default when the Settings store is not initialized yet.
+   */
+  static getDocumentPrefix(fallback: string): string {
+    try {
+      const settings = useSettingsStore.getState();
+      const custom = settings.documentPrefixes?.[fallback];
+      if (custom && custom.trim()) {
+        return custom.trim().toUpperCase();
+      }
+    } catch {
+      // Settings store not initialized yet
+    }
+    return fallback;
+  }
+
+  /**
+   * Batch (purchase-batch) number.
+   *  - 'supplier' (default): {SUPPLIER-FIRST-WORD}-{purchaseNo} — e.g.
+   *    "AHMED-PO-2026-0003": the reader sees WHO bought it and WHICH purchase,
+   *    so one material's purchases stay distinguishable by eye.
+   *  - 'classic': BATCH-{purchaseNo} — the old scheme, kept as a Settings choice.
+   * Both are unique because purchaseNo is unique; sanitizing keeps only
+   * alphanumerics of the supplier's first word (12 chars max) so numbers stay
+   * short and Ba No.-style names never inject punctuation into the code.
+   */
+  static buildBatchNo(supplierName: string | undefined, purchaseNo: string): string {
+    try {
+      const settings = useSettingsStore.getState();
+      if (settings.batchNoMode === 'classic') {
+        return `BATCH-${purchaseNo}`;
+      }
+    } catch {
+      // Settings store not initialized yet — default to the supplier scheme
+    }
+    const firstWord = (supplierName || '').trim().split(/\s+/)[0] || '';
+    const stem = firstWord.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12) || 'BATCH';
+    return `${stem}-${purchaseNo}`;
+  }
+
+  /**
    * Check if yearly reset is enabled in settings (default: true).
    */
   static isYearlyResetEnabled(): boolean {
@@ -91,21 +133,26 @@ export class DocumentNumberingService {
    * (the year is embedded in the number as {PREFIX}-{YEAR}-{SEQ}), so deleting
    * a document never causes its number to be reused.
    */
-static nextDocumentNumber<T extends Record<string, any>>(
+  static nextDocumentNumber<T extends Record<string, any>>(
     documents: T[],
     noField: string,
     prefix: string,
     date: string
   ): string {
+    // Custom Settings prefix wins; `prefix` doubles as its Settings key.
+    const resolvedPrefix = DocumentNumberingService.getDocumentPrefix(prefix);
     const year = date && date.length >= 4 ? date.slice(0, 4) : new Date().getFullYear().toString();
     let maxSeq = 0;
     for (const doc of documents) {
       const no = doc[noField] as string | undefined;
+      // Sequence across EVERY document of this field in the year, regardless
+      // of its prefix: renaming a prefix mid-year (PO → BUY) must never
+      // rewind the counter to 0001, and numbers stay unique per module-year.
       if (!no || !no.includes(`-${year}-`)) continue;
       const seq = DocumentNumberingService.extractVoucherSequence(no);
       if (seq > maxSeq) maxSeq = seq;
     }
-    return `${prefix}-${year}-${String(maxSeq + 1).padStart(4, '0')}`;
+    return `${resolvedPrefix}-${year}-${String(maxSeq + 1).padStart(4, '0')}`;
   }
 
   /**

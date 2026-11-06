@@ -1,5 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { migrateERPState } from './erpMigration';
+
+// DocumentNumberingService.buildBatchNo consults the Settings store for
+// batchNoMode. Mock the store (the real one lives in SQLite-backed zustand)
+// with a mutable state so each test controls the scheme.
+const settingsState: { batchNoMode: 'supplier' | 'classic' } = { batchNoMode: 'supplier' };
+vi.mock('./useSettingsStore', () => ({
+  useSettingsStore: {
+    getState: () => settingsState,
+  },
+}));
 
 /**
  * Regression tests for step 4 of migrateERPState: unconditional reconstruction
@@ -181,5 +191,47 @@ describe('migrateERPState batch-stage reconstruction', () => {
     expect(batch.remainingPcs).toBe(0);
     expect(batch.atProcessorPcs).toBe(0);
     expect(batch.processedPcs).toBe(2500); // 4000 produced − 1500 sold
+  });
+});
+
+describe('migrateERPState batch-number scheme (step 5c)', () => {
+  const makeState = (batchNo: string) => ({
+    suppliers: [{ id: 's1', name: 'Ahmed Steel Traders' }],
+    purchases: [
+      { id: 'p1', supplierId: 's1', materialId: 'm1', purchaseNo: 'PO-2026-0003', date: '2026-01-01', weight: 1000, weightUnit: 'KGs', ratePerUnit: 100, weightPerPiece: 0.25, amount: 100000, status: 'Active' },
+    ],
+    batches: [
+      { id: 'b1', purchaseId: 'p1', supplierId: 's1', materialId: 'm1', batchNo, initialPcs: 4000, remainingPcs: 4000 },
+    ],
+  });
+
+  it('renames a legacy BATCH-{purchaseNo} number to the supplier scheme', () => {
+    settingsState.batchNoMode = 'supplier';
+    const result = migrateERPState(makeState('BATCH-PO-2026-0003'));
+    const batch = result.batches.find((b: any) => b.id === 'b1');
+    expect(batch.batchNo).toBe('AHMED-PO-2026-0003');
+  });
+
+  it('is idempotent — a renamed batch is never renamed again', () => {
+    settingsState.batchNoMode = 'supplier';
+    const once = migrateERPState(makeState('BATCH-PO-2026-0003'));
+    const twice = migrateERPState(once);
+    const batch = twice.batches.find((b: any) => b.id === 'b1');
+    expect(batch.batchNo).toBe('AHMED-PO-2026-0003');
+  });
+
+  it('leaves custom or already-renamed batch numbers untouched', () => {
+    settingsState.batchNoMode = 'supplier';
+    const result = migrateERPState(makeState('MY-RENAMED-BATCH'));
+    const batch = result.batches.find((b: any) => b.id === 'b1');
+    expect(batch.batchNo).toBe('MY-RENAMED-BATCH');
+  });
+
+  it('keeps the BATCH- scheme when batchNoMode is classic', () => {
+    settingsState.batchNoMode = 'classic';
+    const result = migrateERPState(makeState('BATCH-PO-2026-0003'));
+    const batch = result.batches.find((b: any) => b.id === 'b1');
+    expect(batch.batchNo).toBe('BATCH-PO-2026-0003');
+    settingsState.batchNoMode = 'supplier';
   });
 });

@@ -299,7 +299,7 @@ function CommandPalette() {
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] px-4 sm:px-6">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity" onClick={() => setIsOpen(false)} />
       
-      <div className="relative w-full max-w-2xl bg-card rounded-2xl shadow-2xl border border-border overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-2xl glass-overlay rounded-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         <div className="flex items-center px-4 border-b border-border/50">
           <Search className="h-5 w-5 text-muted-foreground/80" />
           <input
@@ -412,7 +412,7 @@ function NotificationBell() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-80 bg-card rounded-xl shadow-xl border border-border overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="absolute right-0 top-full mt-2 w-80 glass-overlay rounded-xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between bg-muted/40">
             <h3 className="font-semibold text-foreground">Notifications</h3>
             {unreadCount > 0 && (
@@ -583,9 +583,11 @@ export function DashboardLayout() {
 
   return (
     <div className="min-h-screen bg-muted/40 font-sans selection:bg-muted-foreground/20">
+      {/* Colour field the shell's glass panels blur against. Inert and fixed. */}
+      <div className="app-ambient" aria-hidden="true" />
       <CommandPalette />
       
-      <div className="fixed top-3 left-3 right-3 h-14 glass-panel rounded-2xl z-40 flex items-center justify-between px-4 sm:px-5">
+      <div className="fixed top-3 left-[var(--shell-inset)] right-[var(--shell-inset)] h-14 glass-panel rounded-2xl z-40 flex items-center justify-between px-4 sm:px-5">
         <div className="flex items-center gap-4">
           <button 
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -660,7 +662,7 @@ export function DashboardLayout() {
       )}
 
       <aside className={cn(
-        "fixed top-[76px] bottom-3 left-3 z-30 rounded-2xl glass-panel overflow-y-auto scrollbar-hide transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] lg:translate-x-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        "fixed top-[76px] bottom-3 left-[var(--shell-inset)] z-30 rounded-2xl glass-panel overflow-y-auto scrollbar-hide transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] lg:translate-x-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         isRailMode ? "w-[68px]" : "w-64",
         isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
       )}>
@@ -715,13 +717,15 @@ export function DashboardLayout() {
       </aside>
 
       {/* Rail toggle floats just outside the sidebar edge — inside the aside it
-          would be clipped by the panel's overflow scrolling. */}
+          would be clipped by the panel's overflow scrolling. It can sit at the
+          top again because the content gutter now starts past it: it ends one
+          sidebar-width out, the column starts at that same offset plus p-8. */}
       <button
         onClick={toggleRail}
         aria-label={isRailMode ? 'Expand sidebar' : 'Collapse sidebar'}
         title={isRailMode ? 'Expand sidebar' : 'Collapse sidebar'}
         className="hidden lg:flex fixed top-[100px] z-40 h-6 w-6 items-center justify-center rounded-full glass-panel text-muted-foreground hover:text-foreground hover:scale-110 transition-all duration-200"
-        style={{ left: isRailMode ? 68 : 256 }}
+        style={{ left: `calc(var(--shell-inset) + ${isRailMode ? 68 : 256}px)` }}
       >
         {isRailMode ? <PanelLeftOpen className="h-3.5 w-3.5" /> : <PanelLeftClose className="h-3.5 w-3.5" />}
       </button>
@@ -734,10 +738,17 @@ export function DashboardLayout() {
       </a>
 
       <main id="main-content" className={cn(
-        "pt-16 min-h-screen transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
-        isRailMode ? "lg:pl-[92px]" : "lg:pl-[268px]"
+        "pt-16 min-h-screen transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] lg:pr-[var(--shell-inset)]",
+        isRailMode ? "lg:pl-[calc(var(--shell-inset)_+_80px)]" : "lg:pl-[calc(var(--shell-inset)_+_256px)]"
       )}>
-        <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        {/* Left-anchored, not centred: `mx-auto` grows the left margin with the
+            viewport, so on wide screens the column drifted away from the
+            sidebar. Centring is the shell's job (--shell-max) and the gutter is
+            measured from --shell-inset, so the column always starts one
+            sidebar-width plus the p-8 padding past the panel — headings,
+            subtitles, filter chips and chart labels all clear the glass, and
+            nothing sits behind it. */}
+        <div className="max-w-7xl p-4 sm:p-6 lg:p-8">
           <Outlet />
         </div>
       </main>

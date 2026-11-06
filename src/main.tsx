@@ -103,6 +103,27 @@ async function bootstrap() {
         const { SQLiteStorageAdapter } = await import('./database/sqlite/SQLiteStorageAdapter');
         sqliteAdapter = SQLiteStorageAdapter;
 
+        // ---- Settings store rehydration ----
+        const settingsValue = await SQLiteStorageAdapter.getItem('erp-settings');
+        if (settingsValue) {
+          try {
+            const parsed = JSON.parse(settingsValue);
+            const state = parsed.state || parsed;
+            if (!state || typeof state !== 'object') {
+              throw new Error('erp-settings blob is not an object');
+            }
+            const { useSettingsStore } = await import('./store/useSettingsStore');
+            useSettingsStore.setState(state);
+            Logger.info('Startup', 'Settings rehydrated from SQLite');
+          } catch (e: any) {
+            (window as any).__SETTINGS_REHYDRATION_FAILED__ = true;
+            console.error('[Startup] Settings rehydration FAILED — existing settings preserved', e);
+            Logger.error('Startup', `Settings rehydration FAILED, existing data preserved: ${e.message}`);
+          }
+        } else {
+          Logger.info('Startup', 'No persisted settings found (first launch or clean start)');
+        }
+
         // ---- ERP store rehydration ----
         const erpValue = await SQLiteStorageAdapter.getItem('erp-storage');
         if (erpValue) {
@@ -215,27 +236,6 @@ async function bootstrap() {
           if (!migrated) {
             Logger.info('Startup', 'No persisted access state found (first launch)');
           }
-        }
-
-        // ---- Settings store rehydration ----
-        const settingsValue = await SQLiteStorageAdapter.getItem('erp-settings');
-        if (settingsValue) {
-          try {
-            const parsed = JSON.parse(settingsValue);
-            const state = parsed.state || parsed;
-            if (!state || typeof state !== 'object') {
-              throw new Error('erp-settings blob is not an object');
-            }
-            const { useSettingsStore } = await import('./store/useSettingsStore');
-            useSettingsStore.setState(state);
-            Logger.info('Startup', 'Settings rehydrated from SQLite');
-          } catch (e: any) {
-            (window as any).__SETTINGS_REHYDRATION_FAILED__ = true;
-            console.error('[Startup] Settings rehydration FAILED — existing settings preserved', e);
-            Logger.error('Startup', `Settings rehydration FAILED, existing data preserved: ${e.message}`);
-          }
-        } else {
-          Logger.info('Startup', 'No persisted settings found (first launch or clean start)');
         }
 
         // ---- Log store rehydration ----

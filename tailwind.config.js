@@ -104,6 +104,10 @@ export default {
                 'gradient-card': 'var(--gradient-card)',
                 'gradient-background': 'var(--gradient-background)'
             },
+            fontFamily: {
+                // docs/DESIGN.md specifies Montserrat for headings and body.
+                sans: ['Montserrat', 'ui-sans-serif', 'system-ui', 'sans-serif']
+            },
             boxShadow: {
                 card: 'var(--shadow-card)',
                 hover: 'var(--shadow-hover)'

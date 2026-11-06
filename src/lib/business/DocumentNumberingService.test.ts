@@ -2,9 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock the settings store so tests can flip yearly reset + prefixes
 // without touching the real zustand store / SQLite adapter.
-const settingsState: { voucherYearlyReset: boolean; voucherPrefixes: Record<string, string> } = {
+const settingsState: {
+  voucherYearlyReset: boolean;
+  voucherPrefixes: Record<string, string>;
+  documentPrefixes: Record<string, string>;
+  batchNoMode: 'supplier' | 'classic';
+} = {
   voucherYearlyReset: true,
   voucherPrefixes: {},
+  documentPrefixes: {},
+  batchNoMode: 'supplier',
 };
 
 vi.mock('../../store/useSettingsStore', () => ({
@@ -45,6 +52,8 @@ describe('DocumentNumberingService.nextVoucherNumber', () => {
   beforeEach(() => {
     settingsState.voucherYearlyReset = true;
     settingsState.voucherPrefixes = {};
+    settingsState.documentPrefixes = {};
+    settingsState.batchNoMode = 'supplier';
   });
 
   it('starts a fresh sequence at 0001', () => {
@@ -139,5 +148,51 @@ describe('DocumentNumberingService.nextDocumentNumber', () => {
       { receiveNo: 'REC-2026-0001' },
     ];
     expect(DocumentNumberingService.nextDocumentNumber(existing, 'receiveNo', 'REC', '2026-01-01')).toBe('REC-2026-0002');
+  });
+
+  it('uses the configured custom document prefix', () => {
+    settingsState.documentPrefixes = { PO: 'BUY' };
+    expect(DocumentNumberingService.nextDocumentNumber([], 'purchaseNo', 'PO', '2026-01-10')).toBe('BUY-2026-0001');
+  });
+
+  it('continues from legacy numbers even when the document prefix changed', () => {
+    // Renaming PO → BUY mid-year must NOT rewind: max stays 9 regardless of prefix.
+    settingsState.documentPrefixes = { PO: 'BUY' };
+    const existing = [{ purchaseNo: 'PO-2026-0009' }];
+    expect(DocumentNumberingService.nextDocumentNumber(existing, 'purchaseNo', 'PO', '2026-02-01')).toBe('BUY-2026-0010');
+  });
+
+  it('falls back to the default prefix when the custom value is blank', () => {
+    settingsState.documentPrefixes = { INV: '   ' };
+    expect(DocumentNumberingService.nextDocumentNumber([], 'invoiceNo', 'INV', '2026-01-10')).toBe('INV-2026-0001');
+  });
+});
+
+describe('DocumentNumberingService.buildBatchNo', () => {
+  beforeEach(() => {
+    settingsState.batchNoMode = 'supplier';
+  });
+
+  it('uses the supplier\'s first word + the purchase number by default', () => {
+    expect(DocumentNumberingService.buildBatchNo('Ahmed Steel Traders', 'PO-2026-0003')).toBe('AHMED-PO-2026-0003');
+  });
+
+  it('strips punctuation from the supplier word', () => {
+    expect(DocumentNumberingService.buildBatchNo('S.K. Steel Works', 'PO-2026-0004')).toBe('SK-PO-2026-0004');
+  });
+
+  it('cuts the supplier word to 12 characters', () => {
+    expect(DocumentNumberingService.buildBatchNo('MultinationalEngineeringSupplies Ltd', 'PO-2026-0005')).toBe('MULTINATIONA-PO-2026-0005');
+  });
+
+  it('falls back to BATCH when there is no usable supplier word', () => {
+    expect(DocumentNumberingService.buildBatchNo(undefined, 'PO-2026-0006')).toBe('BATCH-PO-2026-0006');
+    expect(DocumentNumberingService.buildBatchNo('   ', 'PO-2026-0006')).toBe('BATCH-PO-2026-0006');
+    expect(DocumentNumberingService.buildBatchNo('$$$ Steel', 'PO-2026-0006')).toBe('BATCH-PO-2026-0006');
+  });
+
+  it('returns the classic scheme in classic mode, even with a supplier', () => {
+    settingsState.batchNoMode = 'classic';
+    expect(DocumentNumberingService.buildBatchNo('Ahmed Steel Traders', 'PO-2026-0003')).toBe('BATCH-PO-2026-0003');
   });
 });

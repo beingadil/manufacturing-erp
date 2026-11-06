@@ -74,6 +74,92 @@ const sale = (customerId: string, productId: string, pcsSold: number) =>
     pricePerPiece: 500, remarks: '',
   } as any);
 
+/**
+ * Regression cover for the shop's real mix: a finished full-chain batch
+ * (Circle, receipts finished at the final stage) and a ready-made batch
+ * (Steel Dhakkan, finished at purchase). An assembled sale must be able to
+ * draw both buckets — historically only raw stock was counted and the sale
+ * was refused despite full shelves.
+ */
+describe('assembled sale draws finished stock', () => {
+  function seedFinished() {
+    useERPStore.setState({
+      accountSubtypes: [
+        { id: 'st-inv', name: 'Inventory', type: 'Assets' as const, isSystem: true },
+        { id: 'st-ar', name: 'Accounts Receivable', type: 'Assets' as const, isSystem: true },
+        { id: 'st-sales', name: 'Sales', type: 'Revenue' as const, isSystem: true },
+        { id: 'st-cogs', name: 'Purchases', type: 'Expenses' as const, isSystem: true },
+      ],
+      accounts: [
+        { id: 'acct-rm', code: '1101', name: 'Raw Material Inventory', subtypeId: 'st-inv', type: 'Assets' as const, openingBalance: 0, openingBalanceType: 'Debit' as const, status: 'Active' as const, isSystem: true },
+        { id: 'acct-ar', code: '1200', name: 'Accounts Receivable', subtypeId: 'st-ar', type: 'Assets' as const, openingBalance: 0, openingBalanceType: 'Debit' as const, status: 'Active' as const, isSystem: true },
+        { id: 'acct-sales', code: '4001', name: 'Sales Revenue', subtypeId: 'st-sales', type: 'Revenue' as const, openingBalance: 0, openingBalanceType: 'Credit' as const, status: 'Active' as const, isSystem: true },
+        { id: 'acct-cogs', code: '5201', name: 'Cost of Goods Sold', subtypeId: 'st-cogs', type: 'Cost of Goods Sold' as const, openingBalance: 0, openingBalanceType: 'Debit' as const, status: 'Active' as const, isSystem: true },
+      ],
+      materials: [], products: [], customers: [], suppliers: [], processors: [],
+      purchases: [], sales: [], batches: [], inventoryMovements: [],
+      vouchers: [], journalEntries: [], processingSends: [], processingReceipts: [],
+      processorBills: [],
+    } as any);
+
+    st().addCustomer({ name: 'Shop' });
+
+    useERPStore.setState({
+      materials: [
+        { id: 'mat-circle', name: 'Circle 10 Inch', code: 'C10', categoryId: 'c', unit: 'PCS', status: 'Active', usageType: 'sellable', processingPath: 'full_chain', stockPcs: 0, processedStockPcs: 806, atProcessorPcs: 0 },
+        { id: 'mat-dhakkan', name: 'Steel Dhakkan', code: 'DHA-1', categoryId: 'c', unit: 'PCS', status: 'Active', usageType: 'component', processingPath: 'ready_made', stockPcs: 0, processedStockPcs: 250, atProcessorPcs: 0 },
+      ],
+      products: [
+        {
+          id: 'p-jug-set', name: 'Jug Set', sellingPrice: 1500, usageType: 'assembled',
+          components: [
+            { materialId: 'mat-circle', quantity: 1 },
+            { materialId: 'mat-dhakkan', quantity: 1 },
+          ],
+        },
+      ],
+      batches: [
+        { id: 'b-circle', batchNo: 'B-TR-1', purchaseId: 'p1', supplierId: 's', materialId: 'mat-circle', date: '2026-11-01', weight: 0, weightUnit: 'KGs', ratePerUnit: 82, weightPerPiece: 0, initialPcs: 806, remainingPcs: 0, atProcessorPcs: 0, processedPcs: 806, amount: 66092, status: 'Active', processingPath: 'full_chain' },
+        { id: 'b-dhakkan', batchNo: 'B-TR-2', purchaseId: 'p2', supplierId: 's', materialId: 'mat-dhakkan', date: '2026-11-01', weight: 0, weightUnit: 'KGs', ratePerUnit: 350, weightPerPiece: 0, initialPcs: 250, remainingPcs: 0, atProcessorPcs: 0, processedPcs: 250, amount: 87500, status: 'Active', processingPath: 'ready_made' },
+      ],
+    } as any);
+
+    return st().customers[0].id;
+  }
+
+  it('sells 12 × Jug Set against finished pcs, drawing both buckets', () => {
+    const customerId = seedFinished();
+    expect(() => sale(customerId, 'p-jug-set', 12)).not.toThrow();
+
+    const circle = st().batches.find(b => b.id === 'b-circle')!;
+    const dhakkan = st().batches.find(b => b.id === 'b-dhakkan')!;
+    expect(circle.processedPcs).toBe(794);
+    expect(dhakkan.processedPcs).toBe(238);
+    expect(circle.remainingPcs).toBe(0);
+    expect(dhakkan.remainingPcs).toBe(0);
+
+    const circleMat = st().materials.find(m => m.id === 'mat-circle')!;
+    const dhakkanMat = st().materials.find(m => m.id === 'mat-dhakkan')!;
+    expect(circleMat.processedStockPcs).toBe(794);
+    expect(dhakkanMat.processedStockPcs).toBe(238);
+
+    const movements = (st().inventoryMovements || []).filter(m => m.module === 'Sale');
+    expect(movements).toHaveLength(2);
+    expect(movements.reduce((s, m) => s + (m.quantity || 0), 0)).toBe(24);
+  });
+
+  it('refuses the sale when a finished bucket is short', () => {
+    const customerId = seedFinished();
+    expect(() => sale(customerId, 'p-jug-set', 251)).toThrow(/Not enough stock/);
+
+    // And nothing was deducted anywhere.
+    const circle = st().batches.find(b => b.id === 'b-circle')!;
+    const dhakkan = st().batches.find(b => b.id === 'b-dhakkan')!;
+    expect(circle.processedPcs).toBe(806);
+    expect(dhakkan.processedPcs).toBe(250);
+  });
+});
+
 describe('assembled product sale', () => {
   let env: ReturnType<typeof seed>;
   beforeEach(() => { env = seed(); });
