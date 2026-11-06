@@ -74,7 +74,9 @@ export function FinishedGoods() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !sellingPrice) return;
+    if (!name.trim() || !sellingPrice) {
+      return toast.error('Product Name and Selling Price are required.');
+    }
     if (components.length === 0) {
       return toast.error('Pick at least one material this product takes.');
     }
@@ -107,6 +109,7 @@ export function FinishedGoods() {
       return toast.error(error.message || 'Failed to save product');
     }
   };
+
 
   const handleDelete = () => {
     const saleCount = sales.filter(s => s.productId === deleteModal.id).length;
