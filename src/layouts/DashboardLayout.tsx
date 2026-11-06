@@ -748,7 +748,7 @@ export function DashboardLayout() {
             sidebar-width plus the p-8 padding past the panel — headings,
             subtitles, filter chips and chart labels all clear the glass, and
             nothing sits behind it. */}
-        <div className="max-w-7xl p-4 sm:p-6 lg:p-8">
+        <div className="max-w-[2400px] p-4 sm:p-6 lg:p-8">
           <Outlet />
         </div>
       </main>

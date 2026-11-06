@@ -19,6 +19,7 @@ export interface Column<T> {
   sortable?: boolean;
   render?: (item: T) => React.ReactNode;
   align?: 'left' | 'center' | 'right';
+  width?: string | number;
 }
 
 interface DataTableProps<T> {
@@ -218,7 +219,7 @@ function DataTableInner<T extends Record<string, any>>({
                       ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending')
                       : 'none'
                   }
-                  className={`${density === 'compact' ? 'px-4 py-2' : 'px-6 py-4'} font-medium ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : ''}`}
+                  className={`${density === 'compact' ? 'px-4 py-2' : 'px-6 py-4'} font-medium ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : ''} ${col.width ? `w-[${col.width}]` : ''}`}
                 >
                   {col.sortable ? (
                     <button
@@ -244,7 +245,7 @@ function DataTableInner<T extends Record<string, any>>({
                 {columns.map((col) => (
                   <td 
                     key={col.key} 
-                    className={`${density === 'compact' ? 'px-4 py-2' : 'px-6 py-4'} ${col.align === 'right' ? 'text-right tabular-nums' : col.align === 'center' ? 'text-center' : ''}`}
+                    className={`${density === 'compact' ? 'px-4 py-2' : 'px-6 py-4'} ${col.align === 'right' ? 'text-right tabular-nums' : col.align === 'center' ? 'text-center' : ''} ${col.width ? `w-[${col.width}]` : ''}`}
                   >
                     {col.render ? col.render(item) : item[col.key]}
                   </td>

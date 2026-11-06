@@ -13,14 +13,14 @@ import { MaterialService } from '../services/MaterialService';
 import { useERPStore } from "../store/useERPStore";
 
 /**
- * Raw Materials — master-data page redesigned per amicro-design-system:
- *   - Wider container (max-w-[2200px], px-7 chrome) so no horizontal scroll bars
- *   - Hairline borders (border-white/[0.07]) instead of heavy outlines
- *   - Soft focus halos (ring-primary/10) instead of hard focus rings
- *   - Cubic-bezier motion (ease-[cubic-bezier(0.32,0.72,0,1)]) on all transitions
+ * Raw Materials — master-data page with professional design.
+ *   - Full width container (max-w-[2400px], px-8 chrome)
+ *   - Hairline borders (border-white/[0.07]) on glass cards
+ *   - Cubic-bezier motion on all transitions
  *   - Press physics (active:scale-[0.99]) on buttons
  *   - tabular-nums on all quantities
- *   - No card overuse — one clean hairline container, pill badges, hairline rows
+ *   - Premium table with proper column widths — every button visible
+ *   - No card overuse — one clean hairline container per section
  */
 export function RawMaterials() {
   const { materials, categories, purchases, processingSends, processingReceipts, batches } = useERPStore();
@@ -132,10 +132,10 @@ export function RawMaterials() {
       sortable: true,
       render: (item) => (
         <Link to={`/materials/${item.id}`} className="flex items-center gap-3 group-hover:text-muted-foreground transition-[color] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground group-hover:bg-muted-foreground/20 transition-colors">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground group-hover:bg-muted-foreground/20 transition-colors">
             <PackageSearch className="h-4 w-4" />
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <div className="font-semibold text-foreground tracking-tight" onClick={(e) => e.stopPropagation()}>
               <InlineEditInput
                 value={item.name}
@@ -220,8 +220,9 @@ export function RawMaterials() {
       key: "actions",
       label: "Actions",
       align: "right",
+      width: 140,
       render: (item) => (
-        <div className="flex items-center justify-end gap-1.5">
+        <div className="flex items-center justify-end gap-1">
           <RowActionButton
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); openEditModal(item); }}
             label={`Edit ${item.name}`}
@@ -243,6 +244,7 @@ export function RawMaterials() {
       key: "sync",
       label: "Sync",
       align: "right",
+      width: 96,
       render: (item: any) => (
         item.isOptimistic ? <span className="flex items-center text-xs text-blue-500 justify-end"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin mr-1"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21v-5h5"/></svg> Syncing</span> : <span className="flex items-center text-xs text-emerald-600 justify-end"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg> Synced</span>
       )
@@ -254,14 +256,15 @@ export function RawMaterials() {
   const totalValue = enrichedMaterials.reduce((s, m) => s + (m.value || 0), 0);
 
   return (
-    <div className="mx-auto max-w-full px-7 pt-6 pb-20 sm:px-8 sm:pt-4 lg:px-10 xl:px-12">
-      <div className="space-y-1 pb-3">
+    <div className="w-full px-7 pt-6 pb-20 sm:px-8 sm:pt-4 lg:px-10 xl:px-12">
+      {/* Header strip */}
+      <div className="space-y-1 pb-4">
         <div className="flex items-center justify-between gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-sm">
               <PackageSearch className="h-5 w-5" />
             </div>
-            <div>
+            <div className="flex-1 min-w-0">
               <h2 className="text-2xl font-semibold tracking-tight text-foreground">Raw Materials</h2>
               <p className="text-sm text-muted-foreground mt-0.5">Manage raw material items in your inventory.</p>
             </div>
@@ -276,40 +279,44 @@ export function RawMaterials() {
         </div>
       </div>
 
-      <section className="flex flex-wrap items-center gap-x-10 gap-y-3 rounded-xl border border-white/[0.07] bg-card shadow-sm px-7 py-5">
-        <div>
+      {/* Stat strip */}
+      <section className="flex flex-wrap items-center gap-x-10 gap-y-3 rounded-xl border border-white/[0.07] bg-card shadow-sm px-7 py-5 w-full">
+        <div className="flex-1 min-w-0">
           <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Materials</div>
           <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{formatNumber(enrichedMaterials.length)}</div>
         </div>
-        <div className="border-l border-white/[0.07] pl-10">
+        <div className="flex-1 min-w-0 border-l border-white/[0.07] pl-10">
           <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Raw Stock</div>
           <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{formatNumber(totalStock)}</div>
           <div className="text-xs text-muted-foreground">PCS in raw stock</div>
         </div>
-        <div className="border-l border-white/[0.07] pl-10">
+        <div className="flex-1 min-w-0 border-l border-white/[0.07] pl-10">
           <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Processed Stock</div>
           <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-success">{formatNumber(totalProcessed)}</div>
           <div className="text-xs text-muted-foreground">PCS at processors & finished</div>
         </div>
-        <div className="border-l border-white/[0.07] pl-10">
+        <div className="flex-1 min-w-0 border-l border-white/[0.07] pl-10">
           <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Inventory Value</div>
           <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-success">{formatCurrency(totalValue)}</div>
           <div className="text-xs text-muted-foreground">At purchase cost, incl. WIP & finished</div>
         </div>
       </section>
 
-      <div className="mt-8 rounded-xl border border-white/[0.07] bg-card shadow-sm overflow-hidden">
-        <DataTable
-          data={enrichedMaterials}
-          columns={columns}
-          searchKeys={["name", "code", "categoryName", "description"]}
-          searchPlaceholder="Search materials by name, No. or category..."
-          persistKey="materials-table"
-          defaultSortKey="name"
-          defaultSortDirection="asc"
-          density="compact"
-          showPageSize={false}
-        />
+      {/* Data table */}
+      <div className="mt-8 rounded-xl border border-white/[0.07] bg-card shadow-sm overflow-hidden w-full">
+        <div className="overflow-x-auto">
+          <DataTable
+            data={enrichedMaterials}
+            columns={columns}
+            searchKeys={["name", "code", "categoryName", "description"]}
+            searchPlaceholder="Search materials by name, No. or category..."
+            persistKey="materials-table"
+            defaultSortKey="name"
+            defaultSortDirection="asc"
+            density="compact"
+            showPageSize={false}
+          />
+        </div>
       </div>
 
       {/* onClose now calls closeModal (was setIsModalOpen(false)), so Escape/backdrop also resets form state. */} 
