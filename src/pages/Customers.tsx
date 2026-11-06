@@ -153,32 +153,22 @@ export function Customers() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <KpiCard
-          label="Total Customers"
-          value={formatNumber(customers.length)}
-          icon={<Users className="h-5 w-5" />}
-          iconClassName="text-blue-500"
-          size="sm"
-        />
-        <KpiCard
-          label="Total Receivable"
-          value={formatCurrency(customers.reduce((s, c) => s + (c.balanceReceivable || 0), 0))}
-          icon={<Wallet className="h-5 w-5" />}
-          iconClassName="text-indigo-500"
-          accent="text-success"
-          size="sm"
-          description="Outstanding balance across all customers"
-        />
-        <KpiCard
-          label="Customers with Balance"
-          value={formatNumber(customers.filter(c => (c.balanceReceivable || 0) > 0).length)}
-          icon={<CircleDollarSign className="h-5 w-5" />}
-          iconClassName="text-blue-500"
-          size="sm"
-          description="Customers who owe money"
-        />
-      </div>
+      <section className="flex flex-wrap items-center gap-x-10 gap-y-3 rounded-2xl border border-border bg-card px-6 py-4 shadow-sm">
+        <div>
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Customers</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{formatNumber(customers.length)}</div>
+        </div>
+        <div className="border-l border-border/60 pl-10">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Receivable</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-success">{formatCurrency(customers.reduce((s, c) => s + (c.balanceReceivable || 0), 0))}</div>
+          <div className="text-xs text-muted-foreground">Outstanding balance</div>
+        </div>
+        <div className="border-l border-border/60 pl-10">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">With Balance</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{formatNumber(customers.filter(c => (c.balanceReceivable || 0) > 0).length)}</div>
+          <div className="text-xs text-muted-foreground">Customers owed money</div>
+        </div>
+      </section>
 
       <DataTable
         data={customers}

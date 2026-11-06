@@ -353,7 +353,7 @@ export function MaterialDetail() {
                       const valueOnHand = ((prog?.rawPcs || 0) + (b.atProcessorPcs || 0) + availPcs + (prog?.finishedPcs || 0)) * costPcs;
                       return (
                         <tr key={b.id} className="hover:bg-muted/40 transition-colors">
-                          <td className="px-4 py-3 font-medium text-foreground">{b.batchNo}</td>
+                          <td className="px-4 py-3 font-medium text-foreground"><Link to={`/materials/${id}/purchases/${b.id}`} className="hover:text-primary hover:underline">{b.batchNo}</Link></td>
                           <td className="px-4 py-3 text-muted-foreground">{getSupplierName(b.supplierId)}</td>
                           <td className="px-4 py-3 text-right text-muted-foreground tabular-nums">{formatNumber(b.initialPcs)}</td>
                           <td className="px-4 py-3 text-right font-medium text-foreground tabular-nums">{formatNumber(prog?.rawPcs ?? 0)}</td>

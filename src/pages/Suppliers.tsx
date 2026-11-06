@@ -89,32 +89,22 @@ export function Suppliers() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <KpiCard
-          label="Total Suppliers"
-          value={formatNumber(suppliers.length)}
-          icon={<Truck className="h-5 w-5" />}
-          iconClassName="text-amber-500"
-          size="sm"
-        />
-        <KpiCard
-          label="Total Payable"
-          value={formatCurrency(suppliers.reduce((s, su) => s + (su.balancePayable || 0), 0))}
-          icon={<Wallet className="h-5 w-5" />}
-          iconClassName="text-orange-500"
-          accent="text-destructive"
-          size="sm"
-          description="Outstanding balance across all suppliers"
-        />
-        <KpiCard
-          label="Suppliers with Balance"
-          value={formatNumber(suppliers.filter(su => (su.balancePayable || 0) > 0).length)}
-          icon={<CircleDollarSign className="h-5 w-5" />}
-          iconClassName="text-amber-500"
-          size="sm"
-          description="Suppliers currently owed money"
-        />
-      </div>
+      <section className="flex flex-wrap items-center gap-x-10 gap-y-3 rounded-2xl border border-border bg-card px-6 py-4 shadow-sm">
+        <div>
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Suppliers</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{formatNumber(suppliers.length)}</div>
+        </div>
+        <div className="border-l border-border/60 pl-10">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Payable</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-destructive">{formatCurrency(suppliers.reduce((s, su) => s + (su.balancePayable || 0), 0))}</div>
+          <div className="text-xs text-muted-foreground">Outstanding balance</div>
+        </div>
+        <div className="border-l border-border/60 pl-10">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">With Balance</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{formatNumber(suppliers.filter(su => (su.balancePayable || 0) > 0).length)}</div>
+          <div className="text-xs text-muted-foreground">Suppliers owed money</div>
+        </div>
+      </section>
 
       <DataTable
         data={suppliers}

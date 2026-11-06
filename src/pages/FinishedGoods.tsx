@@ -224,31 +224,22 @@ export function FinishedGoods() {
         </button>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <KpiCard
-          label="Total Products"
-          value={formatNumber(enrichedProducts.length)}
-          icon={<Package className="h-5 w-5" />}
-          iconClassName="text-sky-500"
-          size="sm"
-        />
-        <KpiCard
-          label="Products In Stock"
-          value={formatNumber(enrichedProducts.filter(p => (p.availableStock || 0) > 0).length)}
-          icon={<Boxes className="h-5 w-5" />}
-          iconClassName="text-blue-500"
-          size="sm"
-          description="Products with processed stock available"
-        />
-        <KpiCard
-          label="Total Available Stock"
-          value={formatNumber(enrichedProducts.reduce((s, p) => s + (p.availableStock || 0), 0))}
-          icon={<Boxes className="h-5 w-5" />}
-          iconClassName="text-sky-500"
-          size="sm"
-          description="PCS of finished goods ready to sell"
-        />
-      </div>
+      <section className="flex flex-wrap items-center gap-x-10 gap-y-3 rounded-2xl border border-border bg-card px-6 py-4 shadow-sm">
+        <div>
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Products</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{formatNumber(enrichedProducts.length)}</div>
+        </div>
+        <div className="border-l border-border/60 pl-10">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">In Stock</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{formatNumber(enrichedProducts.filter(p => (p.availableStock || 0) > 0).length)}</div>
+          <div className="text-xs text-muted-foreground">With processed stock</div>
+        </div>
+        <div className="border-l border-border/60 pl-10">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Available Stock</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-sky-500">{formatNumber(enrichedProducts.reduce((s, p) => s + (p.availableStock || 0), 0))}</div>
+          <div className="text-xs text-muted-foreground">PCS ready to sell</div>
+        </div>
+      </section>
 
       <DataTable
         data={enrichedProducts}
