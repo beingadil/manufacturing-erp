@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Column, DataTable } from '@/components/DataTable';
 import { Badge } from '@/components/ui/badge';
+import { toolbarSelectClass } from '@/components/ui/formStyles';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { hashPassword, useAccessStore } from '@/store/useAccessStore';
@@ -275,7 +276,7 @@ export function UsersTab() {
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
-            className="h-10 px-3 rounded-md border border-input bg-background text-sm"
+            className={toolbarSelectClass}
           >
             <option value="">All Roles</option>
             {roles.map((r) => (
@@ -285,7 +286,7 @@ export function UsersTab() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-10 px-3 rounded-md border border-input bg-background text-sm"
+            className={toolbarSelectClass}
           >
             <option value="">All Statuses</option>
             <option value="active">Active</option>

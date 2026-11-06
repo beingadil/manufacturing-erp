@@ -165,6 +165,12 @@ export function migrateERPState(state: any): any {
   //    only receipts from the configured final stage / legacy produce finished;
   //    recorded losses shrink WIP. The same economic pcs are never counted in
   //    two stages simultaneously.
+  // 4b. Batch numbers: legacy BATCH-{purchaseNo} numbers become the supplier
+  //     scheme ({SUPPLIER-FIRST}-{purchaseNo}, e.g. AHMED-PO-2026-0003) when
+  //     batchNoMode is 'supplier'. Precisely idempotent — only a number that
+  //     exactly equals its purchase's legacy form is renamed, so a batch the
+  //     user (or an older migration) already renamed is left alone, and
+  //     switching the mode in Settings simply stops renaming going forward.
   const batches = Array.isArray(state.batches) ? state.batches : [];
   const sends = Array.isArray(state.processingSends) ? state.processingSends : [];
   const receipts = Array.isArray(state.processingReceipts) ? state.processingReceipts : [];
@@ -223,6 +229,21 @@ export function migrateERPState(state: any): any {
     Array.isArray(state.materials) ? state.materials : [],
     migratedBatches
   );
+
+  // 5c. Batch number normalization (see 4b): legacy BATCH-{PO} → supplier
+  //     scheme. Uses the Settings store, hydrated BEFORE the ERP migration in
+  //     main.tsx, so the user's chosen mode wins.
+  if (batches.length > 0) {
+    const purchasesArr = Array.isArray(state.purchases) ? state.purchases : [];
+    const suppliersArr = Array.isArray(state.suppliers) ? state.suppliers : [];
+    migratedBatches = migratedBatches.map((b: any) => {
+      if (!b?.batchNo || !String(b.batchNo).startsWith('BATCH-')) return b;
+      const purchase = purchasesArr.find((p: any) => p.id === b.purchaseId);
+      if (!purchase?.purchaseNo || b.batchNo !== `BATCH-${purchase.purchaseNo}`) return b;
+      const supplier = suppliersArr.find((s: any) => s.id === b.supplierId);
+      return { ...b, batchNo: DocumentNumberingService.buildBatchNo(supplier?.name, purchase.purchaseNo) };
+    });
+  }
 
   // 6. Drop legacy parallel trail
   const { ledgerEntries, ...rest } = state;

@@ -205,9 +205,17 @@ function fifoOrder(batches: Batch[]): Batch[] {
   });
 }
 
-/** Pieces of one material a caller may draw down. Mirrors the sale path. */
+/** Pcs waiting for their next stage (all source buckets). */
+function waitingOn(batch: Batch): number {
+  return Object.values(batch.stageAvailableBySource || {}).reduce((s, n) => s + (n || 0), 0);
+}
+
+/** Pieces of one material a caller may draw down. Mirrors the sale path.
+ *  Raw (never dispatched) and finished/ready-made pieces are two disjoint
+ *  buckets — both are valid stock for a sale: a finished lid needs no
+ *  processing, and a raw plate could feed the FIFO draw. */
 function availableOn(batch: Batch): number {
-  return Math.max(0, batch.remainingPcs || 0);
+  return Math.max(0, (batch.remainingPcs || 0) + (batch.processedPcs || 0));
 }
 
 /**
@@ -238,12 +246,20 @@ export function consumeComponentStock(
   for (const b of fifoOrder(next)) {
     if (consumed >= target - TOLERANCE) break;
     if (b.materialId !== materialId || b.status !== 'Active') continue;
-    const availableHere = availableOn(b);
-    if (availableHere <= TOLERANCE) continue;
-    const take = Math.min(availableHere, target - consumed);
-    b.remainingPcs = roundQty(b.remainingPcs - take);
-    if (b.remainingPcs <= TOLERANCE) b.status = 'Depleted';
-    consumed = roundQty(consumed + take);
+    // Raw first (the drawn pcs likely need processing anyway), then the
+    // finished/ready-made bucket — two disjoint draws, one line each. A lid
+    // bought finished is consumed from its own finished bucket.
+    const rawTake = Math.min(Math.max(0, b.remainingPcs || 0), target - consumed);
+    if (rawTake > TOLERANCE) {
+      b.remainingPcs = roundQty(b.remainingPcs - rawTake);
+      consumed = roundQty(consumed + rawTake);
+    }
+    const finishedTake = Math.min(Math.max(0, b.processedPcs || 0), target - consumed);
+    if (finishedTake > TOLERANCE) {
+      b.processedPcs = roundQty((b.processedPcs || 0) - finishedTake);
+      consumed = roundQty(consumed + finishedTake);
+    }
+    if (availableOn(b) <= TOLERANCE) b.status = 'Depleted';
   }
   return { batches: next, consumed, shortage: 0 };
 }
@@ -274,6 +290,21 @@ export function restoreComponentStock(
     if (remaining <= TOLERANCE) break;
     const live = byId.get(b.id);
     if (!live) continue;
+    // A ready-made batch must never dress pcs in raw-stock clothing — refill
+    // its finished bucket straight away. Every other batch refills raw first
+    // (the draw emptied raw first while it was there), then finished. A batch
+    // with pcs in both buckets at restore time may place the overflow on the
+    // raw side — pcs are always conserved, only their bucket label is
+    // approximate for that mixed case.
+    if (live.processingPath === 'ready_made') {
+      const room = live.initialPcs != null ? Math.max(0, live.initialPcs - (live.processedPcs || 0) - (live.remainingPcs || 0) - (live.atProcessorPcs || 0) - waitingOn(live)) : Number.POSITIVE_INFINITY;
+      if (room <= TOLERANCE) continue;
+      const put = Math.min(room, remaining);
+      live.processedPcs = roundQty((live.processedPcs || 0) + put);
+      if (live.status === 'Depleted' && availableOn(live) > 0) live.status = 'Active';
+      remaining = roundQty(remaining - put);
+      continue;
+    }
     const room = live.initialPcs != null
       ? Math.max(0, live.initialPcs - availableOn(live))
       : Number.POSITIVE_INFINITY;

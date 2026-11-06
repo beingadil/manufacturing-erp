@@ -345,7 +345,7 @@ export const createCRUDActions = (
               module: 'Sale',
               transactionType: 'OUT',
               quantity: required,
-              runningBalance: InventoryCalculationService.calculateRawMaterialStock(materialId, nextBatches),
+              runningBalance: InventoryCalculationService.calculateSaleStock(materialId, nextBatches),
               remarks: `Used in ${newProduct.name} \u00d7 ${newPcsSold}`,
             });
           }

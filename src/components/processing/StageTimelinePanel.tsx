@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { InventoryCalculationService } from '../../lib/business/InventoryCalculationService';
 import { getSortedStages } from '../../lib/processing/stageProgress';
 import { formatCurrency, formatDate, formatNumber } from '../../lib/utils';
+import { selectClass } from '../ui/formStyles';
 import type { Batch, ProcessingReceipt, ProcessingSend, ProcessingStage, Processor, RawMaterial } from '../../types/erp';
 import { StageProgressStepper } from './StageProgressStepper';
 
@@ -75,10 +76,10 @@ export function StageTimelinePanel({
           id="timeline-batch"
           value={selectedBatchId}
           onChange={e => onSelectBatch(e.target.value)}
-          className="w-full sm:max-w-md rounded-xl border border-border bg-background p-3 text-sm"
+          className={`${selectClass} sm:max-w-md`}
         >
           <option value="">Select a batch…</option>
-          {(batches || []).map(b => {
+          {(batches || []).filter(b => b.processingPath !== 'ready_made').map(b => {
             const mat = materials.find(m => m.id === b.materialId);
             return <option key={b.id} value={b.id}>{b.batchNo} — {mat?.name || 'Material'} ({formatNumber(b.initialPcs)} PCS)</option>;
           })}

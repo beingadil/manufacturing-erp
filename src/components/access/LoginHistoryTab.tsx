@@ -2,6 +2,7 @@ import { Loader2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Column, DataTable } from '@/components/DataTable';
 import { Badge } from '@/components/ui/badge';
+import { toolbarSelectClass } from '@/components/ui/formStyles';
 import { useAccessStore } from '@/store/useAccessStore';
 import { LoginHistory } from '@/types/access';
 import { SearchInput } from '../ui/SearchInput';
@@ -78,7 +79,7 @@ export function LoginHistoryTab() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="h-10 px-3 rounded-md border border-input bg-background text-sm"
+          className={toolbarSelectClass}
         >
           <option value="">All Statuses</option>
           <option value="Active">Active</option>

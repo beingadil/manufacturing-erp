@@ -7,9 +7,10 @@ import { QuickAddMaterial } from "../components/QuickAddModals";
 import { SearchableSelect } from "../components/SearchableSelect";
 import { KpiCard } from '../components/ui/KpiCard';
 import { PageModal } from "../components/ui/PageModal";
-import { formatCurrency, formatNumber } from "../lib/utils";
+import { fieldGroupClass, inputClass, labelClass } from '../components/ui/formStyles';
+import { cn, formatCurrency, formatNumber } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
-import type { ProductComponent, ProductUsageType } from "../types/erp";
+import type { ProductComponent } from "../types/erp";
 
 export function FinishedGoods() {
   const { products, materials, categories, sales, addProduct, updateModuleItem, removeModuleItem } = useERPStore();
@@ -17,25 +18,22 @@ export function FinishedGoods() {
   const [isAddMaterialOpen, setIsAddMaterialOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [name, setName] = useState("");
-  // 'simple' = made from one material (sold from its own finished stock).
-  // 'assembled' = made from several materials; each sale consumes them all.
-  const [usageType, setUsageType] = useState<ProductUsageType>('simple');
+  // A product can be made from one material or several. One material saves as
+  // a simple linked product (sold from its finished stock); several save as an
+  // assembled product whose sale deducts every material listed below.
   const [components, setComponents] = useState<ProductComponent[]>([]);
-  const [materialId, setMaterialId] = useState("");
   const [sellingPrice, setSellingPrice] = useState("");
-  const [sku, setSku] = useState("");
   const [description, setDescription] = useState("");
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; id: string; no: string }>({ isOpen: false, id: "", no: "" });
 
   const openEditModal = (product: any) => {
     setEditingProduct(product);
     setName(product.name);
-    // Pre-existing products have no usageType; they were always single-material.
-    setUsageType(product.usageType === 'assembled' ? 'assembled' : 'simple');
-    setComponents((product.components ?? []).map((c: ProductComponent) => ({ ...c })));
-    setMaterialId(product.materialId || "");
+    // Simple products (one linked material) load into the same list as
+    // assembled ones — the form no longer distinguishes the two.
+    const existing = (product.components ?? []).map((c: ProductComponent) => ({ ...c }));
+    setComponents(existing.length > 0 ? existing : product.materialId ? [{ materialId: product.materialId, quantity: 1, sortOrder: 1 }] : []);
     setSellingPrice(product.sellingPrice != null ? String(product.sellingPrice) : "");
-    setSku(product.sku || "");
     setDescription(product.description || "");
     setIsModalOpen(true);
   };
@@ -44,40 +42,38 @@ export function FinishedGoods() {
     setIsModalOpen(false);
     setEditingProduct(null);
     setName("");
-    setUsageType('simple');
     setComponents([]);
-    setMaterialId("");
     setSellingPrice("");
-    setSku("");
     setDescription("");
   };
 
-  // Category is inherited from the linked material — never entered separately.
-  const linkedMaterial = materials.find(m => m.id === materialId);
-  const categoryId = linkedMaterial?.categoryId || "";
+  // Category is inherited from the first selected material — never entered separately.
+  const primaryMaterial = materials.find(m => m.id === components[0]?.materialId);
+  const categoryId = primaryMaterial?.categoryId || "";
+
+  // One material → a normal linked product (sold from that material's finished
+  // stock). Two or more → an assembled product; each sale deducts every
+  // material in the list by its qty per unit.
+  const buildPayload = () => {
+    const multi = components.length > 1;
+    return {
+      name,
+      materialId: multi ? undefined : components[0]?.materialId,
+      usageType: (multi ? 'assembled' : 'simple') as 'simple' | 'assembled',
+      components: multi ? components : undefined,
+      categoryId,
+      sellingPrice: parseFloat(sellingPrice),
+      description,
+    };
+  };
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !sellingPrice) return;
-    if (isAssembled) {
-      if (components.length === 0) return toast.error('Pick at least one material this product is made from.');
-    } else if (!materialId) {
-      return;
-    }
+    if (components.length === 0) return toast.error('Pick at least one material this product is made from.');
 
     try {
-      addProduct({
-        name,
-        // An assembled product holds no stock of its own, so it must not also
-        // claim a single material — clearing it keeps the two models exclusive.
-        materialId: isAssembled ? undefined : materialId,
-        usageType: isAssembled ? 'assembled' : 'simple',
-        components: isAssembled ? components : undefined,
-        categoryId,
-        sellingPrice: parseFloat(sellingPrice),
-        sku: sku.trim() || undefined,
-        description
-      });
+      addProduct(buildPayload());
     } catch (error: any) {
       return toast.error(error.message || 'Failed to create product');
     }
@@ -89,23 +85,10 @@ export function FinishedGoods() {
   const handleEdit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProduct || !name || !sellingPrice) return;
-    if (isAssembled) {
-      if (components.length === 0) return toast.error('Pick at least one material this product is made from.');
-    } else if (!materialId) {
-      return;
-    }
+    if (components.length === 0) return toast.error('Pick at least one material this product is made from.');
 
     try {
-      updateModuleItem('products', editingProduct.id, {
-        name,
-        materialId: isAssembled ? undefined : materialId,
-        usageType: isAssembled ? 'assembled' : 'simple',
-        components: isAssembled ? components : undefined,
-        categoryId,
-        sellingPrice: parseFloat(sellingPrice),
-        sku: sku.trim() || undefined,
-        description
-      });
+      updateModuleItem('products', editingProduct.id, buildPayload());
       toast.success('Product updated successfully');
       closeModal();
     } catch (error: any) {
@@ -124,16 +107,6 @@ export function FinishedGoods() {
     toast.success('Product deleted successfully');
     setDeleteModal({ isOpen: false, id: '', no: '' });
   };
-
-  // Only materials the shop has marked as parts can go into a product. Anything
-  // marked sellable is linked 1:1 instead, so a product can never quietly eat
-  // another product's own stock.
-  const componentMaterials = materials.filter(m => m.usageType === 'component' && m.status !== 'Inactive');
-
-  // The mirror image: a "One material" product must not be linked to a part,
-  // because that would sell the part on its own -- the exact thing the part
-  // toggle exists to prevent.
-  const sellableMaterials = materials.filter(m => m.usageType !== 'component' && m.status !== 'Inactive');
 
   const addComponent = (materialId: string) => {
     if (!materialId) return;
@@ -162,8 +135,6 @@ export function FinishedGoods() {
       availableStock: m?.processedStockPcs || 0
     };
   }), [products, materials, categories]);
-
-  const isAssembled = usageType === 'assembled';
 
   const columns: Column<typeof enrichedProducts[0]>[] = [
     { key: "name", label: "Product Name", sortable: true, render: (item) => <span className="font-medium">{item.name}</span> },
@@ -282,64 +253,41 @@ export function FinishedGoods() {
         description="Are you sure you want to permanently delete this product? This cannot be undone."
       />
 
-      <PageModal isOpen={isModalOpen && !isAddMaterialOpen} onClose={closeModal} title={editingProduct ? 'Edit Product' : 'Add Finished Product'}>
-        <form onSubmit={editingProduct ? handleEdit : handleCreate} className="space-y-4">
-          <div className="space-y-1">
-            <label htmlFor="product-name" className="text-sm font-medium text-foreground">Product Name</label>
-            <input id="product-name" name="product-name" type="text" required placeholder="Product Name" value={name} onChange={e => setName(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label htmlFor="product-sku" className="text-sm font-medium text-foreground">SKU (Optional)</label>
-              <input id="product-sku" name="product-sku" type="text" placeholder="SKU (Optional)" spellCheck={false} autoComplete="off" value={sku} onChange={e => setSku(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" />
+      <PageModal isOpen={isModalOpen && !isAddMaterialOpen} onClose={closeModal} title={editingProduct ? 'Edit Product' : 'Add Finished Product'} maxWidth="max-w-3xl">
+        <form onSubmit={editingProduct ? handleEdit : handleCreate} className="space-y-5">
+          <div className={fieldGroupClass}>
+            <div className="space-y-1.5">
+              <label htmlFor="product-name" className={labelClass}>Product Name</label>
+              <input id="product-name" name="product-name" type="text" required placeholder="e.g. Steel Jug 8 Litre" value={name} onChange={e => setName(e.target.value)} autoComplete="off" className={inputClass} />
             </div>
-            <div className="space-y-1">
-              <label htmlFor="product-price" className="text-sm font-medium text-foreground">Selling Price (PKR)</label>
-              <input id="product-price" name="product-price" type="number" step="0.01" required placeholder="Selling Price (PKR)" value={sellingPrice} onChange={e => setSellingPrice(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" />
+            <div className="space-y-1.5">
+              <label htmlFor="product-price" className={labelClass}>Selling Price</label>
+              <input id="product-price" name="product-price" type="number" step="0.01" min="0" required placeholder="e.g. 1850" value={sellingPrice} onChange={e => setSellingPrice(e.target.value)} className={cn(inputClass, 'tabular-nums')} />
             </div>
           </div>
 
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-semibold text-foreground">This product is made from…</legend>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {([
-                { v: 'simple', t: 'One material', d: 'Sold straight from that material\u2019s finished stock.' },
-                { v: 'assembled', t: 'Several materials', d: 'A jug = circle + no.4 + handle. Each sale deducts all of them.' },
-              ] as const).map(o => (
-                <button
-                  key={o.v}
-                  type="button"
-                  onClick={() => setUsageType(o.v)}
-                  aria-pressed={usageType === o.v}
-                  className={`rounded-xl border px-4 py-3 text-left transition-colors ${usageType === o.v ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}
-                >
-                  <span className={`block text-sm font-medium ${usageType === o.v ? 'text-primary' : 'text-foreground'}`}>{o.t}</span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">{o.d}</span>
-                </button>
-              ))}
-            </div>
-          </fieldset>
+          <div className="space-y-1.5">
+            <label htmlFor="product-component" className={labelClass}>Made from these materials *</label>
+            <SearchableSelect
+              options={materials
+                .filter(m => !components.some(c => c.materialId === m.id))
+                .map(m => ({
+                  id: m.id,
+                  label: m.name,
+                  secondaryLabel: [m.code, m.status === 'Inactive' ? 'Inactive' : null].filter(Boolean).join(' · ') || undefined,
+                }))}
+              value=""
+              onChange={addComponent}
+              placeholder="Add Material..."
+              onAdd={() => setIsAddMaterialOpen(true)}
+              required={components.length === 0}
+            />
 
-          {isAssembled ? (
-            <div className="space-y-2">
-              <label htmlFor="product-component" className="text-sm font-medium text-foreground">Made from these materials</label>
-              <SearchableSelect
-                options={componentMaterials
-                  .filter(m => !components.some(c => c.materialId === m.id))
-                  .map(m => ({ id: m.id, label: m.name, secondaryLabel: m.code }))}
-                value=""
-                onChange={addComponent}
-                placeholder="Add Material..."
-              />
-
-              {components.length === 0 ? (
-                <p className="rounded-lg border border-border bg-muted/30 px-3 py-3 text-xs text-muted-foreground">
-                  {componentMaterials.length === 0
-                    ? 'No materials are marked as "a part of another product" yet. Set that on the Raw Materials page first.'
-                    : 'Add the materials above. One Jug, for example, might take 1 Circle, 1 No.4 and 1 Handle.'}
-                </p>
-              ) : (
+            {components.length === 0 ? (
+              <p className="rounded-lg border border-border bg-muted/30 px-3 py-3 text-xs text-muted-foreground">
+                Add at least one material. Pick several with quantities to make an assembled product — each sale then deducts every material listed.
+              </p>
+            ) : (
                 <div className="overflow-hidden rounded-xl border border-border">
                   <table className="w-full text-sm">
                     <thead className="bg-muted/50 text-xs text-muted-foreground">
@@ -386,42 +334,34 @@ export function FinishedGoods() {
                   </table>
                 </div>
               )}
-            </div>
-          ) : (
-          <div>
-            <label className="text-sm font-medium text-foreground">Linked Material</label>
-            <SearchableSelect 
-              options={sellableMaterials.map(m => ({ id: m.id, label: m.name, secondaryLabel: m.code }))}
-              value={materialId}
-              onChange={setMaterialId}
-              placeholder="Select Linked Material..."
-              onAdd={() => setIsAddMaterialOpen(true)}
-              required
-            />
+            {components.length > 1 && (
+              <p className="text-xs text-muted-foreground">
+                More than one material listed — this product will save as assembled. Each sale deducts the qty per unit of every material above.
+              </p>
+            )}
           </div>
-          )}
 
-          {linkedMaterial && (
+          {primaryMaterial && (
             <div className="rounded-xl bg-muted/40 border border-border px-4 py-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Category (from material)</span>
-                <span className="font-medium text-foreground">{categories.find(c => c.id === linkedMaterial.categoryId)?.name || '—'}</span>
+                <span className="font-medium text-foreground">{categories.find(c => c.id === categoryId)?.name || '—'}</span>
               </div>
             </div>
           )}
 
-          <div className="space-y-1">
-            <label htmlFor="product-description" className="text-sm font-medium text-foreground">Description (Optional)</label>
-            <input id="product-description" name="product-description" type="text" placeholder="Description (Optional)" value={description} onChange={e => setDescription(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" />
+          <div className="space-y-1.5">
+            <label htmlFor="product-description" className={labelClass}>Description (optional)</label>
+            <input id="product-description" name="product-description" type="text" placeholder="Sizes, finish, anything the shop reads aloud" value={description} onChange={e => setDescription(e.target.value)} autoComplete="off" className={inputClass} />
           </div>
-          <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">{editingProduct ? 'Save Changes' : 'Save Product'}</button>
+          <button type="submit" className="w-full rounded-xl bg-primary p-3 text-sm font-semibold text-primary-foreground transition-transform ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-primary/90 active:scale-[0.99]">{editingProduct ? 'Save Changes' : 'Save Product'}</button>
         </form>
       </PageModal>
 
-      <QuickAddMaterial 
-        isOpen={isAddMaterialOpen} 
-        onClose={() => setIsAddMaterialOpen(false)} 
-        onSuccess={(id) => setMaterialId(id)} 
+      <QuickAddMaterial
+        isOpen={isAddMaterialOpen}
+        onClose={() => setIsAddMaterialOpen(false)}
+        onSuccess={(id) => addComponent(id)}
       />
     </div>
   );

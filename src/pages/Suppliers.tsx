@@ -6,6 +6,7 @@ import { Column, DataTable, RowActionButton } from "../components/DataTable";
 import { PartyLedgerModal } from "../components/PartyLedgerModal";
 import { KpiCard } from '../components/ui/KpiCard';
 import { PageModal } from "../components/ui/PageModal";
+import { fieldGroupClass, inputClass, labelClass, textareaClass } from '../components/ui/formStyles';
 import { cn, formatCurrency, formatNumber } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
 
@@ -174,41 +175,43 @@ export function Suppliers() {
         defaultSortKey="name"
       />
 
-      <PageModal isOpen={isModalOpen} onClose={closeModal} title={editingSupplier ? 'Edit Supplier' : 'Add Supplier'}>
-  <form onSubmit={handleSubmit} className="space-y-4">
-    <div className="space-y-1">
-      <label htmlFor="supplier-name" className="text-sm font-medium text-foreground">Supplier Name</label>
-      <input id="supplier-name" name="supplier-name" type="text" required value={name} onChange={e => setName(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Supplier Name *" />
-    </div>
-    <div className="space-y-1">
-      <label htmlFor="supplier-contact" className="text-sm font-medium text-foreground">Contact Person</label>
-      <input id="supplier-contact" name="supplier-contact" type="text" value={contactPerson} onChange={e => setContactPerson(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Contact Person" />
-    </div>
-    <div className="grid grid-cols-2 gap-3">
-      <div className="space-y-1">
-        <label htmlFor="supplier-phone" className="text-sm font-medium text-foreground">Phone</label>
-        <input id="supplier-phone" name="supplier-phone" type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={e => setPhone(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Phone" />
-      </div>
-      <div className="space-y-1">
-        <label htmlFor="supplier-ntn" className="text-sm font-medium text-foreground">NTN Number</label>
-        <input id="supplier-ntn" name="supplier-ntn" type="text" spellCheck={false} autoComplete="off" value={ntn} onChange={e => setNtn(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="NTN Number" />
-      </div>
-    </div>
-    <div className="space-y-1">
-      <label htmlFor="supplier-email" className="text-sm font-medium text-foreground">Email</label>
-      <input id="supplier-email" name="supplier-email" type="email" autoComplete="email" spellCheck={false} value={email} onChange={e => setEmail(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Email" />
-    </div>
-    <div className="space-y-1">
-      <label htmlFor="supplier-address" className="text-sm font-medium text-foreground">Address</label>
-      <textarea id="supplier-address" name="supplier-address" value={address} onChange={e => setAddress(e.target.value)} rows={2} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Address" />
-    </div>
-    <div className="space-y-1">
-      <label htmlFor="supplier-notes" className="text-sm font-medium text-foreground">Notes</label>
-      <textarea id="supplier-notes" name="supplier-notes" value={notes} onChange={e => setNotes(e.target.value)} rows={2} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Notes" />
-    </div>
-    <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">{editingSupplier ? 'Save Changes' : 'Add Supplier'}</button>
-  </form>
-</PageModal>
+      <PageModal isOpen={isModalOpen} onClose={closeModal} title={editingSupplier ? 'Edit Supplier' : 'Add Supplier'} maxWidth="max-w-2xl">
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="space-y-1.5">
+            <label htmlFor="supplier-name" className={labelClass}>Supplier Name</label>
+            <input id="supplier-name" name="supplier-name" type="text" required value={name} onChange={e => setName(e.target.value)} autoComplete="off" className={inputClass} placeholder="e.g. Ahmed Steel Traders" />
+          </div>
+          <div className={fieldGroupClass}>
+            <div className="space-y-1.5">
+              <label htmlFor="supplier-contact" className={labelClass}>Contact Person</label>
+              <input id="supplier-contact" name="supplier-contact" type="text" value={contactPerson} onChange={e => setContactPerson(e.target.value)} autoComplete="off" className={inputClass} placeholder="Who you deal with" />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="supplier-phone" className={labelClass}>Phone</label>
+              <input id="supplier-phone" name="supplier-phone" type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={e => setPhone(e.target.value)} className={inputClass} placeholder="e.g. 0300 1234567" />
+            </div>
+          </div>
+          <div className={fieldGroupClass}>
+            <div className="space-y-1.5">
+              <label htmlFor="supplier-ntn" className={labelClass}>NTN Number</label>
+              <input id="supplier-ntn" name="supplier-ntn" type="text" spellCheck={false} autoComplete="off" value={ntn} onChange={e => setNtn(e.target.value)} className={inputClass} placeholder="Tax ID, if registered" />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="supplier-email" className={labelClass}>Email</label>
+              <input id="supplier-email" name="supplier-email" type="email" autoComplete="email" spellCheck={false} value={email} onChange={e => setEmail(e.target.value)} className={inputClass} placeholder="name@company.com" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="supplier-address" className={labelClass}>Address</label>
+            <textarea id="supplier-address" name="supplier-address" value={address} onChange={e => setAddress(e.target.value)} rows={2} autoComplete="off" className={textareaClass} />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="supplier-notes" className={labelClass}>Notes</label>
+            <textarea id="supplier-notes" name="supplier-notes" value={notes} onChange={e => setNotes(e.target.value)} rows={2} autoComplete="off" className={textareaClass} />
+          </div>
+          <button type="submit" className="w-full rounded-xl bg-primary p-3 text-sm font-semibold text-primary-foreground transition-transform ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-primary/90 active:scale-[0.99]">{editingSupplier ? 'Save Changes' : 'Add Supplier'}</button>
+        </form>
+      </PageModal>
 
       {ledgerParty && <PartyLedgerModal party={ledgerParty} onClose={() => setLedgerParty(null)} />}
     </div>

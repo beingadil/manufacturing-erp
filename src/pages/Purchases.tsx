@@ -1,9 +1,10 @@
 import { CalendarDays, Edit, Eye, PackagePlus, Plus, Printer, ReceiptText, Trash2, Wallet } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
 import { QuickAddMaterial, QuickAddSupplier } from "../components/QuickAddModals";
+import { selectClass } from '../components/ui/formStyles';
 import { SearchableSelect } from "../components/SearchableSelect";
 import { DatePicker } from "../components/ui/date-picker";
 import { KpiCard } from "../components/ui/KpiCard";
@@ -18,26 +19,14 @@ import { useERPStore } from "../store/useERPStore";
 export function Purchases() {
   const { purchases, materials, suppliers, vouchers } = useERPStore();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editPurchaseId, setEditPurchaseId] = useState<string | undefined>();
   const [deleteModal, setDeleteModal] = useState<{isOpen: boolean, id: string, no: string}>({isOpen: false, id: '', no: ''});
   const [isAddSupplierOpen, setIsAddSupplierOpen] = useState(false);
 
   const handleEditClick = (item: any) => {
-    setEditPurchaseId(item.id);
-    setSupplierId(item.supplierId);
-    setMaterialId(item.materialId);
-    setWeight(item.weight.toString());
-    setWeightUnit(item.weightUnit);
-    setWeightPerPiece(item.weightPerPiece.toString());
-    setRatePerUnit(item.ratePerUnit.toString());
-    setDate(item.date);
-    // Restore the entry mode the purchase was recorded under.
-    const mat = materials.find(m => m.id === item.materialId);
-    const wasReadyMade = item.directPcs != null || mat?.processingPath === 'ready_made';
-    setEntryMode(wasReadyMade ? 'pcs' : 'weight');
-    if (item.directPcs != null) setDirectPcs(String(item.directPcs));
-    setIsModalOpen(true);
+      navigate('/purchases/edit/' + item.id);
   };
 
   const [isAddMaterialOpen, setIsAddMaterialOpen] = useState(false);
@@ -244,7 +233,7 @@ export function Purchases() {
           <p className="text-sm text-muted-foreground mt-1">Record raw material purchases and piece calculations.</p>
         </div>
         <button
-          onClick={() => { setEditPurchaseId(undefined); setSupplierId(''); setMaterialId(''); setWeight(''); setWeightPerPiece(''); setRatePerUnit(''); setIsModalOpen(true); }}
+          onClick={() => navigate('/purchases/new')}
           className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors"
         >
           <Plus className="h-4 w-4" />
@@ -280,8 +269,8 @@ export function Purchases() {
           <DataTable 
             data={enrichedPurchases} 
             columns={columns} 
-            searchKeys={["purchaseNo", "supplierName", "materialName"]} 
-            searchPlaceholder="Search purchases by PO, supplier or material..."
+            searchKeys={["purchaseNo", "supplierName", "materialName", "formattedDate", "weight", "calculatedPcs", "amount"]} 
+            searchPlaceholder="Search purchases by PO, supplier, material, date, weight, pcs or amount..."
             persistKey="purchases-table"
             defaultSortKey="date"
           />
@@ -379,7 +368,7 @@ export function Purchases() {
             </div>
             <div className="space-y-2">
               <label htmlFor="purchase-unit" className="text-sm font-semibold">Unit *</label>
-              <select id="purchase-unit" name="purchase-unit" required value={weightUnit} onChange={e => setWeightUnit(e.target.value as any)} className="w-full rounded-xl border border-border px-4 py-3 h-12 bg-card">
+              <select id="purchase-unit" name="purchase-unit" required value={weightUnit} onChange={e => setWeightUnit(e.target.value as any)} className={`${selectClass} h-12`}>
                 <option value="KGs">KGs</option>
                 <option value="Tons">Tons</option>
               </select>

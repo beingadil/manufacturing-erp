@@ -1,4 +1,4 @@
-import { Layers, PackageSearch, Pencil, Plus, Trash2, Wallet } from "lucide-react";
+import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from 'sonner';
@@ -6,8 +6,8 @@ import { InlineEditInput } from '../components/common/InlineEditInput';
 import { SafeDeleteDialog } from '../components/common/SafeDeleteDialog';
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
 import { SearchableSelect } from "../components/SearchableSelect";
-import { KpiCard } from '../components/ui/KpiCard';
 import { PageModal } from "../components/ui/PageModal";
+import { fieldGroupClass, hintClass, inputClass, labelClass, selectClass, textareaClass } from '../components/ui/formStyles';
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
 import { findMaterialCodeConflict } from '../lib/business/ProductAssemblyService';
 import { cn, formatCurrency, formatNumber } from "../lib/utils";
@@ -231,16 +231,13 @@ export function RawMaterials() {
   }), [materials, categories, batches]);
 
   const columns: Column<typeof enrichedMaterials[0]>[] = [
-    { 
-      key: "name", 
-      label: "Material Name", 
+    {
+      key: "name",
+      label: "Material",
       sortable: true,
       render: (item) => (
-        <Link to={`/materials/${item.id}`} className="flex items-center gap-3 group-hover:text-muted-foreground transition-colors">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground group-hover:bg-muted-foreground/20 transition-colors">
-            <PackageSearch className="h-4 w-4" />
-          </div>
-          <div>
+        <Link to={`/materials/${item.id}`} className="group-hover:text-muted-foreground transition-colors">
+          <div className="max-w-[280px]">
             <div className="font-semibold text-foreground" onClick={(e) => e.stopPropagation()}>
               <InlineEditInput
                 value={item.name}
@@ -249,7 +246,7 @@ export function RawMaterials() {
                 ariaLabel={`Rename material ${item.name}`}
               />
             </div>
-            {item.description && <div className="text-xs text-muted-foreground">{item.description}</div>}
+            {item.description && <div className="truncate text-xs text-muted-foreground">{item.description}</div>}
           </div>
         </Link>
       )
@@ -278,30 +275,40 @@ export function RawMaterials() {
         );
       },
     },
-    { 
-      key: "categoryName", 
-      label: "Category", 
+    {
+      key: "categoryName",
+      label: "Category",
       sortable: true,
       render: (item) => (
-        <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
-          {item.categoryName}
-        </span>
+        <span className={hintClass}>{item.categoryName}</span>
       )
     },
-    { key: "stockPcs", label: "Raw Stock (PCS)", align: "right", sortable: true, render: (item) => <span className="font-bold text-foreground">{item.stockPcs}</span> },
-    { key: "processedStockPcs", label: "Processed Stock (PCS)", align: "right", sortable: true, render: (item) => <span className="font-bold text-success">{item.processedStockPcs}</span> },
+    {
+      key: "stockPcs",
+      label: "Raw (PCS)",
+      align: "right",
+      sortable: true,
+      render: (item) => <span className="font-semibold text-foreground tabular-nums">{formatNumber(item.stockPcs)}</span>
+    },
+    {
+      key: "processedStockPcs",
+      label: "Finished (PCS)",
+      align: "right",
+      sortable: true,
+      render: (item) => <span className="font-semibold text-success tabular-nums">{formatNumber(item.processedStockPcs)}</span>
+    },
     {
       key: "value",
-      label: "Total Value (PKR)",
+      label: "Stock value",
       align: "right",
       sortable: true,
       render: (item) => (
-        <div className="text-right">
-          <div className="font-bold text-foreground">{formatCurrency(item.value)}</div>
+        <div className="text-right tabular-nums">
+          <div className="font-semibold text-foreground">{formatCurrency(item.value)}</div>
           {item.costPerPiece > 0 ? (
-            <div className="text-xs text-muted-foreground">Avg purchase rate @ {formatCurrency(item.costPerPiece)} / PCS</div>
+            <div className={hintClass}>{formatCurrency(item.costPerPiece)} / pc avg</div>
           ) : (
-            <div className="text-xs text-muted-foreground">No cost data (no purchases yet)</div>
+            <div className={hintClass}>No purchases yet</div>
           )}
         </div>
       )
@@ -344,14 +351,6 @@ export function RawMaterials() {
         </div>
       )
     },
-    {
-      key: "sync",
-      label: "Sync",
-      align: "right",
-      render: (item: any) => (
-        item.isOptimistic ? <span className="flex items-center text-xs text-blue-500 justify-end"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin mr-1"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21v-5h5"/></svg> Syncing</span> : <span className="flex items-center text-xs text-green-500 justify-end"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg> Synced</span>
-      )
-    }
   ];
 
   return (
@@ -366,15 +365,10 @@ export function RawMaterials() {
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteDialog({ ...deleteDialog, isOpen: false })}
       />
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-md">
-            <PackageSearch className="h-5 w-5" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">Raw Materials</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">Manage raw material items in your inventory.</p>
-          </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Raw Materials</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Click a material to see each purchase as its own batch — stock and value come straight from purchase records.</p>
         </div>
         <button
           onClick={() => setIsModalOpen(true)}
@@ -385,32 +379,40 @@ export function RawMaterials() {
         </button>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <KpiCard
-          label="Total Materials"
-          value={formatNumber(enrichedMaterials.length)}
-          icon={<PackageSearch className="h-5 w-5" />}
-          iconClassName="text-emerald-500"
-          size="sm"
-        />
-        <KpiCard
-          label="Total Raw Stock"
-          value={formatNumber(enrichedMaterials.reduce((s, m) => s + (m.stockPcs || 0), 0))}
-          icon={<Layers className="h-5 w-5" />}
-          iconClassName="text-teal-500"
-          size="sm"
-          description="PCS in raw stock across all materials"
-        />
-        <KpiCard
-          label="Total Inventory Value"
-          value={formatCurrency(enrichedMaterials.reduce((s, m) => s + (m.value || 0), 0))}
-          icon={<Wallet className="h-5 w-5" />}
-          iconClassName="text-emerald-500"
-          accent="text-success"
-          size="sm"
-          description="Everything on hand valued at actual purchase cost (per batch), incl. WIP and finished"
-        />
-      </div>
+      <section className="flex flex-wrap items-center gap-x-10 gap-y-3 rounded-2xl border border-border bg-card px-6 py-4 shadow-sm">
+        <div>
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Materials</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{formatNumber(enrichedMaterials.length)}</div>
+        </div>
+        <div className="border-l border-border/60 pl-10">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Raw stock</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">
+            {formatNumber(enrichedMaterials.reduce((s, m) => s + (m.stockPcs || 0), 0))}
+            <span className="ml-1.5 text-xs font-medium text-muted-foreground">PCS</span>
+          </div>
+        </div>
+        <div className="border-l border-border/60 pl-10">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Finished stock</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-success">
+            {formatNumber(enrichedMaterials.reduce((s, m) => s + (m.processedStockPcs || 0), 0))}
+            <span className="ml-1.5 text-xs font-medium text-muted-foreground">PCS</span>
+          </div>
+        </div>
+        <div className="border-l border-border/60 pl-10">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Stock value</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">
+            {formatCurrency(enrichedMaterials.reduce((s, m) => s + (m.value || 0), 0))}
+          </div>
+          <div className={hintClass}>Raw, at processor and finished — at purchase cost</div>
+        </div>
+      </section>
+
+      {materials.filter((m: any) => m.isOptimistic).length > 0 && (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+          {materials.filter((m: any) => m.isOptimistic).length} {materials.filter((m: any) => m.isOptimistic).length === 1 ? 'change' : 'changes'} syncing…
+        </p>
+      )}
 
       <DataTable
         data={enrichedMaterials}
@@ -421,28 +423,36 @@ export function RawMaterials() {
         defaultSortKey="name"
       />
 
-      <PageModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingMaterial ? 'Edit Material' : 'Add Material'}>
-        <form onSubmit={editingMaterial ? handleEdit : handleCreate} className="space-y-4">
-          <div className="space-y-2">
-            <label htmlFor="material-name" className="text-sm font-semibold text-foreground">Material Name *</label>
-            <input id="material-name" name="material-name" type="text" required value={name} onChange={e => setName(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors" placeholder="e.g. Circle 12½ Inch" />
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="material-code" className="text-sm font-semibold text-foreground">No.</label>
-            <input id="material-code" name="material-code" type="text" value={code} onChange={e => setCode(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors" placeholder="e.g. 4 No" />
-            <p className="text-xs text-muted-foreground">Shown next to the name everywhere, and searchable.</p>
+      <PageModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingMaterial ? 'Edit Material' : 'Add Material'} maxWidth="max-w-3xl">
+        <form onSubmit={editingMaterial ? handleEdit : handleCreate} className="space-y-6">
+          <div className={fieldGroupClass}>
+            <div className="space-y-2">
+              <label htmlFor="material-name" className={labelClass}>Material Name *</label>
+              <input id="material-name" name="material-name" type="text" required value={name} onChange={e => setName(e.target.value)} autoComplete="off" className={inputClass} placeholder="e.g. Circle 12½ Inch" />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="material-code" className={labelClass}>No.</label>
+              <input id="material-code" name="material-code" type="text" value={code} onChange={e => setCode(e.target.value)} autoComplete="off" className={inputClass} placeholder="e.g. 4 No" />
+              <p className={hintClass}>Shown next to the name everywhere, and searchable.</p>
+            </div>
           </div>
           <fieldset className="space-y-2">
-            <legend className="text-sm font-semibold text-foreground">This material is used as…</legend>
+            <legend className={labelClass}>This material is used as…</legend>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {([
                 { v: 'sellable', t: 'A product on its own', d: 'Processing makes it saleable; the Products form links it directly.' },
-                { v: 'component', t: 'A part of another product', d: 'A steel dhakkan on a steel jug, a handle. Never sold on its own.' },
+                { v: 'component', t: 'A part of another product', d: 'A steel dhakkan on a steel jug, a handle. Shaped for assembled products.' },
               ] as const).map(o => (
                 <button
                   key={o.v}
                   type="button"
-                  onClick={() => setUsageType(o.v)}
+                  onClick={() => {
+                    setUsageType(o.v);
+                    if (o.v === 'component') setProcessingPath('ready_made');
+                    else setProcessingPath('full_chain');
+                    setFixedStageId('');
+                    setAllowedStageIds([]);
+                  }}
                   aria-pressed={usageType === o.v}
                   className={`rounded-xl border px-4 py-3 text-left transition-colors ${usageType === o.v ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}
                 >
@@ -451,12 +461,12 @@ export function RawMaterials() {
                 </button>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Only materials marked as a part can be picked in the Products form.
+            <p className={hintClass}>
+              Part materials can still be linked to a product here — this marker only shapes the parts list of assembled products.
             </p>
           </fieldset>
           <div className="space-y-2">
-            <label htmlFor="material-category" className="text-sm font-semibold text-foreground">Category *</label>
+            <label htmlFor="material-category" className={labelClass}>Category *</label>
             <SearchableSelect
               options={categories.map(c => ({ id: c.id, label: c.name }))}
               value={categoryId}
@@ -465,21 +475,22 @@ export function RawMaterials() {
               required
             />
           </div>
+          {usageType !== 'component' && (<>
           <div className="space-y-2">
-            <label htmlFor="material-path" className="text-sm font-semibold text-foreground">Processing Path *</label>
-            <select
-              id="material-path"
-              required
+            <label htmlFor="material-path" className={labelClass}>Processing Path *</label>
+            <SearchableSelect
+              options={[
+                { id: 'full_chain', label: `Through all processors (${sortedStagesForForm.length || 5} stages)` },
+                { id: 'single_stage', label: 'One processor only — becomes final product' },
+                { id: 'custom_stages', label: 'Selected processors only — pick stages below' },
+                { id: 'ready_made', label: 'Ready-made — no processing, straight to stock' },
+              ]}
               value={processingPath}
-              onChange={e => setProcessingPath(e.target.value as ProcessingPath)}
-              className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors bg-card"
-            >
-              <option value="full_chain">Through all processors ({sortedStagesForForm.length || 5} stages)</option>
-              <option value="single_stage">One processor only — becomes final product</option>
-              <option value="custom_stages">Selected processors only — pick stages below</option>
-              <option value="ready_made">Ready-made — no processing, straight to stock</option>
-            </select>
-            <p className="text-xs text-muted-foreground">
+              onChange={(v) => setProcessingPath(v as ProcessingPath)}
+              placeholder="Select processing path..."
+              required
+            />
+            <p className={hintClass}>
               {processingPath === 'full_chain' && 'Material goes through every processor in sequence before becoming a final product.'}
               {processingPath === 'single_stage' && 'Material is sent to exactly one processor below; what comes back is the final product.'}
               {processingPath === 'custom_stages' && 'Tick the processors this material passes through (in chain order). What comes back from the LAST ticked processor is the final product.'}
@@ -488,7 +499,7 @@ export function RawMaterials() {
           </div>
           {processingPath === 'custom_stages' && (
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-foreground">Selected Processors *</label>
+              <label className={labelClass}>Selected Processors *</label>
               <div className="rounded-xl border border-border bg-card p-3 space-y-2">
                 {sortedStagesForForm.map(s => (
                   <label key={s.id} className="flex items-center gap-3 text-sm cursor-pointer">
@@ -504,23 +515,23 @@ export function RawMaterials() {
                   </label>
                 ))}
                 {sortedStagesForForm.length === 0 && (
-                  <p className="text-xs text-muted-foreground">No processor stages configured yet.</p>
+                  <p className={hintClass}>No processor stages configured yet.</p>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className={hintClass}>
                 Sends always follow the chain order among the selected processors; the last selected one produces the final product.
               </p>
             </div>
           )}
           {processingPath === 'single_stage' && (
             <div className="space-y-2">
-              <label htmlFor="material-fixed-stage" className="text-sm font-semibold text-foreground">The One Processor *</label>
+              <label htmlFor="material-fixed-stage" className={labelClass}>The One Processor *</label>
               <select
                 id="material-fixed-stage"
                 required
                 value={fixedStageId}
                 onChange={e => setFixedStageId(e.target.value)}
-                className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors bg-card"
+                className={selectClass}
               >
                 <option value="">Select the processor stage...</option>
                 {sortedStagesForForm.map(s => (
@@ -529,16 +540,22 @@ export function RawMaterials() {
               </select>
             </div>
           )}
+          </>)}
           <div className="space-y-2">
-            <label htmlFor="material-description" className="text-sm font-semibold text-foreground">Description</label>
-            <textarea id="material-description" name="material-description" value={description} onChange={e => setDescription(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors" placeholder="Optional notes" rows={2} />
+            <label htmlFor="material-description" className={labelClass}>Description</label>
+            <textarea id="material-description" name="material-description" value={description} onChange={e => setDescription(e.target.value)} className={textareaClass} placeholder="Optional notes" rows={2} />
           </div>
           <div className="space-y-2">
-            <label htmlFor="material-status" className="text-sm font-semibold text-foreground">Status</label>
-            <select id="material-status" name="material-status" required value={status} onChange={e => setStatus(e.target.value as 'Active' | 'Inactive')} className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors bg-card">
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
+            <label htmlFor="material-status" className={labelClass}>Status</label>
+            <SearchableSelect
+              options={[
+                { id: 'Active', label: 'Active' },
+                { id: 'Inactive', label: 'Inactive' },
+              ]}
+              value={status}
+              onChange={(v) => setStatus(v as 'Active' | 'Inactive')}
+              placeholder="Select status..."
+            />
           </div>
           <div className="pt-4 flex gap-3">
             <button type="button" onClick={closeModal} className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground/80 hover:bg-muted/40 transition-colors">Cancel</button>

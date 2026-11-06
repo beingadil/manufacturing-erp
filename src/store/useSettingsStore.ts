@@ -36,6 +36,14 @@ export interface SettingsState {
   voucherPrefixes: Record<string, string>;
   setVoucherPrefixes: (prefixes: Record<string, string>) => void;
   setVoucherYearlyReset: (enabled: boolean) => void;
+
+  // Document Numbering (PO / INV / DSP / REC / BILL / PRD prefixes)
+  documentPrefixes: Record<string, string>;
+  setDocumentPrefixes: (prefixes: Record<string, string>) => void;
+
+  // Batch numbering: 'supplier' → {SupplierFirst}-{PO-2026-0001}; 'classic' → BATCH-{PO…}
+  batchNoMode: 'supplier' | 'classic';
+  setBatchNoMode: (mode: 'supplier' | 'classic') => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -77,10 +85,25 @@ export const useSettingsStore = create<SettingsState>()(
       },
       setVoucherPrefixes: (prefixes) => set({ voucherPrefixes: prefixes }),
       setVoucherYearlyReset: (voucherYearlyReset) => set({ voucherYearlyReset }),
+
+      documentPrefixes: {
+        'PO': 'PO',
+        'INV': 'INV',
+        'DSP': 'DSP',
+        'REC': 'REC',
+        'BILL': 'BILL',
+        'PRD': 'PRD',
+      },
+      setDocumentPrefixes: (documentPrefixes) => set({ documentPrefixes }),
+      batchNoMode: 'supplier',
+      setBatchNoMode: (batchNoMode) => set({ batchNoMode }),
     }),
     {
       name: 'erp-settings',
-      version: 2,
+      version: 3,
+      // Bumped v2 → v3 for documentPrefixes/batchNoMode: identity-migrate so
+      // previously-saved settings survive; new keys fall back to defaults.
+      migrate: (persisted: any) => persisted,
       skipHydration: true,
       storage: createJSONStorage(() => SQLiteStorageAdapter)
     }

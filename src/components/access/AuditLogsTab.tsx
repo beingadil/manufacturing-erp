@@ -2,6 +2,7 @@ import { Loader2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Column, DataTable } from '@/components/DataTable';
 import { Badge } from '@/components/ui/badge';
+import { toolbarSelectClass } from '@/components/ui/formStyles';
 import { useAccessStore } from '@/store/useAccessStore';
 import { AuditLog } from '@/types/access';
 import { SearchInput } from '../ui/SearchInput';
@@ -95,7 +96,7 @@ export function AuditLogsTab() {
         <select
           value={moduleFilter}
           onChange={(e) => setModuleFilter(e.target.value)}
-          className="h-10 px-3 rounded-md border border-input bg-background text-sm"
+          className={toolbarSelectClass}
         >
           <option value="">All Modules</option>
           {modules.map((m) => (
@@ -105,7 +106,7 @@ export function AuditLogsTab() {
         <select
           value={actionFilter}
           onChange={(e) => setActionFilter(e.target.value)}
-          className="h-10 px-3 rounded-md border border-input bg-background text-sm"
+          className={toolbarSelectClass}
         >
           <option value="">All Actions</option>
           {actions.map((a) => (

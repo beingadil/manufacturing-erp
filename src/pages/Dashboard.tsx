@@ -152,7 +152,7 @@ export function Dashboard() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight text-foreground">Executive Dashboard</h2>
-          <p className="text-sm text-muted-foreground mt-1">Real-time overview of enterprise operations.</p>
+          <p className="text-sm text-muted-foreground mt-1">Overview of sales, purchases, inventory and accounts.</p>
         </div>
         <div className="flex items-center gap-3">
            <button onClick={() => navigate('/reports')} className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors">
@@ -484,7 +484,7 @@ export function Dashboard() {
                 </li>
               ))}
               {outOfStockMaterials.length === 0 && lowStockMaterials.length === 0 && (
-                <li className="p-8 text-center text-muted-foreground text-sm">No alerts at this time. All systems nominal.</li>
+                <li className="p-8 text-center text-muted-foreground text-sm">No alerts at this time.</li>
               )}
             </ul>
           </div>

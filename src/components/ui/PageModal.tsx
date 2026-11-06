@@ -9,6 +9,10 @@ interface PageModalProps {
   children: React.ReactNode;
   /** Max width class, defaults to max-w-lg */
   maxWidth?: string;
+  /** Custom header content rendered above the scroll area (replaces the default title bar). */
+  header?: React.ReactNode;
+  /** Footer bar rendered below the scroll area (sticks to the bottom). */
+  footer?: React.ReactNode;
 }
 
 /**
@@ -19,7 +23,7 @@ interface PageModalProps {
  * - overscroll-behavior: contain on the content area
  * - Click outside to close
  */
-export function PageModal({ isOpen, onClose, title, children, maxWidth = 'max-w-lg' }: PageModalProps) {
+export function PageModal({ isOpen, onClose, title, children, maxWidth = 'max-w-lg', header, footer }: PageModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -111,22 +115,25 @@ export function PageModal({ isOpen, onClose, title, children, maxWidth = 'max-w-
       <div
         ref={contentRef}
         tabIndex={-1}
-        className={`bg-card rounded-2xl shadow-xl w-full ${maxWidth} max-h-[90vh] flex flex-col overflow-hidden outline-none`}
+        className={`bg-card rounded-2xl shadow-2xl shadow-black/25 w-full ${maxWidth} max-h-[90vh] flex flex-col overflow-hidden outline-none`}
         style={{ overscrollBehavior: 'contain' }}
       >
-        <div className="px-6 py-4 border-b border-border flex justify-between items-center shrink-0">
-          <h3 className="text-lg font-bold text-foreground">{title}</h3>
-          <button
-            onClick={onClose}
-            aria-label="Close dialog"
-            className="p-1 rounded-lg hover:bg-muted transition-colors"
-          >
-            <X className="h-5 w-5 text-muted-foreground/80" />
-          </button>
-        </div>
-        <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto" style={{ overscrollBehavior: 'contain' }}>
+        {header ?? (
+          <div className="px-7 py-4 border-b border-border flex justify-between items-center shrink-0">
+            <h3 className="text-lg font-bold text-foreground">{title}</h3>
+            <button
+              onClick={onClose}
+              aria-label="Close dialog"
+              className="p-1.5 rounded-lg text-muted-foreground/80 hover:bg-muted hover:text-foreground transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        )}
+        <div className="px-7 py-6 space-y-5 flex-1 min-h-0 max-h-[80vh] overflow-y-auto" style={{ overscrollBehavior: 'contain' }}>
           {children}
         </div>
+        {footer}
       </div>
     </div>,
     document.body

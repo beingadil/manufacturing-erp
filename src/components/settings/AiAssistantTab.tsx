@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { aiClient, FALLBACK_MODELS } from '../../lib/ai/aiClient';
 import { cn } from '../../lib/utils';
+import { toolbarSelectClass } from '../ui/formStyles';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { ToggleSwitch } from '../ui/toggle-switch';
 
@@ -173,7 +174,7 @@ export function AiAssistantTab({ showSavedToast }: { showSavedToast: boolean }) 
                       setModel(next);
                       void aiClient.setConfig({ model: next });
                     }}
-                    className="ml-2 text-[11px] font-mono rounded border border-border bg-card px-1.5 py-0.5 focus:border-primary focus:outline-none"
+                    className={cn(toolbarSelectClass, 'text-[11px] font-mono')}
                     aria-label="AI model"
                   >
                     {FALLBACK_MODELS.map((m) => (

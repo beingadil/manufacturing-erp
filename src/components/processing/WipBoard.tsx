@@ -48,9 +48,11 @@ export function WipBoard({
     .filter(b => (b.remainingPcs || 0) > 0)
     .map(b => ({ batch: b, col: 0 as const }));
 
-  // Finished cards — batches with finished pcs on hand.
+  // Finished cards — batches with finished pcs on hand that went through the
+  // pipeline. Ready-made batches are finished at purchase by definition and
+  // never dispatched, so they stay out of the processors view entirely.
   const finishedCards = batches
-    .filter(b => (b.processedPcs || 0) > 0)
+    .filter(b => (b.processedPcs || 0) > 0 && b.processingPath !== 'ready_made')
     .map(b => ({ batch: b, col: 'finished' as const }));
 
   // Stage cards — dispatches with WIP pending at that stage (sent but not fully received).

@@ -4,6 +4,7 @@ import { ErrorManagement } from '../../lib/validation';
 import { ProcessingService } from '../../services/ProcessingService';
 import { useERPStore } from '../../store/useERPStore';
 import { QuickAddProcessor } from '../QuickAddModals';
+import { selectClass } from '../ui/formStyles';
 import { SearchableSelect } from '../SearchableSelect';
 import { DatePicker } from '../ui/date-picker';
 import { PageModal } from '../ui/PageModal';
@@ -140,7 +141,7 @@ export function ReceiveFromProcessorForm({
             required
             value={sendId}
             onChange={e => { setSendId(e.target.value); setError(null); }}
-            className="w-full rounded-xl border border-border bg-background p-3 text-sm"
+            className={selectClass}
             disabled={!processorId}
           >
             <option value="">Select Pending Send Entry</option>

@@ -261,6 +261,30 @@ describe('multi-stage processing engine', () => {
     expect(inventoryValue()).toBe(300000); // still exactly 300,000
   });
 
+  // ── TEST E2 — Fully-finished material cannot re-enter the chain ──────────
+  it('TEST E2: a fully-finished material has nothing left to dispatch', () => {
+    purchase();
+    const initSend = sendToStage('Initial Processor', 'Initial Processor', 2000, 5, '2026-08-02');
+    receiveFromStage(initSend, 'Initial Processor', 'Initial Processor', 2000, '2026-08-03');
+    const machineSend = sendToStage('Machine', 'Machine Man', 2000, 32, '2026-08-04');
+    receiveFromStage(machineSend, 'Machine', 'Machine Man', 2000, '2026-08-05');
+    const acidSend = sendToStage('Acid', 'Acid Man', 2000, 40, '2026-08-06');
+    receiveFromStage(acidSend, 'Acid', 'Acid Man', 2000, '2026-08-07');
+    const polishSend = sendToStage('Polish', 'Polisher', 2000, 45, '2026-08-08');
+    receiveFromStage(polishSend, 'Polish', 'Polisher', 2000, '2026-08-09');
+    const spotSend = sendToStage('Spot Machine', 'Spot Machine Man', 2000, 50, '2026-08-10');
+    receiveFromStage(spotSend, 'Spot Machine', 'Spot Machine Man', 2000, '2026-08-11');
+
+    expect(material().processedStockPcs).toBe(2000);
+    expect(material().stockPcs).toBe(0);
+    expect(material().atProcessorPcs).toBe(0);
+
+    // Nothing left to draw anywhere — re-dispatching, stage-skipping, or a
+    // plain re-send must all fail loudly.
+    expect(() => sendToStage('Initial Processor', 'Initial Processor', 1, 5, '2026-08-12')).toThrow(/not enough|available|Insufficient/i);
+    expect(() => sendToStage('Spot Machine', 'Spot Machine Man', 1, 50, '2026-08-12')).toThrow(/not enough|available|Insufficient/i);
+  });
+
   // ── TEST F — Partial receipt ──────────────────────────────────────────────
   it('TEST F: partial receipt (100 sent, 96 received) leaves 4 pending — no automatic loss', () => {
     purchase();

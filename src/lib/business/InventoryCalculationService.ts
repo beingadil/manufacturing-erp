@@ -79,17 +79,19 @@ export function batchTotalPcs(batch: Batch): number {
 
 export class InventoryCalculationService {
   /**
-   * Weighted-average cost per piece for a material, derived from its Active
-   * batches (remaining value ÷ remaining pcs). Zero when the material has no
-   * costed batches yet. Used for the per-batch fallback only — never selling price.
+   * Weighted-average purchase cost per piece for a material, across both
+   * drawable buckets (raw + finished). Zero when the material has no costed
+   * batches yet. Used for the assembly breakdown's cost of goods.
    */
   static getWeightedAverageCostPerPiece(materialId: string, batches: Batch[]): number {
     let totalValue = 0;
     let totalPcs = 0;
     for (const b of batches) {
-      if (b.materialId !== materialId || b.status !== 'Active' || b.remainingPcs <= 0 || b.initialPcs <= 0) continue;
-      totalValue += (b.amount / b.initialPcs) * b.remainingPcs;
-      totalPcs += b.remainingPcs;
+      if (b.materialId !== materialId || b.status !== 'Active' || b.initialPcs <= 0) continue;
+      const pcs = (b.remainingPcs || 0) + (b.processedPcs || 0);
+      if (pcs <= 0) continue;
+      totalValue += (b.amount / b.initialPcs) * pcs;
+      totalPcs += pcs;
     }
     return totalPcs > 0 ? totalValue / totalPcs : 0;
   }
@@ -887,6 +889,17 @@ export class InventoryCalculationService {
     return batch ? batchRawAvailableOf(batch) : 0;
   }
 
+  /**
+   * Stock a sale (or assembly leg) may draw down: raw on hand PLUS finished
+   * pieces — ready-made purchases and final-stage receipts both count. The
+   * two buckets are disjoint, so this never double-counts.
+   */
+  static calculateSaleStock(materialId: string, batches: Batch[]): number {
+    return batches
+      .filter(b => b.materialId === materialId && b.status === 'Active')
+      .reduce((sum, b) => sum + batchRawAvailableOf(b) + (b.processedPcs || 0), 0);
+  }
+
   /** Remaining processor balance: dispatched − received for one processor/material. */
   static calculateProcessorPendingBalance(
     processorId: string,
@@ -923,6 +936,29 @@ export class InventoryCalculationService {
       .filter(s => s.stageId === stageId)
       .reduce((sum, s) => sum + (s.lossQuantity || 0), 0);
     return Math.max(0, sent - received - lost);
+  }
+
+  /**
+   * Everything physically AT a stage right now: pcs dispatched to it still out
+   * with the processor (sent \u2212 received \u2212 loss) PLUS pcs it produced that wait
+   * for the next leg (the per-source availability buckets, disjoint from the
+   * in-transit bucket). This is the number the WIP strips and boards show —
+   * a material received back from Acid appears under Acid ("awaiting Polish"),
+   * never vanishes. pcs move out on the next dispatch.
+   */
+  static getStageBucket(
+    stageId: string | undefined,
+    processingSends: ProcessingSend[],
+    processingReceipts: ProcessingReceipt[],
+    batches: Batch[]
+  ): number {
+    const inFlight = this.getStageWIP(stageId, processingSends, processingReceipts);
+    if (!stageId) return inFlight;
+    const waiting = (batches || []).reduce(
+      (sum, b) => sum + batchAvailableAtSource(b, stageId),
+      0
+    );
+    return inFlight + waiting;
   }
 
   /**

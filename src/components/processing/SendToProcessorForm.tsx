@@ -4,6 +4,7 @@ import { batchCanSendToStage, getMaterialBatchProgress, getSortedStages } from '
 import { formatNumber } from '../../lib/utils';
 import { ProcessingService } from '../../services/ProcessingService';
 import { useERPStore } from '../../store/useERPStore';
+import { selectClass } from '../ui/formStyles';
 import { QuickAddMaterial, QuickAddProcessor } from '../QuickAddModals';
 import { SearchableSelect } from '../SearchableSelect';
 import { DatePicker } from '../ui/date-picker';
@@ -437,7 +438,7 @@ export function SendToProcessorForm({
           <select
             value={batchId}
             onChange={e => { setBatchId(e.target.value); setStageId(''); setError(null); }}
-            className="w-full rounded-xl border border-border bg-background p-3 text-sm"
+            className={selectClass}
             disabled={!materialId}
           >
             <option value="">Auto (oldest batch first)</option>
@@ -462,7 +463,7 @@ export function SendToProcessorForm({
           <select
             value={editSendId ? stageId : (effectiveStageId || '')}
             onChange={e => { setStageId(e.target.value); setBatchId(''); setError(null); }}
-            className="w-full rounded-xl border border-border bg-background p-3 text-sm"
+            className={selectClass}
             disabled={!materialId || (isSingleStage && !!fixedStage && !editSendId)}
           >
             {!materialId && <option value="">Select material first</option>}

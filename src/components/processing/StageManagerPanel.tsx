@@ -4,6 +4,7 @@ import { ProcessingService } from '../../services/ProcessingService';
 import { useERPStore } from '../../store/useERPStore';
 import type { ProcessingStage } from '../../types/erp';
 import { DataTable } from '../DataTable';
+import { selectClass } from '../ui/formStyles';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog';
 import { PageModal } from '../ui/PageModal';
 
@@ -147,7 +148,7 @@ export function StageManagerPanel() {
             </div>
             <div>
               <label className="block text-sm font-medium text-foreground/80 mb-1">Rate Method</label>
-              <select value={rateMethod} onChange={e => setRateMethod(e.target.value as any)} className="w-full rounded-xl border border-border bg-background p-3 text-sm">
+              <select value={rateMethod} onChange={e => setRateMethod(e.target.value as any)} className={selectClass}>
                 <option value="per_piece">Per Piece</option>
                 <option value="per_kg">Per KG</option>
               </select>

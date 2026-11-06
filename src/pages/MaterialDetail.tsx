@@ -1,497 +1,307 @@
-import { format } from 'date-fns';
-import {
-  AlertTriangle,
-  ArrowDown,
-  ArrowLeft,
-  ArrowRightLeft,
-  ArrowUp,
-  CheckCircle2,
-  Clock,
-  Layers,
-  Package,
-  PackageCheck,
-  Target,
-  Truck,
-  Wallet,
-} from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChevronRight, Package, PackageCheck, Truck, Wallet } from 'lucide-react';
 import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { InventoryCalculationService, stageAvailableEntries } from '../lib/business/InventoryCalculationService';
-import { getMaterialBatchProgress, getSortedStages } from '../lib/processing/stageProgress';
+import { BucketBar } from '../components/materials/BucketBar';
+import { stageCostBreakdown } from '../lib/processing/batchCosts';
 import { cn, formatCurrency, formatNumber } from '../lib/utils';
+import { InventoryCalculationService, batchAvailableTotal, batchRawAvailableOf, stageAvailableEntries } from '../lib/business/InventoryCalculationService';
+import { getSortedStages } from '../lib/processing/stageProgress';
 import { useERPStore } from '../store/useERPStore';
 
 /**
- * Material detail — the full lifecycle view of one raw material.
+ * Material overview — the purchases (batches) of one material, listed one by
+ * one. Clicking a purchase opens its own route with that purchase's full
+ * detail: bucket KPIs, stage-by-stage processing cost, movement ledger.
  *
- * Everything shown is DERIVED from the authoritative records (purchases, sends,
- * receipts, sales) — no counter is displayed without its matching derivation,
- * so the page can never disagree with the processing engine:
- *  - KPI values come from InventoryCalculationService.getMaterialStageValues
- *    (actual purchase cost per batch, never a blended average).
- *  - The stage-position strip uses the same per-batch progress derivation as
- *    the Send form, so "where are my pcs right now" matches what the user can
- *    actually send next.
- *  - The profit column is the only presentational addition (sale price vs the
- *    FIFO batch cost of the pcs each sale consumed).
+ * Everything on this page is derived from the purchase/sale/send/receipt
+ * history — never from a stored roll-up that could drift.
  */
 export function MaterialDetail() {
   const { id } = useParams<{ id: string }>();
   const {
-    materials, categories, batches, processingSends,
-    products, sales, inventoryMovements,
-    suppliers, processors, processingStages, customers, processingReceipts,
+    materials, categories, batches, processingSends, processingReceipts,
+    processingStages, suppliers, customers, products, sales, purchases,
   } = useERPStore();
 
   const material = materials.find(m => m.id === id);
   const category = categories.find(c => c.id === material?.categoryId);
   const sortedStages = useMemo(() => getSortedStages(processingStages || []), [processingStages]);
 
-  const materialBatches = useMemo(() => {
-    return (batches || []).filter(b => b.materialId === id).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [batches, id]);
-
-  const materialMovements = useMemo(() => {
-    return (inventoryMovements || []).filter(m => m.materialId === id).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [inventoryMovements, id]);
-
-  const materialSends = useMemo(() => {
-    return processingSends.filter(s => s.materialId === id).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [processingSends, id]);
-
-  const materialProducts = useMemo(() => {
-    return products.filter(p => p.materialId === id);
-  }, [products, id]);
-
-  const productIds = materialProducts.map(p => p.id);
+  const materialBatches = useMemo(
+    () => (batches || []).filter(b => b.materialId === id).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [batches, id],
+  );
 
   const materialSales = useMemo(() => {
-    return sales.filter(s => productIds.includes(s.productId)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sales, productIds.join('|')]);
+    if (!material) return [];
+    const linkedIds = new Set(
+      products.filter(p => p.materialId === material.id || (p.components || []).some(c => c.materialId === material.id)).map(p => p.id),
+    );
+    return sales.filter(s => linkedIds.has(s.productId)).slice(0, 8);
+  }, [sales, products, material]);
 
-  // ── Derived quantities (single source: batches + history) ─────────────────
+  const materialSends = useMemo(
+    () => processingSends.filter(s => s.materialId === id),
+    [processingSends, id],
+  );
+
   const stageValues = useMemo(
     () => (material ? InventoryCalculationService.getMaterialStageValues(material.id, batches || []) : null),
-    [material, batches]
+    [material, batches],
   );
 
-  const batchProgress = useMemo(
-    () => (material ? getMaterialBatchProgress(material.id, batches || [], sortedStages) : []),
-    [material, batches, sortedStages]
+  const processingCost = useMemo(
+    () => processingReceipts.filter(r => r.materialId === id).reduce((sum, r) => sum + (r.billAmount || 0), 0),
+    [processingReceipts, id],
   );
 
-  // Stage-position roll-up: where the material's pcs physically sit right now.
-  const positions = useMemo(() => {
-    const pos = {
-      raw: 0, inTransit: 0, available: 0, finished: 0,
-      availableFromStage: null as string | null,
-    };
-    for (const p of batchProgress) {
-      pos.raw += p.rawPcs;
-      pos.inTransit += p.inTransitPcs;
-      pos.available += p.availablePcs;
-      pos.finished += p.finishedPcs;
-    }
-    // Which stage(s) produced the pcs now waiting for their next leg —
-    // availability is PER SOURCE, so multiple producers coexist as
-    // separate buckets and are all named (never merged).
-    const srcNames = new Set<string>();
-    for (const p of batchProgress) {
-      for (const e of stageAvailableEntries(p.batch)) {
-        if (e.pcs <= 0) continue;
-        const src = sortedStages.find(s => s.id === e.stageId);
-        if (src) srcNames.add(src.name);
-      }
-    }
-    if (srcNames.size > 0) pos.availableFromStage = [...srcNames].join(' + ');
-    return pos;
-  }, [batchProgress, sortedStages]);
+  // Per-stage processing cost — totals across the whole material
+  const stageCost = useMemo(
+    () => stageCostBreakdown(processingSends || [], processingReceipts || [], processingStages || []),
+    [processingSends, processingReceipts, processingStages],
+  );
 
-  // Per-stage WIP from the movement history (same basis as the dashboard).
-  const stageWip = useMemo(() => sortedStages
-    .filter(s => !s.isFinalStage)
-    .map(stage => ({
-      stage,
-      pcs: InventoryCalculationService.getStageWIP(stage.id, processingSends, processingReceipts),
-    })), [sortedStages, processingSends, processingReceipts]);
+  const getSupplierName = (supplierId: string) => suppliers.find(s => s.id === supplierId)?.name || 'Unknown';
+  const getPurchaseNo = (purchaseId: string) => purchases.find(p => p.id === purchaseId)?.purchaseNo;
 
-  // Loss / yield analytics across the whole chain.
-  const totals = useMemo(() => {
-    const sent = materialSends.reduce((s, x) => s + (x.pcsSent || 0), 0);
-    const loss = materialSends.reduce((s, x) => s + (x.lossQuantity || 0), 0);
-    const received = materialSends.reduce((s, x) => s + (x.pcsReceived || 0), 0);
-    const purchaseValue = materialBatches.reduce((s, b) => s + (b.amount || 0), 0);
-    const processingCost = processingReceipts
-      .filter(r => r.materialId === material?.id)
-      .reduce((s, r) => s + (r.billAmount || 0), 0);
-    const salesValue = materialSales.reduce((s, x) => s + (x.totalAmount || 0), 0);
-    const cogs = materialSales.reduce((s, x) => {
-      const fifo = InventoryCalculationService.getFIFOCOGSForSale(material!.id, x.pcsSold, batches || []);
-      return s + fifo.cogs;
-    }, 0);
-    return {
-      sent, loss, received,
-      yieldPct: sent > 0 ? Math.round(((received) / sent) * 100) : null,
-      lossPct: sent > 0 ? Math.round((loss / sent) * 1000) / 10 : null,
-      purchaseValue, processingCost, salesValue, cogs,
-      grossMargin: salesValue - cogs,
-    };
-  }, [materialSends, materialBatches, materialSales, batches, material, processingReceipts]);
+  const bucketTotals = (b: NonNullable<typeof materialBatches[number]>) => {
+    const raw = batchRawAvailableOf(b);
+    const inTransit = b.atProcessorPcs || 0;
+    const available = batchAvailableTotal(b);
+    const finished = b.processedPcs || 0;
+    return { raw, inTransit, available, finished, total: raw + inTransit + available + finished };
+  };
 
   if (!material) {
     return (
-      <div className="flex flex-col items-center justify-center h-full space-y-4">
-        <Package className="h-12 w-12 text-muted-foreground/40" />
-        <h2 className="text-xl font-semibold text-foreground">Material Not Found</h2>
-        <Link to="/materials" className="text-sm font-medium text-muted-foreground hover:text-foreground underline">
-          Return to Materials
-        </Link>
+      <div className="flex flex-col items-center justify-center gap-3 py-24 text-center animate-in fade-in">
+        <Package className="h-10 w-10 text-muted-foreground/40" />
+        <h2 className="text-lg font-semibold text-foreground">Material not found</h2>
+        <Link to="/materials" className="text-sm font-medium text-primary hover:underline">Back to Raw Materials</Link>
       </div>
     );
   }
 
-  const getSupplierName = (supplierId: string) => suppliers.find(s => s.id === supplierId)?.name || 'Unknown';
-  const getProcessorName = (processorId: string) => processors.find(p => p.id === processorId)?.name || 'Unknown';
-  const getProductName = (productId: string) => products.find(p => p.id === productId)?.name || 'Unknown';
-  const getCustomerName = (customerId: string) => customers.find(c => c.id === customerId)?.name || 'Unknown';
+  const usageTypeBadge = material.usageType === 'component'
+    ? { label: 'Part of a product', tone: 'bg-violet-500/10 text-violet-600 dark:text-violet-400' }
+    : { label: 'Product on its own', tone: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' };
+  const pathLabel = {
+    full_chain: 'Full chain',
+    single_stage: 'Single processor',
+    custom_stages: 'Selected processors',
+    ready_made: 'Ready-made',
+  }[material.processingPath ?? 'full_chain'];
 
-  // FIFO profit per sale (batch cost of the pcs this sale consumed).
-  const saleProfit = (saleId: string, pcsSold: number) => {
-    const fifo = InventoryCalculationService.getFIFOCOGSForSale(material.id, pcsSold, batches || []);
-    const sale = materialSales.find(s => s.id === saleId);
-    return sale ? sale.totalAmount - fifo.cogs : 0;
-  };
+  const kpis = [
+    { label: 'Raw stock', value: stageValues?.raw.pcs ?? 0, money: stageValues?.raw.value ?? 0, tone: 'text-foreground' },
+    { label: 'At processor', value: stageValues?.atProcessor.pcs ?? 0, money: stageValues?.atProcessor.value ?? 0, tone: 'text-warning' },
+    { label: 'Finished stock', value: stageValues?.finished.pcs ?? 0, money: stageValues?.finished.value ?? 0, tone: 'text-success' },
+    { label: 'Processing cost', value: null as number | null, money: processingCost, tone: 'text-info' },
+  ];
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
-      <div className="flex items-center gap-4">
-        <Link to="/materials" className="p-2 -ml-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors">
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <div>
-          <div className="flex items-center gap-3">
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">{material.name}</h2>
+    <div className="space-y-8 pb-10 animate-in fade-in duration-500">
+      {/* ── Header ─────────────────────────────────────────────────────── */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <Link to="/materials" className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <ArrowLeft className="h-4 w-4" /> Raw Materials
+          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">{material.name}</h1>
+            {material.code && (
+              <span className="font-mono text-xs text-muted-foreground border border-border rounded-md px-2 py-1">{material.code}</span>
+            )}
+            <span className={cn('inline-flex items-center rounded-md px-2 py-1 text-xs font-medium', usageTypeBadge.tone)}>
+              {usageTypeBadge.label}
+            </span>
             <span className={cn(
-              "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium",
-              material.status === 'Active' ? "bg-success/10 text-success ring-1 ring-success/20" : "bg-muted text-muted-foreground ring-1 ring-muted-foreground/20"
+              'inline-flex items-center rounded-md px-2 py-1 text-xs font-medium',
+              material.status === 'Active' ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground',
             )}>
               {material.status}
             </span>
+            <span className="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium bg-muted/60 text-muted-foreground">
+              {pathLabel}
+            </span>
           </div>
-          <p className="text-sm text-muted-foreground mt-1">{category?.name || 'Uncategorized'} • {material.description || 'No description'}</p>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            {category?.name ?? 'Uncategorized'}{material.description ? ` · ${material.description}` : ''}
+          </p>
         </div>
       </div>
 
-      {/* ── Stock KPIs with true values ─────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center gap-3 text-muted-foreground mb-2">
-            <Package className="h-5 w-5" />
-            <span className="text-sm font-medium">Raw Stock</span>
+      {/* ── Stock KPIs ─────────────────────────────────────────────────── */}
+      <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {kpis.map(k => (
+          <div key={k.label} className="rounded-2xl border border-border bg-card px-5 py-4 shadow-sm">
+            <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{k.label}</div>
+            {k.value !== null ? (
+              <>
+                <div className={cn('mt-1.5 text-2xl font-bold tracking-tight tabular-nums', k.tone)}>{formatNumber(k.value)}</div>
+                <div className="text-xs text-muted-foreground tabular-nums">{formatCurrency(k.money)} at purchase cost</div>
+              </>
+            ) : (
+              <>
+                <div className={cn('mt-1.5 text-2xl font-bold tracking-tight tabular-nums', k.tone)}>{formatCurrency(k.money)}</div>
+                <div className="text-xs text-muted-foreground">Σ processor bills for this material</div>
+              </>
+            )}
           </div>
-          <div className="text-3xl font-bold text-foreground">{formatNumber(stageValues?.raw.pcs ?? 0)} <span className="text-sm font-medium text-muted-foreground">PCS</span></div>
-          <div className="text-xs text-muted-foreground mt-1">{formatCurrency(stageValues?.raw.value ?? 0)} at purchase cost</div>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center gap-3 text-muted-foreground mb-2">
-            <Clock className="h-5 w-5 text-amber-500" />
-            <span className="text-sm font-medium">At Processor (WIP)</span>
-          </div>
-          <div className="text-3xl font-bold text-warning">{formatNumber(stageValues?.atProcessor.pcs ?? 0)} <span className="text-sm font-medium text-amber-500/70">PCS</span></div>
-          <div className="text-xs text-muted-foreground mt-1">{formatCurrency(stageValues?.atProcessor.value ?? 0)} at purchase cost</div>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center gap-3 text-muted-foreground mb-2">
-            <Target className="h-5 w-5 text-emerald-500" />
-            <span className="text-sm font-medium">Finished Stock</span>
-          </div>
-          <div className="text-3xl font-bold text-success">{formatNumber(stageValues?.finished.pcs ?? 0)} <span className="text-sm font-medium text-emerald-500/70">PCS</span></div>
-          <div className="text-xs text-muted-foreground mt-1">{formatCurrency(stageValues?.finished.value ?? 0)} at purchase cost</div>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center gap-3 text-muted-foreground mb-2">
-            <Wallet className="h-5 w-5 text-blue-500" />
-            <span className="text-sm font-medium">Lifetime Processing Cost</span>
-          </div>
-          <div className="text-3xl font-bold text-info">{formatCurrency(totals.processingCost)}</div>
-          <div className="text-xs text-muted-foreground mt-1">Σ processor bills for this material</div>
-        </div>
-      </div>
+        ))}
+      </section>
 
-      {/* ── Stage-position strip: exactly where the pcs sit right now ───── */}
-      <div className="rounded-2xl border border-border bg-card shadow-sm p-5">
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-          <h3 className="font-semibold text-foreground flex items-center gap-2">
-            <Layers className="h-4 w-4" /> Where the pieces are right now
-          </h3>
-          <span className="text-xs text-muted-foreground">
-            Total tracked: {formatNumber(positions.raw + positions.inTransit + positions.available + positions.finished)} PCS
-            · Dispatched {formatNumber(totals.sent)} · Received back {formatNumber(totals.received)}
-            {totals.yieldPct != null && <> · Return yield {totals.yieldPct}%</>}
-            {totals.lossPct != null && totals.loss > 0 && <> · <span className="text-destructive font-medium">Loss {formatNumber(totals.loss)} PCS ({totals.lossPct}%)</span></>}
-          </span>
+      {/* ── Purchases — each goes to its own detail route ──────────────── */}
+      <section>
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3 border-b border-border/60 pb-4">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Purchases</h2>
+            <p className="text-xs text-muted-foreground">Newest first · click a batch to open its full cost and ledger</p>
+          </div>
+          <span className="text-xs text-muted-foreground tabular-nums">{materialBatches.length} {materialBatches.length === 1 ? 'batch' : 'batches'}</span>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="rounded-xl border border-border bg-muted/30 p-3">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1"><Package className="h-3.5 w-3.5" /> Raw — ready for stage 1</div>
-            <div className="text-xl font-bold text-foreground">{formatNumber(positions.raw)} <span className="text-xs font-medium text-muted-foreground">PCS</span></div>
+
+        {materialBatches.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-border py-14 text-center">
+            <PackageCheck className="mx-auto h-8 w-8 text-muted-foreground/40" />
+            <p className="mt-3 text-sm font-medium text-foreground">No purchases recorded</p>
+            <p className="mt-1 text-xs text-muted-foreground">Batches appear here once this material is purchased.</p>
           </div>
-          <div className="rounded-xl border border-border bg-muted/30 p-3">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1"><Truck className="h-3.5 w-3.5" /> Out with processors</div>
-            <div className="text-xl font-bold text-foreground">{formatNumber(positions.inTransit)} <span className="text-xs font-medium text-muted-foreground">PCS</span></div>
-          </div>
-          <div className="rounded-xl border border-border bg-muted/30 p-3">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-              <CheckCircle2 className="h-3.5 w-3.5" /> Received — awaiting next stage
-              {positions.availableFromStage && <span className="font-medium text-foreground/70"> (from {positions.availableFromStage})</span>}
-            </div>
-            <div className="text-xl font-bold text-foreground">{formatNumber(positions.available)} <span className="text-xs font-medium text-muted-foreground">PCS</span></div>
-          </div>
-          <div className="rounded-xl border border-border bg-muted/30 p-3">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1"><PackageCheck className="h-3.5 w-3.5" /> Finished — sellable</div>
-            <div className="text-xl font-bold text-foreground">{formatNumber(positions.finished)} <span className="text-xs font-medium text-muted-foreground">PCS</span></div>
-          </div>
-        </div>
-        {/* Per-stage WIP dots */}
-        {stageWip.some(s => s.pcs > 0) && (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {stageWip.filter(s => s.pcs > 0).map(({ stage, pcs }) => (
-              <span key={stage.id} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs">
-                <span className="h-2 w-2 rounded-full bg-amber-500" />
-                {stage.name}: <span className="font-semibold">{formatNumber(pcs)} PCS</span> in transit
-              </span>
-            ))}
-          </div>
+        ) : (
+          <ul className="divide-y divide-border/60 border-y border-border/60">
+            {materialBatches.map(b => {
+              const bucket = bucketTotals(b);
+              const costPcs = InventoryCalculationService.getBatchCostPerPiece(b);
+              const status = b.status === 'Depleted'
+                ? 'Depleted'
+                : bucket.raw > 0
+                  ? 'Raw'
+                  : bucket.available > 0 || bucket.inTransit > 0
+                    ? 'In processing'
+                    : 'Finished';
+              const statusTone = status === 'Depleted'
+                ? 'bg-muted text-muted-foreground'
+                : status === 'Raw'
+                  ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400'
+                  : status === 'In processing'
+                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                    : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
+              const po = getPurchaseNo(b.purchaseId);
+              return (
+                <li key={b.id}>
+                  <Link
+                    to={`/materials/${id}/purchases/${b.id}`}
+                    className="group grid grid-cols-12 items-center gap-3 py-4 pl-4 pr-2 transition-colors hover:bg-muted/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary rounded-lg"
+                  >
+                    <div className="col-span-3 min-w-0 sm:col-span-2">
+                      <span className="font-mono text-sm font-semibold text-foreground">{b.batchNo}</span>
+                      {po && <span className="block font-mono text-[10px] text-muted-foreground">{po}</span>}
+                    </div>
+                    <div className="col-span-9 min-w-0 sm:col-span-4 md:col-span-3">
+                      <p className="truncate text-sm font-medium text-foreground">{getSupplierName(b.supplierId)}</p>
+                      <p className="text-xs text-muted-foreground tabular-nums">{new Date(b.date).toLocaleDateString()} · {formatNumber(b.initialPcs)} PCS · {formatCurrency(b.amount)}</p>
+                    </div>
+                    <div className="col-span-12 min-w-0 md:col-span-5 hidden md:block">
+                      <BucketBar buckets={bucket} />
+                    </div>
+                    <div className="col-span-8 xs:col-span-6 sm:col-span-4 md:col-span-1 flex items-center justify-end gap-2">
+                      <span className={cn('inline-flex shrink-0 items-center rounded-md px-2 py-1 text-[10px] font-medium', statusTone)}>
+                        {status}
+                      </span>
+                    </div>
+                    <div className="col-span-4 xs:col-span-6 sm:col-span-1 flex items-center justify-end">
+                      <ChevronRight className="h-4 w-4 text-muted-foreground/50 transition-transform duration-200 group-hover:translate-x-1 group-hover:text-foreground" aria-hidden="true" />
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
         )}
-      </div>
+      </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-6">
-          {/* ── Movement ledger ─────────────────────────────────────────── */}
-          <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col h-[400px]">
-            <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between bg-muted/40">
-              <h3 className="font-semibold text-foreground flex items-center gap-2">
-                <ArrowRightLeft className="h-4 w-4" /> Movement Ledger
-              </h3>
-            </div>
-            <div className="overflow-y-auto flex-1 p-0">
-              <table className="w-full text-sm text-left whitespace-nowrap">
-                <thead className="text-xs text-muted-foreground bg-card sticky top-0 border-b border-border/50">
+      {/* ── Processing cost — material totals ───────────────────────────── */}
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-5">
+        <section className="rounded-2xl border border-border bg-card shadow-sm xl:col-span-3">
+          <div className="border-b border-border/60 px-6 py-4">
+            <h2 className="text-sm font-semibold text-foreground">Processing cost, stage by stage</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">Billed amounts across all batches of this material</p>
+          </div>
+          {stageCost.rows.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs text-muted-foreground border-b border-border/60">
                   <tr>
-                    <th className="px-4 py-3 font-medium">Date</th>
-                    <th className="px-4 py-3 font-medium">Ref</th>
-                    <th className="px-4 py-3 font-medium">Type</th>
-                    <th className="px-4 py-3 font-medium text-right">Qty</th>
-                    <th className="px-4 py-3 font-medium text-right">Balance</th>
+                    <th className="px-6 py-3 text-left font-medium">Stage</th>
+                    <th className="px-6 py-3 text-right font-medium">Sends</th>
+                    <th className="px-6 py-3 text-right font-medium">Received</th>
+                    <th className="px-6 py-3 text-right font-medium">Loss</th>
+                    <th className="px-6 py-3 text-right font-medium">Billed</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
-                  {materialMovements.length > 0 ? (
-                    materialMovements.map(m => (
-                      <tr key={m.id} className="hover:bg-muted/40 transition-colors">
-                        <td className="px-4 py-3 text-muted-foreground tabular-nums">{format(new Date(m.date), 'MMM d, yyyy')}</td>
-                        <td className="px-4 py-3 font-medium text-foreground">
-                          <div>{m.referenceNo}</div>
-                          <div className="text-xs text-muted-foreground font-normal">{m.module}</div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={cn(
-                            "inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wider",
-                            m.transactionType === 'IN' ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
-                          )}>
-                            {m.transactionType === 'IN' ? <ArrowDown className="w-3 h-3 mr-1" /> : <ArrowUp className="w-3 h-3 mr-1" />}
-                            {m.transactionType}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right font-medium text-foreground tabular-nums">{formatNumber(m.quantity)}</td>
-                        <td className="px-4 py-3 text-right text-muted-foreground tabular-nums">{formatNumber(m.runningBalance)}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No movements recorded</td>
+                  {stageCost.rows.map(row => (
+                    <tr key={row.stageId} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-6 py-3 font-medium text-foreground">
+                        {row.isFinalStage && <span className="mr-1.5 text-emerald-500">★</span>}
+                        {row.name}
+                      </td>
+                      <td className="px-6 py-3 text-right tabular-nums text-muted-foreground">{row.dispatches}</td>
+                      <td className="px-6 py-3 text-right tabular-nums text-success">{formatNumber(row.received)}</td>
+                      <td className="px-6 py-3 text-right tabular-nums">
+                        {row.loss > 0 ? <span className="text-destructive font-medium">{formatNumber(row.loss)}</span> : <span className="text-muted-foreground/40">—</span>}
+                      </td>
+                      <td className="px-6 py-3 text-right tabular-nums font-medium">{formatCurrency(row.billed)}</td>
                     </tr>
-                  )}
+                  ))}
                 </tbody>
+                <tfoot className="border-t border-border/60 bg-muted/30 text-xs font-semibold">
+                  <tr>
+                    <td className="px-6 py-3 text-muted-foreground">Totals</td>
+                    <td className="px-6 py-3 text-right tabular-nums">{stageCost.totals.dispatches}</td>
+                    <td className="px-6 py-3 text-right tabular-nums text-success">{formatNumber(stageCost.totals.received)}</td>
+                    <td className="px-6 py-3 text-right tabular-nums text-destructive">{stageCost.totals.loss > 0 ? formatNumber(stageCost.totals.loss) : '0'}</td>
+                    <td className="px-6 py-3 text-right tabular-nums">{formatCurrency(stageCost.totals.billed)}</td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
-          </div>
+          ) : (
+            <div className="px-6 py-10 text-center text-sm text-muted-foreground">Nothing processed from this material yet.</div>
+          )}
+        </section>
 
-          {/* ── Batches with value + stage position ─────────────────────── */}
-          <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col max-h-[460px]">
-            <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between bg-muted/40">
-              <h3 className="font-semibold text-foreground">Batches</h3>
-              <span className="text-xs text-muted-foreground">Value at each batch's own purchase rate</span>
-            </div>
-            <div className="overflow-y-auto flex-1 p-0">
-              <table className="w-full text-sm text-left whitespace-nowrap">
-                <thead className="text-xs text-muted-foreground bg-card sticky top-0 border-b border-border/50">
+        {/* ── Recent sales (read-only, material-level) ──────────────────── */}
+        <section className="rounded-2xl border border-border bg-card shadow-sm xl:col-span-2">
+          <div className="border-b border-border/60 px-6 py-4">
+            <h2 className="text-sm font-semibold text-foreground">Recent sales</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">Sells linked to this material's products</p>
+          </div>
+          {materialSales.length === 0 ? (
+            <div className="px-6 py-10 text-center text-sm text-muted-foreground">No sales recorded.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs text-muted-foreground border-b border-border/60">
                   <tr>
-                    <th className="px-4 py-3 font-medium">Batch No</th>
-                    <th className="px-4 py-3 font-medium">Supplier</th>
-                    <th className="px-4 py-3 font-medium text-right">Initial</th>
-                    <th className="px-4 py-3 font-medium text-right">Raw</th>
-                    <th className="px-4 py-3 font-medium text-right">WIP</th>
-                    <th className="px-4 py-3 font-medium text-right">Avail</th>
-                    <th className="px-4 py-3 font-medium text-right">Finished</th>
-                    <th className="px-4 py-3 font-medium text-right">Cost/PCS</th>
-                    <th className="px-4 py-3 font-medium text-right">Value on hand</th>
+                    <th className="px-6 py-3 text-left font-medium">Invoice</th>
+                    <th className="px-6 py-3 text-right font-medium">PCS</th>
+                    <th className="px-6 py-3 text-right font-medium">Revenue</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
-                  {materialBatches.length > 0 ? (
-                    materialBatches.map(b => {
-                      const prog = batchProgress.find(p => p.batch.id === b.id);
-                      const costPcs = InventoryCalculationService.getBatchCostPerPiece(b);
-                      const availPcs = prog?.availablePcs ?? 0;
-                      // Everything still on hand for this batch: raw + WIP +
-                      // awaiting-next-stage + finished-not-yet-sold (the same
-                      // Raw+WIP+Finished basis the Dashboard reconciles on).
-                      // Buckets are disjoint, so this sum never double-counts.
-                      const valueOnHand = ((prog?.rawPcs || 0) + (b.atProcessorPcs || 0) + availPcs + (prog?.finishedPcs || 0)) * costPcs;
-                      return (
-                        <tr key={b.id} className="hover:bg-muted/40 transition-colors">
-                          <td className="px-4 py-3 font-medium text-foreground">{b.batchNo}</td>
-                          <td className="px-4 py-3 text-muted-foreground">{getSupplierName(b.supplierId)}</td>
-                          <td className="px-4 py-3 text-right text-muted-foreground tabular-nums">{formatNumber(b.initialPcs)}</td>
-                          <td className="px-4 py-3 text-right font-medium text-foreground tabular-nums">{formatNumber(prog?.rawPcs ?? 0)}</td>
-                          <td className="px-4 py-3 text-right text-warning tabular-nums">{formatNumber(b.atProcessorPcs || 0)}</td>
-                          <td className="px-4 py-3 text-right text-info tabular-nums">{formatNumber(availPcs)}</td>
-                          <td className="px-4 py-3 text-right text-success tabular-nums">{formatNumber(prog?.finishedPcs ?? 0)}</td>
-                          <td className="px-4 py-3 text-right font-medium text-foreground tabular-nums">{costPcs > 0 ? formatCurrency(costPcs) : '—'}</td>
-                          <td className="px-4 py-3 text-right font-medium text-foreground tabular-nums">{formatCurrency(valueOnHand)}</td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">No batches recorded</td>
+                  {materialSales.map(s => (
+                    <tr key={s.id} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-6 py-3 font-medium text-foreground">{s.invoiceNo}</td>
+                      <td className="px-6 py-3 text-right tabular-nums">{formatNumber(s.pcsSold)}</td>
+                      <td className="px-6 py-3 text-right tabular-nums font-medium">{formatCurrency(s.totalAmount)}</td>
                     </tr>
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
-          </div>
-        </div>
-
-        <div className="space-y-6">
-          {/* ── Processing history with pending/loss and per-batch trail ── */}
-          <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col max-h-[460px]">
-            <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between bg-muted/40">
-              <h3 className="font-semibold text-foreground">Processing History</h3>
-              {materialSends.length > 0 && (
-                <span className="text-xs text-muted-foreground">
-                  Sent {formatNumber(totals.sent)} · Recv {formatNumber(totals.received)} · Loss {formatNumber(totals.loss)}
-                </span>
-              )}
-            </div>
-            <div className="overflow-y-auto flex-1 p-0">
-              <table className="w-full text-sm text-left whitespace-nowrap">
-                <thead className="text-xs text-muted-foreground bg-card sticky top-0 border-b border-border/50">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Ref</th>
-                    <th className="px-4 py-3 font-medium">Processor</th>
-                    <th className="px-4 py-3 font-medium">Batch</th>
-                    <th className="px-4 py-3 font-medium text-right">Sent</th>
-                    <th className="px-4 py-3 font-medium text-right">Recv</th>
-                    <th className="px-4 py-3 font-medium text-right">Loss</th>
-                    <th className="px-4 py-3 font-medium text-right">Pending</th>
-                    <th className="px-4 py-3 font-medium text-right">Est. Cost</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/50">
-                  {materialSends.length > 0 ? (
-                    materialSends.map(s => {
-                      const stage = sortedStages.find(st => st.id === s.stageId);
-                      const batch = (batches || []).find(b => b.id === s.batchId);
-                      const pending = (s.pcsSent || 0) - (s.pcsReceived || 0) - (s.lossQuantity || 0);
-                      const rateMethod = stage?.rateMethod || 'per_piece';
-                      const estCost = rateMethod === 'per_kg'
-                        ? (s.pcsReceived || 0) * (batch?.weightPerPiece || 0) * (s.ratePerPiece || 0)
-                        : (s.pcsReceived || 0) * (s.ratePerPiece || 0);
-                      return (
-                        <tr key={s.id} className="hover:bg-muted/40 transition-colors">
-                          <td className="px-4 py-3 font-medium text-foreground">{s.dispatchNo}</td>
-                          <td className="px-4 py-3 text-muted-foreground">{getProcessorName(s.processorId)}</td>
-                          <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{batch?.batchNo || '—'}</td>
-                          <td className="px-4 py-3 text-right text-foreground tabular-nums">{formatNumber(s.pcsSent)}</td>
-                          <td className="px-4 py-3 text-right text-success tabular-nums">{formatNumber(s.pcsReceived)}</td>
-                          <td className="px-4 py-3 text-right tabular-nums">
-                            {(s.lossQuantity || 0) > 0
-                              ? <span className="text-destructive font-medium">{formatNumber(s.lossQuantity || 0)}</span>
-                              : <AlertTriangle className="inline h-3 w-3 text-muted-foreground/25" aria-hidden="true" />}
-                          </td>
-                          <td className="px-4 py-3 text-right tabular-nums">
-                            {pending > 0
-                              ? <span className="text-warning font-bold">{formatNumber(pending)}</span>
-                              : <span className="text-muted-foreground/40">—</span>}
-                          </td>
-                          <td className="px-4 py-3 text-right text-muted-foreground tabular-nums">{estCost > 0 ? formatCurrency(estCost) : '—'}</td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">No processing history</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* ── Sales with per-sale FIFO profit ─────────────────────────── */}
-          <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col max-h-[460px]">
-            <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between bg-muted/40">
-              <h3 className="font-semibold text-foreground">Sales History</h3>
-              {materialSales.length > 0 && (
-                <span className="text-xs text-muted-foreground">
-                  Revenue {formatCurrency(totals.salesValue)} · COGS {formatCurrency(totals.cogs)} ·
-                  <span className={cn("font-semibold ml-1", totals.grossMargin >= 0 ? "text-success" : "text-destructive")}>
-                    Margin {formatCurrency(totals.grossMargin)}
-                  </span>
-                </span>
-              )}
-            </div>
-            <div className="overflow-y-auto flex-1 p-0">
-              <table className="w-full text-sm text-left whitespace-nowrap">
-                <thead className="text-xs text-muted-foreground bg-card sticky top-0 border-b border-border/50">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Date</th>
-                    <th className="px-4 py-3 font-medium">Invoice</th>
-                    <th className="px-4 py-3 font-medium">Customer</th>
-                    <th className="px-4 py-3 font-medium">Product</th>
-                    <th className="px-4 py-3 font-medium text-right">Qty</th>
-                    <th className="px-4 py-3 font-medium text-right">Revenue</th>
-                    <th className="px-4 py-3 font-medium text-right">Profit</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/50">
-                  {materialSales.length > 0 ? (
-                    materialSales.map(s => (
-                      <tr key={s.id} className="hover:bg-muted/40 transition-colors">
-                        <td className="px-4 py-3 text-muted-foreground tabular-nums">{format(new Date(s.date), 'MMM d, yyyy')}</td>
-                        <td className="px-4 py-3 font-medium text-foreground">{s.invoiceNo}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{getCustomerName(s.customerId)}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{getProductName(s.productId)}</td>
-                        <td className="px-4 py-3 text-right font-medium text-foreground tabular-nums">{formatNumber(s.pcsSold)}</td>
-                        <td className="px-4 py-3 text-right font-medium text-foreground tabular-nums">{formatCurrency(s.totalAmount)}</td>
-                        <td className={cn("px-4 py-3 text-right font-semibold tabular-nums", saleProfit(s.id, s.pcsSold) >= 0 ? "text-success" : "text-destructive")}>
-                          {formatCurrency(saleProfit(s.id, s.pcsSold))}
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No sales history</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+          )}
+        </section>
       </div>
     </div>
   );

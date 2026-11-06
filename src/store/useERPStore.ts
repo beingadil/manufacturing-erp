@@ -245,9 +245,13 @@ export const useERPStore = create<ERPState>()(
 
       wipeModules: (moduleIds) => set((state) => {
         const moduleSet = new Set(moduleIds);
-        const patch: Partial<ERPState> = {};
         const wipeAccounting = moduleSet.has('accounting');
         const wipeInventory = moduleSet.has('inventory');
+        const wipeProcessing = moduleSet.has('processing');
+        const wipePurchases = moduleSet.has('purchases');
+        const wipeSales = moduleSet.has('sales');
+
+        const patch: Partial<ERPState> = {};
 
         // 1. Clear each module's own arrays (accounting/inventory handled below).
         for (const id of moduleIds) {
@@ -259,32 +263,50 @@ export const useERPStore = create<ERPState>()(
 
         // 2. Cascade: wiping a transaction module also clears the batches and
         //    inventory movements it created, so no orphan trail remains.
-        if (moduleSet.has('purchases') || moduleSet.has('sales') || moduleSet.has('processing')) {
+        if (wipePurchases || wipeSales || wipeProcessing) {
           if (!wipeInventory) {
-            const removedPurchaseIds = moduleSet.has('purchases')
+            const removedPurchaseIds = wipePurchases
               ? new Set(state.purchases.map(p => p.id))
               : null;
             const movementModules = new Set<string>();
-            if (moduleSet.has('purchases')) movementModules.add('Purchase');
-            if (moduleSet.has('sales')) movementModules.add('Sale');
-            if (moduleSet.has('processing')) { movementModules.add('Dispatch'); movementModules.add('Receive'); }
+            if (wipePurchases) movementModules.add('Purchase');
+            if (wipeSales) movementModules.add('Sale');
+            if (wipeProcessing) { movementModules.add('Dispatch'); movementModules.add('Receive'); }
 
             if (removedPurchaseIds) {
               patch.batches = state.batches.filter(b => !removedPurchaseIds.has(b.purchaseId));
+            } else {
+              patch.batches = state.batches;
             }
             patch.inventoryMovements = state.inventoryMovements.filter(m =>
               !movementModules.has(m.module)
               && !(removedPurchaseIds && m.batchId && removedPurchaseIds.has(m.batchId))
             );
+
+            // 2b. When wiping processing, restore every processed/at-processor
+            //     stock back to raw material (reset batch stage fields) so the
+            //     inventory is not silently lost. Processor balances are
+            //     recomputed from the remaining bills.
+            if (wipeProcessing) {
+              const baseBatches = patch.batches ?? state.batches;
+              patch.batches = baseBatches.map(b => ({
+                ...b,
+                remainingPcs: b.initialPcs ?? b.remainingPcs,
+                atProcessorPcs: 0,
+                processedPcs: 0,
+                stageAvailableBySource: {},
+                currentStageId: undefined,
+              }));
+            }
           }
 
           // 3. Also remove the auto-generated vouchers + journal entries of those
           //    modules (unless the whole accounting module is being wiped).
           if (!wipeAccounting) {
             const sources = new Set<string>();
-            if (moduleSet.has('purchases')) sources.add('Purchase');
-            if (moduleSet.has('sales')) sources.add('Sales');
-            if (moduleSet.has('processing')) sources.add('Processing');
+            if (wipePurchases) sources.add('Purchase');
+            if (wipeSales) sources.add('Sales');
+            if (wipeProcessing) sources.add('Processing');
             const removedVoucherIds = new Set(
               state.vouchers.filter(v => sources.has(v.sourceModule || '')).map(v => v.id)
             );
@@ -300,6 +322,27 @@ export const useERPStore = create<ERPState>()(
         if (wipeAccounting) {
           patch.vouchers = [];
           patch.journalEntries = [];
+        }
+
+        // 4. Recompute material counters from the (possibly restored) batches
+        //    so stock shows correctly after the wipe.
+        const finalBatches = patch.batches ?? state.batches;
+        patch.materials = InventoryCalculationService.syncMaterialCounters(
+          state.materials || [],
+          finalBatches
+        );
+
+        // 5. When processing is wiped, mark processors as unbilled: remove their
+        //    bills (already cleared) and recompute balancePayable from the
+        //    remaining bills so billed -> unbilled is reflected.
+        if (wipeProcessing) {
+          const remainingBills = (patch.processorBills ?? []) as any[];
+          patch.processors = (state.processors || []).map(p => ({
+            ...p,
+            balancePayable: remainingBills
+              .filter(b => b.processorId === p.id)
+              .reduce((s: number, b: any) => s + (b.totalAmount || 0), 0),
+          }));
         }
 
         return patch as Partial<ERPState>;
@@ -671,8 +714,20 @@ export const useERPStore = create<ERPState>()(
         // here too — not only in the form that normally builds it.
         if (data.usageType === 'assembled') validateComponents(data.components ?? []);
 
+        // SKU is never typed in — it is allocated here, year-scoped and
+        // max-based (PRD-2026-0001 style), same discipline as PO/INV numbers.
+        const today = new Date().toISOString().slice(0, 10);
         const id = uuidv4();
-        set((state) => ({ products: [{ ...data, id }, ...state.products] }));
+        set((state) => ({
+          products: [
+            {
+              ...data,
+              id,
+              sku: data.sku ?? DocumentNumberingService.nextDocumentNumber(state.products, 'sku', 'PRD', today),
+            },
+            ...state.products,
+          ],
+        }));
         return id;
       },
 
@@ -700,7 +755,13 @@ export const useERPStore = create<ERPState>()(
         };
 
         const batchId = uuidv4();
-        const batchNo = `BATCH-${purchaseNo}`;
+        // {SUPPLIER-FIRST}-{purchaseNo} (AHMED-PO-2026-0003) by default — the
+        // batches of one material stay tellable apart by eye; Settings can
+        // switch back to the BATCH- prefix.
+        const batchNo = DocumentNumberingService.buildBatchNo(
+          state.suppliers.find(s => s.id === data.supplierId)?.name,
+          purchaseNo,
+        );
         const newBatch: Batch = {
           id: batchId,
           batchNo,
@@ -1311,7 +1372,7 @@ export const useERPStore = create<ERPState>()(
           // down the list, which would leave stock quietly out of step.
           for (const [materialId, perUnitQty] of perUnit) {
             const required = roundQty(perUnitQty * data.pcsSold);
-            const available = InventoryCalculationService.calculateRawMaterialStock(materialId, nextBatches);
+            const available = InventoryCalculationService.calculateSaleStock(materialId, nextBatches);
             if (required > available + 1e-9) {
               throw new AppError(
                 `Not enough stock to sell ${data.pcsSold} \u00d7 ${assembled.name}: ` +
@@ -1327,14 +1388,21 @@ export const useERPStore = create<ERPState>()(
             for (const b of nextBatches) {
               if (consumed >= required) break;
               if (b.materialId !== materialId || b.status !== 'Active') continue;
-              const availableHere = InventoryCalculationService.batchRawAvailable(b);
-              if (availableHere <= 0) continue;
-              const take = Math.min(availableHere, required - consumed);
-              b.remainingPcs = roundQty(b.remainingPcs - take);
-              if (b.remainingPcs <= 1e-9) b.status = 'Depleted';
-              consumed = roundQty(consumed + take);
+              const rawHere = Math.max(0, b.remainingPcs || 0);
+              const rawTake = Math.min(rawHere, required - consumed);
+              if (rawTake > 0) {
+                b.remainingPcs = roundQty(b.remainingPcs - rawTake);
+                consumed = roundQty(consumed + rawTake);
+              }
+              const finishedHere = Math.max(0, b.processedPcs || 0);
+              const finishedTake = Math.min(finishedHere, required - consumed);
+              if (finishedTake > 0) {
+                b.processedPcs = roundQty((b.processedPcs || 0) - finishedTake);
+                consumed = roundQty(consumed + finishedTake);
+              }
+              if ((b.remainingPcs || 0) + (b.processedPcs || 0) <= 1e-9) b.status = 'Depleted';
             }
-            const running = InventoryCalculationService.calculateRawMaterialStock(materialId, nextBatches);
+            const running = InventoryCalculationService.calculateSaleStock(materialId, nextBatches);
             newMovements.push({
               id: uuidv4(),
               materialId,

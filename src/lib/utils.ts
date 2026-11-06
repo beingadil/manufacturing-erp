@@ -62,3 +62,15 @@ export function formatPercent(ratio: number, digits = 2) {
   }).format(ratio);
 }
 
+export function adaptiveAmountClass(value: unknown, size: 'sm' | 'md' | 'lg' = 'md'): string {
+  const len = typeof value === 'string' ? value.trim().length : 0;
+  const steps: Record<'sm' | 'md' | 'lg', Array<[number, string]>> = {
+    sm: [[8, 'text-lg'], [11, 'text-base'], [14, 'text-sm'], [Number.POSITIVE_INFINITY, 'text-xs']],
+    md: [[9, 'text-2xl'], [12, 'text-xl'], [16, 'text-lg'], [Number.POSITIVE_INFINITY, 'text-base']],
+    lg: [[9, 'text-3xl'], [12, 'text-2xl'], [16, 'text-xl'], [Number.POSITIVE_INFINITY, 'text-base']],
+  };
+  for (const [max, cls] of steps[size]) {
+    if (len <= max) return cls;
+  }
+  return steps[size][steps[size].length - 1][1];
+}

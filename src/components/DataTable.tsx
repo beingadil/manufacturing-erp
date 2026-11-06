@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import React, { memo, useEffect, useMemo, useState } from "react";
 import { cn } from "../lib/utils";
+import { toolbarSelectClass } from "./ui/formStyles";
 
 export interface Column<T> {
   key: string;
@@ -36,6 +37,8 @@ interface DataTableProps<T> {
   embedded?: boolean;
   /** Optional footer row rendered after the data rows (e.g. column totals). */
   summaryRow?: React.ReactNode[];
+  /** Hide the rows-per-page selector (compact lists). */
+  showPageSize?: boolean;
 }
 
 /**
@@ -58,7 +61,8 @@ function DataTableInner<T extends Record<string, any>>({
   defaultSortKey,
   itemsPerPageOptions = [10, 25, 50, 100],
   embedded = false,
-  summaryRow
+  summaryRow,
+  showPageSize = true
 }: DataTableProps<T>) {
   // Try to load state from localStorage if persistKey is provided
   const loadState = (key: string, defaultValue: any) => {
@@ -177,19 +181,21 @@ function DataTableInner<T extends Record<string, any>>({
           <span className="hidden sm:inline-flex items-center rounded-full bg-muted/60 px-2.5 py-1 text-xs font-medium text-muted-foreground">
             {sortedData.length} {sortedData.length === 1 ? 'item' : 'items'}
           </span>
+          {showPageSize && (
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Show</span>
             <select
               aria-label="Rows per page"
               value={itemsPerPage}
               onChange={(e) => setItemsPerPage(Number(e.target.value))}
-              className="h-10 px-3 bg-muted/40 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className={cn(toolbarSelectClass, 'h-10')}
             >
               {itemsPerPageOptions.map(opt => (
                 <option key={opt} value={opt}>{opt}</option>
               ))}
             </select>
           </div>
+          )}
         </div>
       </div>
       

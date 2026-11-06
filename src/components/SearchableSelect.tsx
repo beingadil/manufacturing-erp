@@ -144,9 +144,11 @@ export function SearchableSelect({
           tabIndex={0}
           onKeyDown={handleKeyDown}
           className={cn(
-            "flex-1 flex items-center justify-between rounded-xl border bg-card p-3 text-sm cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+            "flex-1 flex items-center justify-between rounded-xl border border-border bg-background/60 px-4 py-3 text-sm cursor-pointer",
+            "transition-[border-color,background-color,box-shadow] ease-[cubic-bezier(0.32,0.72,0,1)]",
+            "hover:border-border focus:outline-none focus-visible:ring-4 focus-visible:ring-primary/10",
             !selectedOption && "text-muted-foreground",
-            isOpen && "ring-2 ring-primary border-transparent"
+            isOpen && "border-primary/50 ring-4 ring-primary/10"
           )}
           onClick={() => (isOpen ? setIsOpen(false) : openDropdown())}
         >
@@ -202,10 +204,10 @@ export function SearchableSelect({
           id={listboxId.current}
           role="listbox"
           aria-label={placeholder}
-          className="rounded-xl border border-border bg-card shadow-md flex flex-col max-h-60 overflow-hidden"
+          className="flex max-h-60 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-lg"
         >
-          <div className="dropdown-search flex items-center border-b px-3 shrink-0">
-            <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" aria-hidden="true" />
+          <div className="dropdown-search flex items-center border-b border-border/60 px-3.5 shrink-0">
+            <Search className="mr-2.5 h-4 w-4 shrink-0 opacity-50" aria-hidden="true" />
             <input
               ref={inputRef}
               className="flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none focus:border-transparent focus:ring-0 focus:shadow-none placeholder:text-muted-foreground"
@@ -252,9 +254,10 @@ export function SearchableSelect({
                   aria-selected={value === option.id}
                   data-active={index === activeIndex}
                   className={cn(
-                    "relative flex cursor-pointer select-none items-center rounded-sm px-2 py-2 text-sm outline-none whitespace-nowrap",
+                    "relative flex cursor-pointer select-none items-center rounded-lg px-2.5 py-2 text-sm outline-none whitespace-nowrap",
+                    "transition-colors duration-100",
                     index === activeIndex && "bg-muted/70",
-                    value === option.id && "bg-muted"
+                    value === option.id && "text-primary"
                   )}
                   onMouseEnter={() => setActiveIndex(index)}
                   onClick={() => selectOption(option.id)}
@@ -262,7 +265,7 @@ export function SearchableSelect({
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4 shrink-0",
-                      value === option.id ? "opacity-100" : "opacity-0"
+                      value === option.id ? "opacity-100 text-primary" : "opacity-0"
                     )}
                   />
                   <div className="flex flex-col min-w-0">

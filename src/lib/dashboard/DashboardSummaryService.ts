@@ -224,7 +224,7 @@ export class DashboardSummaryService {
       .sort((a, b) => a.sequence - b.sequence)
       .filter(s => !s.isFinalStage)
       .map(stage => {
-        const pcs = InventoryCalculationService.getStageWIP(stage.id, processingSends, processingReceipts);
+        const pcs = InventoryCalculationService.getStageBucket(stage.id, processingSends, processingReceipts, batches || []);
         // Value the stage at the weighted-average purchase cost of the pcs in
         // WIP (batch basis) — same basis as the atProcessor total.
         const value = atProcessor > 0 && wipPcs > 0 ? (atProcessor * pcs) / wipPcs : 0;

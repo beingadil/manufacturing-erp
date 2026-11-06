@@ -1,7 +1,8 @@
-import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, Edit, Eye, Package, PackageCheck, Printer, Send, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, Edit, Eye, Printer, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from 'react-router-dom';
 import { Column, DataTable } from "../components/DataTable";
+import { toolbarSelectClass } from "../components/ui/formStyles";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
 import { CreateProcessorBillForm } from '../components/processing/CreateProcessorBillForm';
 import { DispatchDetailModal } from '../components/processing/DispatchDetailModal';
@@ -11,13 +12,12 @@ import { StageManagerPanel } from '../components/processing/StageManagerPanel';
 import { StageTimelinePanel } from '../components/processing/StageTimelinePanel';
 import { WipBoard } from '../components/processing/WipBoard';
 import { WipStageStrip } from '../components/processing/WipStageStrip';
-import { KpiCard } from "../components/ui/KpiCard";
 import { PageModal } from "../components/ui/PageModal";
 import { VoucherHistoryTab } from "../components/VoucherHistoryTab";
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
 import { generateDispatchSlipPDF, generateProcessorBillPDF } from "../lib/documentGenerators";
 import { getSortedStages } from '../lib/processing/stageProgress';
-import { formatCurrency } from "../lib/utils";
+import { formatCurrency, formatNumber } from "../lib/utils";
 import { ErrorManagement } from '../lib/validation';
 import { ProcessingService } from '../services/ProcessingService';
 import { useERPStore } from "../store/useERPStore";
@@ -59,6 +59,12 @@ export function JobWork() {
   // ── Stage filters for tables ─────────────────────────────────────────────
   const [sendStageFilter, setSendStageFilter] = useState('');
   const [receiveStageFilter, setReceiveStageFilter] = useState('');
+  const [sendDateFrom, setSendDateFrom] = useState('');
+  const [sendDateTo, setSendDateTo] = useState('');
+  const [receiveDateFrom, setReceiveDateFrom] = useState('');
+  const [receiveDateTo, setReceiveDateTo] = useState('');
+  const [billDateFrom, setBillDateFrom] = useState('');
+  const [billDateTo, setBillDateTo] = useState('');
   const [timelineBatchId, setTimelineBatchId] = useState('');
 
   const sortedStages = useMemo(() => getSortedStages(processingStages || []), [processingStages]);
@@ -67,12 +73,19 @@ export function JobWork() {
   const stageWip = useMemo(() => sortedStages
     .filter(s => !s.isFinalStage)
     .map(stage => {
-      const pcs = InventoryCalculationService.getStageWIP(stage.id, processingSends, processingReceipts);
-      const totalWip = materials.reduce((sum, m) => sum + (m.atProcessorPcs || 0), 0);
-      const value = totalWip > 0 ? pcs * (totalWip > 0 ? 1 : 0) : 0;
-      return { stageId: stage.id, name: stage.name, sequence: stage.sequence, pcs, value };
-    }), [sortedStages, processingSends, processingReceipts, materials]);
+      const pcs = InventoryCalculationService.getStageBucket(stage.id, processingSends, processingReceipts, batches || []);
+      return { stageId: stage.id, name: stage.name, sequence: stage.sequence, pcs };
+    }), [sortedStages, processingSends, processingReceipts, batches]);
   const totalWipPcs = materials.reduce((sum, m) => sum + (m.atProcessorPcs || 0), 0);
+  // Actual purchase cost of the pcs sitting in the pipeline (incl. waiting).
+  const totalWipValue = useMemo(
+    () => materials.reduce((sum, m) => sum + InventoryCalculationService.getMaterialStageValues(m.id, batches || []).atProcessor.value, 0),
+    [materials, batches],
+  );
+  const stageWipWithValue = useMemo(
+    () => stageWip.map(s => ({ ...s, value: totalWipPcs > 0 ? (totalWipValue * s.pcs) / totalWipPcs : 0 })),
+    [stageWip, totalWipPcs, totalWipValue],
+  );
 
   // ── Enriched rows for tables ─────────────────────────────────────────────
   const enrichedSends = useMemo(() => processingSends.map(s => {
@@ -93,9 +106,12 @@ export function JobWork() {
     };
   }), [processingSends, processors, materials, processingStages, batches]);
 
-  const filteredSends = useMemo(() => sendStageFilter
-    ? enrichedSends.filter(s => (s.stageId || '') === sendStageFilter)
-    : enrichedSends, [enrichedSends, sendStageFilter]);
+  const filteredSends = useMemo(() => enrichedSends.filter(s => {
+    if (sendStageFilter && (s.stageId || '') !== sendStageFilter) return false;
+    if (sendDateFrom && (s.date || '') < sendDateFrom) return false;
+    if (sendDateTo && (s.date || '') > sendDateTo) return false;
+    return true;
+  }), [enrichedSends, sendStageFilter, sendDateFrom, sendDateTo]);
 
   // Record totals for the stats strip (mirrors the tables below).
   const jobStats = useMemo(() => ({
@@ -118,10 +134,12 @@ export function JobWork() {
     };
   }), [processingReceipts, processors, materials, processingStages]);
 
-  const filteredReceipts = useMemo(() => receiveStageFilter
-    ? enrichedReceipts.filter(r => (r.stageId || '') === receiveStageFilter)
-    : enrichedReceipts, [enrichedReceipts, receiveStageFilter]);
-
+  const filteredReceipts = useMemo(() => enrichedReceipts.filter(r => {
+    if (receiveStageFilter && (r.stageId || '') !== receiveStageFilter) return false;
+    if (receiveDateFrom && (r.date || '') < receiveDateFrom) return false;
+    if (receiveDateTo && (r.date || '') > receiveDateTo) return false;
+    return true;
+  }), [enrichedReceipts, receiveStageFilter, receiveDateFrom, receiveDateTo]);
   const enrichedBills = useMemo(() => processorBills.map(b => {
     const p = processors.find(pr => pr.id === b.processorId);
     const voucher = vouchers.find(v => v.sourceId === b.id && v.sourceModule === 'Processing');
@@ -134,6 +152,11 @@ export function JobWork() {
       stageName: stage ? stage.name : '—',
     };
   }), [processorBills, processors, vouchers, processingStages]);
+  const filteredBills = useMemo(() => enrichedBills.filter(b => {
+    if (billDateFrom && (b.date || '') < billDateFrom) return false;
+    if (billDateTo && (b.date || '') > billDateTo) return false;
+    return true;
+  }), [enrichedBills, billDateFrom, billDateTo]);
 
   const sendColumns: Column<typeof enrichedSends[0]>[] = [
     { key: 'actions', label: 'Actions', align: 'right', render: (item) => (
@@ -168,12 +191,25 @@ export function JobWork() {
     { key: "formattedDate", label: "Date", sortable: true },
     { key: "processorName", label: "Processor", sortable: true, render: (item) => <span className="font-medium">{item.processorName}</span> },
     { key: "stageName", label: "Stage", sortable: true },
-    { key: "materialName", label: "Material", sortable: true },
-    { key: "batchNo", label: "Batch", sortable: true, render: (item) => <span className="font-mono text-xs text-muted-foreground">{item.batchNo}</span> },
-    { key: "pcsSent", label: "Sent", align: "right", sortable: true, render: (item) => <span className="font-medium">{item.pcsSent} PCS</span> },
-    { key: "pcsReceived", label: "Received", align: "right", sortable: true, render: (item) => <span className="font-medium text-success">{item.pcsReceived} PCS</span> },
-    { key: "lossPcs", label: "Loss", align: "right", sortable: true, render: (item) => item.lossPcs > 0 ? <span className="font-medium text-destructive">{item.lossPcs} PCS</span> : <span className="text-muted-foreground/40">—</span> },
-    { key: "pendingPcs", label: "Pending", align: "right", sortable: true, render: (item) => <span className="font-bold text-destructive">{item.pendingPcs} PCS</span> },
+    { key: "materialName", label: "Material", sortable: true, render: (item) => <span className="text-xs">{item.materialName}</span> },
+    {
+      key: "batchNo",
+      label: "Batch",
+      sortable: true,
+      render: (item) => item.batchId ? (
+        <Link
+          to={`/materials/${item.materialId}/purchases/${item.batchId}`}
+          className="font-mono text-xs text-muted-foreground transition-colors hover:text-primary hover:underline"
+          title="Open this purchase"
+        >
+          {item.batchNo}
+        </Link>
+      ) : <span className="font-mono text-xs text-muted-foreground">{item.batchNo}</span>,
+    },
+    { key: "pcsSent", label: "Sent", align: "right", sortable: true, render: (item) => <span className="font-medium tabular-nums">{formatNumber(item.pcsSent)}</span> },
+    { key: "pcsReceived", label: "Received", align: "right", sortable: true, render: (item) => <span className="font-medium text-success tabular-nums">{formatNumber(item.pcsReceived)}</span> },
+    { key: "lossPcs", label: "Loss", align: "right", sortable: true, render: (item) => item.lossPcs > 0 ? <span className="font-medium text-destructive tabular-nums">{formatNumber(item.lossPcs)}</span> : <span className="text-muted-foreground/40">—</span> },
+    { key: "pendingPcs", label: "Pending", align: "right", sortable: true, render: (item) => <span className="font-bold text-destructive tabular-nums">{formatNumber(item.pendingPcs)}</span> },
     {
       key: "status",
       label: "Status",
@@ -203,9 +239,9 @@ export function JobWork() {
     { key: "formattedDate", label: "Date", sortable: true },
     { key: "processorName", label: "Processor", sortable: true, render: (item) => <span className="font-medium">{item.processorName}</span> },
     { key: "stageName", label: "Stage", sortable: true },
-    { key: "materialName", label: "Material", sortable: true },
-    { key: "pcsReceived", label: "Received", align: "right", sortable: true, render: (item) => <span className="font-medium text-success">+{item.pcsReceived} PCS</span> },
-    { key: "billAmount", label: "Bill Amount", align: "right", sortable: true, render: (item) => <span className="font-bold text-foreground">{formatCurrency(item.billAmount)}</span> }
+    { key: "materialName", label: "Material", sortable: true, render: (item) => <span className="text-xs">{item.materialName}</span> },
+    { key: "pcsReceived", label: "Received", align: "right", sortable: true, render: (item) => <span className="font-medium text-success tabular-nums">+{formatNumber(item.pcsReceived)}</span> },
+    { key: "billAmount", label: "Bill Amount", align: "right", sortable: true, render: (item) => <span className="font-bold text-foreground tabular-nums">{formatCurrency(item.billAmount)}</span> }
   ];
 
   const billColumns: Column<typeof enrichedBills[0]>[] = [
@@ -264,12 +300,12 @@ export function JobWork() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-foreground">Processing (Job Work)</h2>
-          <p className="text-sm text-muted-foreground mt-1">Send raw materials through each processing stage and receive finished goods.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Processing (Job Work)</h1>
+          <p className="text-sm text-muted-foreground mt-1">Send raw materials through each processing stage and receive them back.</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={() => { setEditBillId(undefined); setIsBillOpen(true); }}
             className="inline-flex items-center gap-2 rounded-lg bg-card border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted/40"
@@ -293,7 +329,7 @@ export function JobWork() {
 
       {/* WIP-by-stage strip (always visible, multi-stage at a glance) */}
       {activeTab !== 'Board' && (
-        <WipStageStrip stages={sortedStages} stageWip={stageWip} totalPcs={totalWipPcs} totalValue={0} />
+        <WipStageStrip stages={sortedStages} stageWip={stageWipWithValue} totalPcs={totalWipPcs} totalValue={totalWipValue} />
       )}
 
       <div className="flex gap-6 border-b border-border overflow-x-auto">
@@ -310,17 +346,32 @@ export function JobWork() {
 
       {/* Record totals strip — shown on the three record tabs (WIP Board has its own stage strip) */}
       {(activeTab === 'Send' || activeTab === 'Receive' || activeTab === 'Billing') && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <KpiCard size="sm" icon={Send} label="Dispatches" value={String(jobStats.dispatches)} description={<span>Total sent orders</span>} />
-          <KpiCard size="sm" icon={Package} iconClassName="text-blue-500" label="PCS Sent" value={jobStats.pcsSent.toLocaleString()} description={<span>To all processors</span>} />
-          <KpiCard size="sm" icon={PackageCheck} iconClassName="text-success" label="PCS Received" value={jobStats.pcsReceived.toLocaleString()} description={<span>Back from processors</span>} />
-          <KpiCard size="sm" icon={AlertTriangle} iconClassName="text-destructive" label="Pending PCS" value={jobStats.pending.toLocaleString()} description={<span>Awaiting receipt or loss</span>} />
-        </div>
+        <section className="flex flex-wrap items-center gap-x-10 gap-y-3 rounded-2xl border border-border bg-card px-6 py-4 shadow-sm">
+          <div>
+            <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Dispatches</div>
+            <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{formatNumber(jobStats.dispatches)}</div>
+          </div>
+          <div className="border-l border-border/60 pl-10">
+            <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">PCS sent</div>
+            <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{formatNumber(jobStats.pcsSent)}</div>
+          </div>
+          <div className="border-l border-border/60 pl-10">
+            <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">PCS received</div>
+            <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-success">{formatNumber(jobStats.pcsReceived)}</div>
+          </div>
+          <div className="border-l border-border/60 pl-10">
+            <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Pending PCS</div>
+            <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-destructive">
+              {jobStats.pending > 0 ? formatNumber(jobStats.pending) : '0'}
+            </div>
+            {jobStats.pending > 0 && <div className="text-xs text-muted-foreground">Awaiting receipt or loss</div>}
+          </div>
+        </section>
       )}
 
       {activeTab === "Board" ? (
         <div className="space-y-5">
-          <WipStageStrip stages={sortedStages} stageWip={stageWip} totalPcs={totalWipPcs} totalValue={0} />
+          <WipStageStrip stages={sortedStages} stageWip={stageWipWithValue} totalPcs={totalWipPcs} totalValue={totalWipValue} />
           <WipBoard
             stages={sortedStages}
             batches={batches || []}
@@ -332,16 +383,20 @@ export function JobWork() {
         </div>
       ) : activeTab === "Send" ? (
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">{filteredSends.length} dispatches</span>
-            <select
-              value={sendStageFilter}
-              onChange={e => setSendStageFilter(e.target.value)}
-              className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
-            >
-              <option value="">All stages</option>
-              {sortedStages.map(s => <option key={s.id} value={s.id}>{s.name}{s.isFinalStage ? ' (Final)' : ''}</option>)}
-            </select>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground">{filteredSends.length} {filteredSends.length === 1 ? 'dispatch' : 'dispatches'}</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <input type="date" value={sendDateFrom} onChange={e => setSendDateFrom(e.target.value)} className="rounded-lg border border-border bg-background/60 px-2 py-1.5 text-xs text-foreground" aria-label="From date" />
+              <input type="date" value={sendDateTo} onChange={e => setSendDateTo(e.target.value)} className="rounded-lg border border-border bg-background/60 px-2 py-1.5 text-xs text-foreground" aria-label="To date" />
+              <select
+                value={sendStageFilter}
+                onChange={e => setSendStageFilter(e.target.value)}
+                className={toolbarSelectClass}
+              >
+                <option value="">All stages</option>
+                {sortedStages.map(s => <option key={s.id} value={s.id}>{s.name}{s.isFinalStage ? ' (Final)' : ''}</option>)}
+              </select>
+            </div>
           </div>
           <DataTable
             data={filteredSends}
@@ -356,14 +411,18 @@ export function JobWork() {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">{filteredReceipts.length} receipts</span>
-            <select
-              value={receiveStageFilter}
-              onChange={e => setReceiveStageFilter(e.target.value)}
-              className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
-            >
-              <option value="">All stages</option>
-              {sortedStages.map(s => <option key={s.id} value={s.id}>{s.name}{s.isFinalStage ? ' (Final)' : ''}</option>)}
-            </select>
+            <div className="flex flex-wrap items-center gap-2">
+              <input type="date" value={receiveDateFrom} onChange={e => setReceiveDateFrom(e.target.value)} className="rounded-lg border border-border bg-background/60 px-2 py-1.5 text-xs text-foreground" aria-label="From date" />
+              <input type="date" value={receiveDateTo} onChange={e => setReceiveDateTo(e.target.value)} className="rounded-lg border border-border bg-background/60 px-2 py-1.5 text-xs text-foreground" aria-label="To date" />
+              <select
+                value={receiveStageFilter}
+                onChange={e => setReceiveStageFilter(e.target.value)}
+                className={toolbarSelectClass}
+              >
+                <option value="">All stages</option>
+                {sortedStages.map(s => <option key={s.id} value={s.id}>{s.name}{s.isFinalStage ? ' (Final)' : ''}</option>)}
+              </select>
+            </div>
           </div>
           <DataTable
             data={filteredReceipts}
@@ -375,14 +434,23 @@ export function JobWork() {
           />
         </div>
       ) : activeTab === "Billing" ? (
-        <DataTable
-          data={enrichedBills}
-          columns={billColumns}
-          searchKeys={["processorName", "billNo", "stageName"]}
-          searchPlaceholder="Search bills..."
-          persistKey="jobwork-bills-table"
-          defaultSortKey="date"
-        />
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground">{filteredBills.length} bills</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <input type="date" value={billDateFrom} onChange={e => setBillDateFrom(e.target.value)} className="rounded-lg border border-border bg-background/60 px-2 py-1.5 text-xs text-foreground" aria-label="From date" />
+              <input type="date" value={billDateTo} onChange={e => setBillDateTo(e.target.value)} className="rounded-lg border border-border bg-background/60 px-2 py-1.5 text-xs text-foreground" aria-label="To date" />
+            </div>
+          </div>
+          <DataTable
+            data={filteredBills}
+            columns={billColumns}
+            searchKeys={["processorName", "billNo", "stageName"]}
+            searchPlaceholder="Search bills..."
+            persistKey="jobwork-bills-table"
+            defaultSortKey="date"
+          />
+        </div>
       ) : activeTab === "Vouchers" ? (
         <VoucherHistoryTab sourceModule="Processing" />
       ) : activeTab === "Timeline" ? (
@@ -446,7 +514,7 @@ export function JobWork() {
       />
 
       <PageModal isOpen={lossModal.isOpen} onClose={() => setLossModal({ ...lossModal, isOpen: false })} title="Record Loss">
-        <form onSubmit={(e) => { e.preventDefault(); handleRecordLoss(); }} className="p-6 space-y-4">
+        <form onSubmit={(e) => { e.preventDefault(); handleRecordLoss(); }} className="space-y-4">
           <div className="text-sm text-muted-foreground">
             Dispatch <span className="font-mono">{lossModal.dispatchNo}</span> — pending {lossModal.pending} PCS. Loss is recorded explicitly; pending pcs can still be received later.
           </div>

@@ -6,6 +6,7 @@ import { AccountingEngine } from '../lib/accounting/AccountingEngine';
 import { getBankAccounts, getCashAccounts } from '../lib/accounting/accountClassification';
 import { DocumentNumberingService } from '../lib/business/DocumentNumberingService';
 import { cn, formatCurrency } from '../lib/utils';
+import { toolbarSelectClass } from './ui/formStyles';
 import { ErrorManagement } from '../lib/validation';
 import { SearchableAccountTree } from '../pages/finance/SearchableAccountTree';
 import { useERPStore } from '../store/useERPStore';
@@ -659,7 +660,7 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
                       <select
                         value={row.type}
                         onChange={e => updateCounterparty(row.uid, { type: e.target.value as RowType, counterpartyId: '', parentAccountId: undefined })}
-                        className="w-full rounded-lg border border-border bg-background px-2.5 py-2 text-sm text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary"
+                        className={cn(toolbarSelectClass, 'w-full')}
                       >
                         {ROW_TYPES[direction].map(t => (
                           <option key={t.value} value={t.value}>{t.label}</option>

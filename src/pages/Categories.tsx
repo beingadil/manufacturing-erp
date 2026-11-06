@@ -2,11 +2,13 @@ import { Cloud, Layers, Package, Pencil, Plus, RefreshCw, Tags, Trash2, X } from
 import { motion } from 'motion/react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { SearchableSelect } from '../components/SearchableSelect';
 import { InlineEditInput } from '../components/common/InlineEditInput';
 import { SafeDeleteDialog } from '../components/common/SafeDeleteDialog';
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
 import { KpiCard } from '../components/ui/KpiCard';
 import { ModalOverlay } from '../components/ui/ModalOverlay';
+import { hintClass, inputClass, labelClass, selectClass, textareaClass } from '../components/ui/formStyles';
 import { formatNumber } from '../lib/utils';
 import { CategoryService } from '../services/CategoryService';
 import { useERPStore } from '../store/useERPStore';
@@ -253,7 +255,7 @@ export default function Categories() {
         searchKeys={["name", "description"]}
         searchPlaceholder="Search categories..."
         emptyStateMessage="No categories yet"
-        emptyStateHint="Create your first category to start organizing raw materials."
+        emptyStateHint="Create a category to organize raw materials."
         persistKey="categories-table"
         defaultSortKey="name"
       />
@@ -264,62 +266,43 @@ export default function Categories() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             onClick={(e) => e.stopPropagation()}
-            className="bg-card rounded-2xl shadow-xl w-full max-w-lg overflow-hidden"
+            className="bg-card rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden"
           >
-            <div className="px-6 py-4 border-b border-border/50 flex items-center justify-between bg-gradient-to-r from-indigo-500/10 to-violet-500/10">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-sm">
-                  {editingCategory ? <Pencil className="h-4 w-4" /> : <Tags className="h-4 w-4" />}
-                </div>
-                <h2 className="text-lg font-bold text-foreground">
-                  {editingCategory ? 'Edit Category' : 'Add New Category'}
-                </h2>
-              </div>
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+              <h2 className="text-lg font-bold text-foreground">
+                {editingCategory ? 'Edit Category' : 'Add New Category'}
+              </h2>
               <button
                 type="button"
                 onClick={closeForm}
                 aria-label="Close"
-                className="text-muted-foreground/80 hover:text-muted-foreground transition-colors"
+                className="rounded-lg p-1 text-muted-foreground/80 hover:bg-muted transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground">Category Name *</label>
+            <form onSubmit={handleSubmit} className="px-6 py-6 space-y-5">
+              <div className="space-y-1.5">
+                <label className={labelClass}>Category name</label>
                 <input
                   type="text"
                   required
                   autoFocus
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
-                  placeholder="e.g. Metals, Plastics, etc."
+                  className={inputClass}
+                  placeholder="e.g. Metals, Plastics"
                 />
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground">Description (Optional)</label>
+              <div className="space-y-1.5">
+                <label className={labelClass}>Description (optional)</label>
                 <textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
-                  placeholder="Additional details about this category..."
+                  className={textareaClass}
+                  placeholder="What belongs in this category"
                   rows={3}
                 />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground">Default Processing Path</label>
-                <select
-                  value={formData.defaultProcessingPath}
-                  onChange={(e) => setFormData({ ...formData, defaultProcessingPath: e.target.value as ProcessingPath })}
-                  className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors bg-card"
-                >
-                  <option value="full_chain">Through all processors</option>
-                  <option value="single_stage">One processor only</option>
-                  <option value="custom_stages">Selected processors (stages picked on each material)</option>
-                  <option value="ready_made">Ready-made (no processing)</option>
-                </select>
-                <p className="text-xs text-muted-foreground">Pre-selected when creating a material in this category.</p>
               </div>
               <div className="flex gap-3 pt-2">
                 <button
@@ -331,7 +314,7 @@ export default function Categories() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-md"
+                  className="flex-1 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-transform ease-[cubic-bezier(0.32,0.72,0,1)] active:scale-[0.99]"
                 >
                   {editingCategory ? 'Update' : 'Save'}
                 </button>
