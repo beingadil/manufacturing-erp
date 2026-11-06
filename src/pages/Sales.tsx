@@ -1,170 +1,32 @@
 import { Banknote, CalendarDays, Edit, Eye, Plus, Printer, ReceiptText, ShoppingBag, Trash2 } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
-import { QuickAddCustomer, QuickAddProduct } from "../components/QuickAddModals";
-import { SearchableSelect } from "../components/SearchableSelect";
-import { DatePicker } from "../components/ui/date-picker";
 import { KpiCard } from "../components/ui/KpiCard";
-import { PageModal } from "../components/ui/PageModal";
 import { VoucherHistoryTab } from "../components/VoucherHistoryTab";
 import { generateInvoicePDF } from "../lib/documentGenerators";
-import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
-import {
-  breakdownForSale,
-  isAssembled,
-  runningLowAfterSale,
-  shortfallMessage,
-} from '../lib/business/ProductAssemblyService';
 import { formatCurrency } from "../lib/utils";
 import { ErrorManagement } from '../lib/validation';
 import { SalesService } from '../services/SalesService';
 import { useERPStore } from "../store/useERPStore";
 
 export function Sales() {
-  const { sales, products, materials, customers, vouchers, batches, inventoryThreshold } = useERPStore();
+  const { sales, products, customers, vouchers } = useERPStore();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editSaleId, setEditSaleId] = useState<string | undefined>();
-  const [deleteModal, setDeleteModal] = useState<{isOpen: boolean, id: string, no: string}>({isOpen: false, id: '', no: ''});
   const [activeTab, setActiveTab] = useState<'data' | 'vouchers'>(() => (searchParams.get('tab') === 'vouchers' ? 'vouchers' : 'data'));
-
-  // Deep link: /sales?new=1 (Dashboard Quick Entry) opens the create form.
-  // The tab-sync effect below strips ?new from the URL on its mount pass.
-  useEffect(() => {
-    if (searchParams.get('new') !== '1') return;
-    setEditSaleId(undefined);
-    setCustomerId('');
-    setProductId('');
-    setPcsSold('');
-    setPricePerPiece('');
-    setIsModalOpen(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const navigate = useNavigate();
 
   // Sync tab to URL (?tab=data|vouchers) so refresh/back preserves the view.
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
     params.set('tab', activeTab);
-    params.delete('new'); // consumed by the deep-link effect above
     setSearchParams(params, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
-  
-  const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
-  const [isAddProductOpen, setIsAddProductOpen] = useState(false);
 
-  const [productId, setProductId] = useState("");
-  const [customerId, setCustomerId] = useState("");
-  const [pcsSold, setPcsSold] = useState("");
-  const [pricePerPiece, setPricePerPiece] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-
-  const selectedProduct = products.find(p => p.id === productId);
-  const linkedMaterial = selectedProduct ? materials.find(m => m.id === selectedProduct.materialId) : null;
-  // When editing, this sale's own pcs are already deducted from stock — add
-  // them back so the guard doesn't block legitimate edits (price/date fixes).
-  const editingSalePcs = editSaleId ? (sales.find(s => s.id === editSaleId)?.pcsSold || 0) : 0;
-  const availableStock = (linkedMaterial ? linkedMaterial.processedStockPcs : 0) + editingSalePcs;
-
-  // A product made from several materials is fulfilled at the moment of sale:
-  // each sale consumes the parts. The breakdown is SHOWN to the seller but is
-  // never editable — the product record is the single authority, so the recipe
-  // cannot drift from what actually left the stock.
-  const soldPcs = parseInt(pcsSold);
-  const componentAvailability = useMemo(
-    () =>
-      materials.map(m => ({
-        materialId: m.id,
-        availablePcs: InventoryCalculationService.calculateSaleStock(m.id, batches),
-        unitCost: InventoryCalculationService.getWeightedAverageCostPerPiece(m.id, batches),
-      })),
-    [materials, batches],
-  );
-  const breakdown = useMemo(() => {
-    if (!selectedProduct || !isAssembled(selectedProduct) || !(soldPcs > 0)) return null;
-    return breakdownForSale(selectedProduct, soldPcs, componentAvailability);
-  }, [selectedProduct, soldPcs, componentAvailability]);
-  const shortfall = breakdown ? shortfallMessage(
-    breakdown,
-    id => materials.find(m => m.id === id)?.name ?? 'Unknown material',
-  ) : null;
-  // Heads-up only: parts this sale can still pay for, but which land on or
-  // below the shop's low-stock line afterwards. Surfaced before saving so the
-  // shop can decide to buy more first, rather than discovering it later.
-  const runningLow = useMemo(() => {
-    if (!breakdown || shortfall) return [];
-    return runningLowAfterSale(breakdown, inventoryThreshold);
-  }, [breakdown, shortfall, inventoryThreshold]);
-
-  
-  const handleEditClick = (item: any) => {
-    setEditSaleId(item.id);
-    setCustomerId(item.customerId);
-    setProductId(item.productId);
-    setPcsSold(item.pcsSold.toString());
-    setPricePerPiece(item.pricePerPiece.toString());
-    setDate(item.date);
-    setIsModalOpen(true);
-  };
-
-  const handleProductChange = (pId: string) => {
-    setProductId(pId);
-    const p = products.find(prod => prod.id === pId);
-    if (p) setPricePerPiece(p.sellingPrice.toString());
-  };
-
-  const handleCreate = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!productId || !customerId || !pcsSold || !pricePerPiece || !date) return;
-    
-    const pcs = parseInt(pcsSold);
-    // An assembled product is checked part-by-part; a single-material product
-    // against its own finished stock, exactly as before.
-    if (selectedProduct && isAssembled(selectedProduct)) {
-      const b = breakdownForSale(selectedProduct, pcs, componentAvailability);
-      const message = shortfallMessage(b, id => materials.find(m => m.id === id)?.name ?? 'Unknown material');
-      if (message) {
-        toast.error('Not enough stock', { description: message });
-        return;
-      }
-    } else if (pcs > availableStock) {
-      toast.error('Insufficient stock', {
-        description: linkedMaterial
-          ? `${linkedMaterial.name} has only ${availableStock} finished PCS available — you tried to sell ${pcs}.`
-          : 'The selected product has no linked material/stock.',
-      });
-      return;
-    }
-
-    const price = parseFloat(pricePerPiece);
-
-    ErrorManagement.safeExecuteSync(() => {
-      if (editSaleId) {
-        SalesService.update(editSaleId, {
-          productId,
-          customerId,
-          pcsSold: pcs,
-          pricePerPiece: price,
-          date
-        });
-      } else {
-        SalesService.create({
-          productId,
-          customerId,
-          pcsSold: pcs,
-          pricePerPiece: price,
-          date
-        });
-      }
-      setIsModalOpen(false);
-      setPcsSold("");
-      setProductId("");
-      setCustomerId("");
-    }, 'Sales Save');
-  };
+  const [deleteModal, setDeleteModal] = useState<{isOpen: boolean, id: string, no: string}>({isOpen: false, id: '', no: ''});
 
   const enrichedSales = useMemo(() => sales.map(s => {
     const c = customers.find(cust => cust.id === s.customerId);
@@ -202,7 +64,7 @@ export function Sales() {
         <RowActionButton label={`View ${item.invoiceNo}`}>
           <Eye />
         </RowActionButton>
-        <RowActionButton onClick={() => handleEditClick(item)} label={`Edit ${item.invoiceNo}`} tone="primary">
+        <RowActionButton onClick={() => navigate(`/sales/edit/${item.id}`)} label={`Edit ${item.invoiceNo}`} tone="primary">
           <Edit />
         </RowActionButton>
         <RowActionButton onClick={() => setDeleteModal({isOpen: true, id: item.id, no: item.invoiceNo})} label={`Delete ${item.invoiceNo}`} tone="destructive">
@@ -239,7 +101,7 @@ export function Sales() {
           <h2 className="text-2xl font-bold tracking-tight text-foreground">Sales</h2>
           <p className="text-sm text-muted-foreground mt-1">Record sales of finished products.</p>
         </div>
-        <button onClick={() => { setEditSaleId(undefined); setCustomerId(''); setProductId(''); setPcsSold(''); setPricePerPiece(''); setIsModalOpen(true); }} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+        <button onClick={() => navigate('/sales/new')} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
           <Plus className="h-4 w-4" /> New Sale
         </button>
       </div>
@@ -298,155 +160,6 @@ export function Sales() {
         <VoucherHistoryTab sourceModule="Sales" />
       )}
 
-      <PageModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditSaleId(undefined) }} title={editSaleId ? 'Edit Sale' : 'Add Sale'} maxWidth="max-w-3xl">
-        <form onSubmit={handleCreate} className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label htmlFor="sale-customer" className="text-sm font-semibold">Customer *</label>
-              <SearchableSelect 
-                options={customers.map(c => ({ id: c.id, label: c.name, searchValue: c.phone }))}
-                value={customerId}
-                onChange={setCustomerId}
-                placeholder="Select Customer..."
-                onAdd={() => setIsAddCustomerOpen(true)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="sale-product" className="text-sm font-semibold">Product *</label>
-              <SearchableSelect 
-                options={products.map(p => {
-                  if (isAssembled(p)) {
-                    return { id: p.id, label: p.name, secondaryLabel: `Made from ${p.components?.length ?? 0} materials` };
-                  }
-                  const m = materials.find(mat => mat.id === p.materialId);
-                  return { id: p.id, label: p.name, secondaryLabel: `Available: ${m?.processedStockPcs || 0} PCS` };
-                })}
-                value={productId}
-                onChange={handleProductChange}
-                placeholder="Select Product..."
-                onAdd={() => setIsAddProductOpen(true)}
-                required
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <label htmlFor="sale-pcs" className="text-sm font-semibold">PCS to Sell *</label>
-              <input id="sale-pcs" name="sale-pcs" type="number" required placeholder="Quantity" value={pcsSold} onChange={e => setPcsSold(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 h-12" />
-              {breakdown ? (
-                <p className={`mt-1 text-xs ${shortfall ? 'text-destructive font-medium' : runningLow.length > 0 ? 'text-amber-600 dark:text-amber-500 font-medium' : 'text-muted-foreground'}`}>
-                  {shortfall ?? `All ${breakdown.lines.length} material(s) in stock`}
-                </p>
-              ) : (
-                linkedMaterial && (
-                  <p className={`mt-1 text-xs ${pcsSold && parseInt(pcsSold) > availableStock ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
-                    Available: {availableStock} PCS of {linkedMaterial.name}
-                  </p>
-                )
-              )}
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="sale-price" className="text-sm font-semibold">Price Per Piece (PKR) *</label>
-              <input id="sale-price" name="sale-price" type="number" step="0.01" required placeholder="Rate" value={pricePerPiece} onChange={e => setPricePerPiece(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 h-12" />
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="sale-date" className="text-sm font-semibold">Date *</label>
-              <DatePicker id="sale-date" value={date} onChange={setDate} />
-            </div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-muted/40 border border-border flex flex-col gap-2">
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">PCS to Sell:</span>
-              <span className="text-sm font-bold text-foreground">{Math.max(0, parseInt(pcsSold) || 0)} PCS</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Total Amount:</span>
-              <span className="text-sm font-bold text-foreground">{formatCurrency((Math.max(0, parseInt(pcsSold) || 0)) * (parseFloat(pricePerPiece) || 0))}</span>
-            </div>
-          </div>
-          {breakdown && (
-            <div className={`rounded-xl border px-4 py-3 ${shortfall ? 'border-destructive/40 bg-destructive/5' : 'border-border bg-muted/30'}`}>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-semibold text-foreground">
-                  Selling {breakdown.pcsSold} &times; {selectedProduct?.name} uses
-                </p>
-                <span className="text-xs text-muted-foreground">Set on the product</span>
-              </div>
-              <table className="w-full text-sm">
-                <thead className="text-xs text-muted-foreground">
-                  <tr>
-                    <th className="py-1 text-left font-medium">Material</th>
-                    <th className="py-1 text-right font-medium">Per unit</th>
-                    <th className="py-1 text-right font-medium">Will deduct</th>
-                    <th className="py-1 text-right font-medium">In stock</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/50">
-                  {breakdown.lines.map(line => {
-                    const m = materials.find(x => x.id === line.materialId);
-                    const isShort = line.shortageQty > 0;
-                    return (
-                      <tr key={line.materialId}>
-                        <td className="py-1 font-medium text-foreground">
-                          {m?.name ?? 'Unknown material'}
-                          {m?.code && <span className="ml-2 font-mono text-xs text-muted-foreground">{m.code}</span>}
-                        </td>
-                        <td className="py-1 text-right tabular-nums text-muted-foreground">{line.perUnitQty}</td>
-                        <td className={`py-1 text-right tabular-nums font-medium ${isShort ? 'text-destructive' : ''}`}>
-                          {line.requiredQty}
-                        </td>
-                        <td className="py-1 text-right tabular-nums text-muted-foreground">{line.availablePcs}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                Cost of these parts: {formatCurrency(breakdown.totalCost)}. All of them come off stock when this invoice is saved.
-              </p>
-              {runningLow.length > 0 && (
-                <div
-                  role="status"
-                  aria-live="polite"
-                  data-testid="low-stock-warning"
-                  className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2"
-                >
-                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
-                    Running low after this sale
-                  </p>
-                  <ul className="mt-1 space-y-0.5">
-                    {runningLow.map(l => {
-                      const m = materials.find(x => x.id === l.materialId);
-                      return (
-                        <li key={l.materialId} className="text-[11px] text-amber-700/90 dark:text-amber-400/90">
-                          <span className="font-medium">{m?.name ?? 'Unknown material'}</span>
-                          {m?.code && <span className="ml-1 font-mono">{m.code}</span>}
-                          {' — '}
-                          {l.remainingAfter} PCS left after {l.requiredQty} are used
-                          {' (low-stock line is '}
-                          {l.threshold}
-                          {').'}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  <p className="mt-1 text-[11px] text-amber-700/80 dark:text-amber-400/80">
-                    The sale will still go through. Consider a purchase order before you confirm this invoice.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-          <div className="pt-4 flex gap-3">
-            <button type="button" onClick={() => { setIsModalOpen(false); setEditSaleId(undefined); }} className="flex-1 rounded-xl border border-border bg-card px-4 py-3 font-semibold text-foreground/80 hover:bg-muted/40 transition-colors">Cancel</button>
-            <button type="submit" className="flex-1 rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-md">Save Sale</button>
-          </div>
-        </form>
-      </PageModal>
-
       <DeleteConfirmationModal
         isOpen={deleteModal.isOpen}
         onClose={() => setDeleteModal({ isOpen: false, id: '', no: '' })}
@@ -454,17 +167,6 @@ export function Sales() {
         title="Delete Sale"
         recordNo={deleteModal.no}
         description="Are you sure you want to permanently delete this sale? All linked accounting entries, vouchers, and stock movements will be reversed automatically."
-      />
-
-      <QuickAddCustomer 
-        isOpen={isAddCustomerOpen} 
-        onClose={() => setIsAddCustomerOpen(false)} 
-        onSuccess={(id) => setCustomerId(id)} 
-      />
-      <QuickAddProduct 
-        isOpen={isAddProductOpen} 
-        onClose={() => setIsAddProductOpen(false)} 
-        onSuccess={(id) => handleProductChange(id)} 
       />
     </div>
   );
