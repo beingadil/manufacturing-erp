@@ -44,7 +44,7 @@ export function Settings() {
     { id: 'access', label: 'Access Management', icon: Users },
     { id: 'maintenance', label: 'System Maintenance', icon: Wrench },
     { id: 'advanced', label: 'Advanced Features', icon: Monitor },
-    { id: 'voucher', label: 'Voucher Numbering', icon: Hash },
+    { id: 'voucher', label: 'Numbering', icon: Hash },
     { id: 'print', label: 'Print & PDF', icon: Layout },
     { id: 'ai', label: 'AI Assistant', icon: Bot },
     { id: 'about', label: 'About & Updates', icon: Info },
@@ -703,10 +703,15 @@ function AdvancedTab() {
 
 
 function VoucherNumberingTab({ onSave, showSavedToast }: { onSave: () => void, showSavedToast: boolean }) {
-  const { voucherYearlyReset, voucherPrefixes, setVoucherPrefixes, setVoucherYearlyReset } = useSettingsStore();
-  
+  const {
+    voucherYearlyReset, voucherPrefixes, setVoucherPrefixes, setVoucherYearlyReset,
+    documentPrefixes, setDocumentPrefixes, batchNoMode, setBatchNoMode,
+  } = useSettingsStore();
+
   const [localPrefixes, setLocalPrefixes] = useState<Record<string, string>>({ ...voucherPrefixes });
   const [localYearlyReset, setLocalYearlyReset] = useState(voucherYearlyReset);
+  const [localDocPrefixes, setLocalDocPrefixes] = useState<Record<string, string>>({ ...documentPrefixes });
+  const [localBatchMode, setLocalBatchMode] = useState<'supplier' | 'classic'>(batchNoMode);
 
   const voucherTypes = [
     { type: 'Cash Payment', default: 'CP', example: 'CP-0001' },
@@ -719,14 +724,25 @@ function VoucherNumberingTab({ onSave, showSavedToast }: { onSave: () => void, s
     { type: 'Processor Bill', default: 'PB', example: 'PB-0001' },
   ];
 
+  const documentTypes = [
+    { key: 'PO', default: 'PO', applies: 'Purchases' },
+    { key: 'INV', default: 'INV', applies: 'Sales invoices' },
+    { key: 'DSP', default: 'DSP', applies: 'Job Work dispatches' },
+    { key: 'REC', default: 'REC', applies: 'Job Work receipts' },
+    { key: 'BILL', default: 'BILL', applies: 'Processor bills' },
+    { key: 'PRD', default: 'PRD', applies: 'Product codes' },
+  ];
+
   const handleSave = () => {
     setVoucherPrefixes(localPrefixes);
     setVoucherYearlyReset(localYearlyReset);
+    setDocumentPrefixes(localDocPrefixes);
+    setBatchNoMode(localBatchMode);
     onSave();
   };
 
   return (
-    <SettingsCard title="Voucher Numbering" subtitle="Configure custom prefixes per voucher type and toggle yearly sequence reset." icon={Hash}>
+    <SettingsCard title="Numbering" subtitle="Prefixes for accounting vouchers and module documents, the purchase batch scheme, and yearly reset." icon={Hash}>
       <div className="space-y-8">
         
         {/* Yearly Reset Toggle */}
@@ -744,7 +760,7 @@ function VoucherNumberingTab({ onSave, showSavedToast }: { onSave: () => void, s
         {/* Prefix Editor */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h4 className="text-sm font-bold text-foreground uppercase tracking-wider">Custom Prefixes</h4>
+            <h4 className="text-sm font-bold text-foreground uppercase tracking-wider">Accounting Voucher Prefixes</h4>
             <button
               onClick={() => {
                 const defaults: Record<string, string> = {};
@@ -780,6 +796,74 @@ function VoucherNumberingTab({ onSave, showSavedToast }: { onSave: () => void, s
           </div>
         </div>
 
+        {/* Document Prefix Editor */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="text-sm font-bold text-foreground uppercase tracking-wider">Module Document Prefixes</h4>
+            <button
+              onClick={() => {
+                const defaults: Record<string, string> = {};
+                documentTypes.forEach(dt => { defaults[dt.key] = dt.default; });
+                setLocalDocPrefixes(defaults);
+              }}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              Reset to Defaults
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {documentTypes.map(dt => (
+              <div key={dt.key} className="flex items-center gap-3 p-3 rounded-xl border border-border/50 bg-muted/10 hover:bg-muted/20 transition-colors">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-muted-foreground mb-1">{dt.applies}</p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      aria-label={`${dt.applies} prefix`}
+                      value={localDocPrefixes[dt.key] ?? dt.default}
+                      onChange={e => setLocalDocPrefixes(prev => ({ ...prev, [dt.key]: e.target.value.toUpperCase() }))}
+                      className="w-24 rounded-lg border border-border bg-card px-2 py-1.5 text-sm font-mono font-bold text-foreground text-center focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors uppercase"
+                      maxLength={6}
+                    />
+                    <span className="text-sm font-mono text-muted-foreground">-2026-0004</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Purchase Batch Scheme */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="text-sm font-bold text-foreground uppercase tracking-wider">Purchase Batch Numbers</h4>
+            <span className="text-xs text-muted-foreground">New purchases only — saved batches keep their number</span>
+          </div>
+          <div className="space-y-3">
+            {[
+              { mode: 'supplier' as const, title: 'Supplier name + purchase number', sample: 'AHMED-PO-2026-0003', body: "The supplier's first word, then the purchase number. Two batches of one material stay easy to tell apart." },
+              { mode: 'classic' as const, title: 'Classic BATCH- prefix', sample: 'BATCH-PO-2026-0003', body: 'The old scheme. Also the fallback when a supplier name has no usable characters.' },
+            ].map(opt => (
+              <button
+                key={opt.mode}
+                type="button"
+                onClick={() => setLocalBatchMode(opt.mode)}
+                aria-pressed={localBatchMode === opt.mode}
+                className={`w-full text-left flex items-start gap-3 p-4 rounded-xl border transition-colors ${localBatchMode === opt.mode ? 'border-primary/60 bg-primary/5' : 'border-border/50 bg-muted/10 hover:bg-muted/20'}`}
+              >
+                <span className={`mt-1 h-4 w-4 shrink-0 rounded-full border-2 ${localBatchMode === opt.mode ? 'border-primary bg-primary' : 'border-muted-foreground/40'}`} />
+                <span className="flex-1 min-w-0">
+                  <span className="flex items-center gap-3 flex-wrap">
+                    <span className="text-sm font-semibold text-foreground">{opt.title}</span>
+                    <code className="px-2 py-0.5 bg-background rounded border border-border text-xs font-mono font-bold text-primary">{opt.sample}</code>
+                  </span>
+                  <span className="block text-xs text-muted-foreground mt-1">{opt.body}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Preview Example */}
         <div className="p-5 rounded-xl bg-primary/5 border border-primary/20">
           <h4 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
@@ -795,10 +879,26 @@ function VoucherNumberingTab({ onSave, showSavedToast }: { onSave: () => void, s
               </div>
             ))}
           </div>
+          <div className="flex flex-wrap gap-4 mt-3">
+            {documentTypes.map(dt => (
+              <div key={dt.key} className="flex items-center gap-2 text-sm">
+                <span className="text-xs text-muted-foreground">{dt.applies}:</span>
+                <code className="px-2 py-0.5 bg-background rounded border border-border text-xs font-mono font-bold text-primary">
+                  {(localDocPrefixes[dt.key] || dt.default).toUpperCase()}-2026-0004
+                </code>
+              </div>
+            ))}
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-xs text-muted-foreground">Next batch:</span>
+              <code className="px-2 py-0.5 bg-background rounded border border-border text-xs font-mono font-bold text-primary">
+                {localBatchMode === 'supplier' ? 'AHMED-PO-2026-0004' : 'BATCH-PO-2026-0004'}
+              </code>
+            </div>
+          </div>
           <p className="text-xs text-muted-foreground mt-3">
-            {localYearlyReset 
-              ? 'Sequence resets to 0001 each year. Next voucher gets the next number in sequence.'
-              : 'Sequence continues across all years. No yearly reset.'}
+            {localYearlyReset
+              ? 'Vouchers reset to 0001 each year; module documents are always year-scoped. Changing a prefix never rolls the sequence back.'
+              : 'Voucher sequences continue across years; module documents are always year-scoped. Changing a prefix never rolls the sequence back.'}
           </p>
         </div>
 
