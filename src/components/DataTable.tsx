@@ -202,8 +202,8 @@ function DataTableInner<T extends Record<string, any>>({
         </div>
       </div>
       
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left whitespace-nowrap">
+      <div>
+        <table className="w-full text-sm text-left">
           <thead className="sticky top-0 z-10 text-xs text-muted-foreground bg-muted/70 backdrop-blur-sm border-b border-border/50">
             <tr>
               {columns.map((col) => (
