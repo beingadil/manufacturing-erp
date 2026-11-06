@@ -1372,7 +1372,7 @@ export const useERPStore = create<ERPState>()(
           // down the list, which would leave stock quietly out of step.
           for (const [materialId, perUnitQty] of perUnit) {
             const required = roundQty(perUnitQty * data.pcsSold);
-            const available = InventoryCalculationService.calculateRawMaterialStock(materialId, nextBatches);
+            const available = InventoryCalculationService.calculateSaleStock(materialId, nextBatches);
             if (required > available + 1e-9) {
               throw new AppError(
                 `Not enough stock to sell ${data.pcsSold} \u00d7 ${assembled.name}: ` +
@@ -1402,7 +1402,7 @@ export const useERPStore = create<ERPState>()(
               }
               if ((b.remainingPcs || 0) + (b.processedPcs || 0) <= 1e-9) b.status = 'Depleted';
             }
-            const running = InventoryCalculationService.calculateRawMaterialStock(materialId, nextBatches);
+            const running = InventoryCalculationService.calculateSaleStock(materialId, nextBatches);
             newMovements.push({
               id: uuidv4(),
               materialId,

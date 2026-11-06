@@ -844,6 +844,13 @@ export class InventoryCalculationService {
    * stage — disjoint buckets, so the sum never double-counts);
    * processedStockPcs = finished and on hand.
    */
+  /** Sale stock = raw on hand + finished (processed) pieces. */
+  static calculateSaleStock(materialId: string, batches: Batch[]): number {
+    return batches
+      .filter(b => b.materialId === materialId && b.status === 'Active')
+      .reduce((sum, b) => sum + batchRawAvailableOf(b) + (b.processedPcs || 0), 0);
+  }
+
   static syncMaterialCounters(materials: RawMaterial[], batches: Batch[]): RawMaterial[] {
     return materials.map(m => {
       const own = batches.filter(b => b.materialId === m.id && b.status === 'Active');

@@ -63,7 +63,7 @@ export default function SalesFormPage() {
 
   const availableStock = useMemo(() => {
     if (!linkedMaterial) return 0;
-    return (linkedMaterial.processedStockPcs || 0);
+    return InventoryCalculationService.calculateSaleStock(linkedMaterial.id, useERPStore.getState().batches);
   }, [linkedMaterial]);
 
   const totalAmount = useMemo(() => {

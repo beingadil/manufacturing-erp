@@ -78,7 +78,7 @@ export function Sales() {
     () =>
       materials.map(m => ({
         materialId: m.id,
-        availablePcs: InventoryCalculationService.calculateRawMaterialStock(m.id, batches) + (m.processedStockPcs || 0),
+        availablePcs: InventoryCalculationService.calculateSaleStock(m.id, batches),
         unitCost: InventoryCalculationService.getWeightedAverageCostPerPiece(m.id, batches),
       })),
     [materials, batches],
