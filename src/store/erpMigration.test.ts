@@ -235,3 +235,37 @@ describe('migrateERPState batch-number scheme (step 5c)', () => {
     settingsState.batchNoMode = 'supplier';
   });
 });
+
+describe('migrateERPState parts are ready-made (step 5b-ii)', () => {
+  // A part is bought ready-made and never dispatched. A category's
+  // defaultProcessingPath used to overwrite that choice after the usage card
+  // was clicked, leaving parts stored as `full_chain`; purchase entry then
+  // showed them as a full chain asking for KG and a weight per piece.
+  const makeState = () => ({
+    materials: [
+      {
+        id: 'm-part',
+        usageType: 'component',
+        processingPath: 'full_chain',
+        fixedStageId: 'stage-1',
+        allowedStageIds: ['stage-1'],
+        stockPcs: 0,
+      },
+      { id: 'm-own', usageType: 'sellable', processingPath: 'full_chain', stockPcs: 0 },
+    ],
+    batches: [],
+  });
+
+  it('repairs a part that a category default put back on the chain', () => {
+    const result = migrateERPState(makeState() as any);
+    const part = result.materials.find((m: any) => m.id === 'm-part');
+    expect(part.processingPath).toBe('ready_made');
+    expect(part.fixedStageId).toBeUndefined();
+    expect(part.allowedStageIds).toBeUndefined();
+  });
+
+  it('leaves a sellable material on its configured path', () => {
+    const result = migrateERPState(makeState() as any);
+    expect(result.materials.find((m: any) => m.id === 'm-own').processingPath).toBe('full_chain');
+  });
+});

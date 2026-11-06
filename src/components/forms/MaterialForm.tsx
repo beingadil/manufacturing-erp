@@ -44,9 +44,13 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
     [processingStages]
   );
 
-  // A category with a defaultProcessingPath seeds the selector.
+  // A category with a defaultProcessingPath seeds the selector — but never for a
+  // part. Parts are bought ready-made, and the path selector is hidden for them,
+  // so a category default arriving after the usage choice would silently save
+  // the part on a processor chain the user can neither see nor change.
   const handleCategoryChange = (id: string) => {
     setCategoryId(id);
+    if (usageType === 'component') return;
     const catDefault = categories.find(c => c.id === id)?.defaultProcessingPath;
     if (catDefault) setProcessingPath(catDefault);
   };
@@ -63,6 +67,11 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
       return;
     }
 
+    // A part is always ready-made. Enforced at save as well as in the toggle so
+    // a category default, an edit, or stale form state can never persist a part
+    // that the dispatch screens would then try to push down the chain.
+    const effectivePath: ProcessingPath = usageType === 'component' ? 'ready_made' : processingPath;
+
     const data = {
       name,
       code: code.trim() || undefined,
@@ -70,9 +79,9 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
       categoryId,
       description,
       status,
-      processingPath,
-      fixedStageId: processingPath === 'single_stage' ? fixedStageId : undefined,
-      allowedStageIds: processingPath === 'custom_stages' ? allowedStageIds : undefined,
+      processingPath: effectivePath,
+      fixedStageId: effectivePath === 'single_stage' ? fixedStageId : undefined,
+      allowedStageIds: effectivePath === 'custom_stages' ? allowedStageIds : undefined,
     };
 
     try {

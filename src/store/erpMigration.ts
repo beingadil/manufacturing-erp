@@ -230,6 +230,19 @@ export function migrateERPState(state: any): any {
     migratedBatches
   );
 
+  // 5b-ii. A part is bought ready-made and never walks a processor chain.
+  //        Older builds let a category's defaultProcessingPath overwrite the
+  //        usage choice (the path selector is hidden for parts, so the
+  //        override was invisible), leaving parts saved as `full_chain` that
+  //        then appeared as a full chain in purchase entry and dispatch.
+  //        Normalizing here repairs those rows on load; idempotent, and
+  //        sellable materials are left exactly as they are.
+  const normalizedMaterials = migratedMaterials.map((m: any) =>
+    m.usageType === 'component'
+      ? { ...m, processingPath: 'ready_made', fixedStageId: undefined, allowedStageIds: undefined }
+      : m
+  );
+
   // 5c. Batch number normalization (see 4b): legacy BATCH-{PO} → supplier
   //     scheme. Uses the Settings store, hydrated BEFORE the ERP migration in
   //     main.tsx, so the user's chosen mode wins.
@@ -270,7 +283,7 @@ export function migrateERPState(state: any): any {
     accountSubtypes: migratedSubtypes,
     vouchers,
     batches: migratedBatches,
-    materials: migratedMaterials,
+    materials: normalizedMaterials,
     processingStages,
     customers: migratedCustomers,
     suppliers: migratedSuppliers,

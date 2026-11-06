@@ -7,6 +7,11 @@ export interface FormFooterProps {
   onCancel: () => void;
   cancelClassName?: string;
   submitClassName?: string;
+  /** Id of the `<form>` this footer saves. Required when the footer is rendered
+   *  OUTSIDE that form — e.g. through FormModal's `footer` slot, which is a
+   *  sibling of the scroll area, so a plain type="submit" button would submit
+   *  nothing. The `form` attribute re-associates the button with the form. */
+  formId?: string;
 }
 
 /**
@@ -16,7 +21,7 @@ export interface FormFooterProps {
  * The submit button is type="submit" so it bubbles to the owning `<form>`
  * — this primitive owns no state or submission logic.
  */
-export function FormFooter({ cancelLabel = 'Cancel', submitLabel = 'Save', onCancel, cancelClassName, submitClassName }: FormFooterProps) {
+export function FormFooter({ cancelLabel = 'Cancel', submitLabel = 'Save', onCancel, cancelClassName, submitClassName, formId }: FormFooterProps) {
   return (
     <div className="p-4 pt-6 border-t border-border/50 bg-card/50 backdrop-blur-sm flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
       <button
@@ -26,7 +31,7 @@ export function FormFooter({ cancelLabel = 'Cancel', submitLabel = 'Save', onCan
       >
         {cancelLabel}
       </button>
-      <button type="submit" className={cn(formSubmitButtonClass, submitClassName, 'w-full sm:w-auto min-w-[140px]')}>
+      <button type="submit" form={formId} className={cn(formSubmitButtonClass, submitClassName, 'w-full sm:w-auto min-w-[140px]')}>
         {submitLabel}
       </button>
     </div>

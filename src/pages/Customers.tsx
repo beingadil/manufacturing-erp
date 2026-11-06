@@ -185,8 +185,8 @@ export function Customers() {
         description="Someone you sell to, with contact details, NTN, address and notes."
         icon={editingCustomer ? <Pencil /> : <Users />}
         size="md"
-        footer={<FormFooter onCancel={closeModal} submitLabel={editingCustomer ? 'Save Changes' : 'Add Customer'} />}>
-        <form onSubmit={handleSubmit} className="space-y-5">
+        footer={<FormFooter onCancel={closeModal} formId="customer-form" submitLabel={editingCustomer ? 'Save Changes' : 'Add Customer'} />}>
+        <form id="customer-form" onSubmit={handleSubmit} className="space-y-5">
           <FormSection icon={<Users />} eyebrow="Details" first>
             <FormGrid cols={2}>
               <FormField id="customer-name" label="Customer Name" required className="col-span-2">

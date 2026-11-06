@@ -267,10 +267,11 @@ export function Processors() {
         footer={
           <FormFooter
             onCancel={closeModal}
+            formId="processor-form"
             submitLabel={editingProcessor ? 'Save Changes' : 'Add Processor'}
           />
         }>
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form id="processor-form" onSubmit={handleSubmit} className="space-y-5">
           <FormSection icon={<UserCog />} eyebrow="Details" first>
             <FormGrid cols={2}>
               <FormField id="processor-name" label="Processor Name" required className="col-span-2">

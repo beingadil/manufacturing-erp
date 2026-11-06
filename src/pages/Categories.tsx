@@ -263,11 +263,12 @@ export default function Categories() {
           footer={
             <FormFooter
               onCancel={closeForm}
+              formId="category-form"
               submitLabel={editingCategory ? 'Save Changes' : 'Save Category'}
             />
           }
         >
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form id="category-form" onSubmit={handleSubmit} className="space-y-5">
             <FormSection icon={<Tags />} eyebrow="Basics" first>
               <FormGrid cols={2}>
                 <FormField id="category-name" label="Category Name" required className="sm:col-span-2">

@@ -50,7 +50,15 @@ export function FinishedGoods() {
       materialId: product.materialId || '',
       description: product.description || '',
     });
-    setComponents((product.components ?? []).map((c: ProductComponent) => ({ ...c })));
+    // A simple product stores only `materialId` and has no `components` list.
+    // Seeding it from that material keeps the form (which is components-driven)
+    // from opening empty and refusing to save an untouched product.
+    const existingComponents: ProductComponent[] = (product.components ?? []).length > 0
+      ? (product.components ?? []).map((c: ProductComponent) => ({ ...c }))
+      : product.materialId
+        ? [{ materialId: product.materialId, quantity: 1, sortOrder: 1 }]
+        : [];
+    setComponents(existingComponents);
     setIsModalOpen(true);
   };
 
@@ -114,7 +122,7 @@ export function FinishedGoods() {
   const handleDelete = () => {
     const saleCount = sales.filter(s => s.productId === deleteModal.id).length;
     if (saleCount > 0) {
-      toast.error('Cannot delete — this product is referenced by ${saleCount} sale record(s). Deactivate it instead if it is no longer sold.');
+      toast.error(`Cannot delete — this product is referenced by ${saleCount} sale record(s). Deactivate it instead if it is no longer sold.`);
       setDeleteModal({ isOpen: false, id: '', no: '' });
       return;
     }
@@ -273,11 +281,12 @@ export function FinishedGoods() {
         footer={
           <FormFooter
             onCancel={closeModal}
+            formId="product-form"
             submitLabel={editingProduct ? 'Save Changes' : 'Save Product'}
           />
         }
       >
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form id="product-form" onSubmit={handleSubmit} className="space-y-5">
           <FormSection icon={<Package />} eyebrow="Product Identity" first>
             <FormGrid cols={2}>
               <FormField id="product-name" label="Product Name" required>
