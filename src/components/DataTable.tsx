@@ -348,7 +348,7 @@ export function RowActionButton({
       aria-label={label}
       title={label}
       className={cn(
-        "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-150 [&>svg]:h-4 [&>svg]:w-4",
+        "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors duration-150 [&>svg]:h-3.5 [&>svg]:w-3.5",
         tone === "neutral" && "text-muted-foreground/80 hover:bg-muted hover:text-foreground",
         tone === "primary" && "text-muted-foreground/80 hover:bg-primary/10 hover:text-primary",
         tone === "destructive" && "text-muted-foreground/80 hover:bg-destructive/10 hover:text-destructive",
