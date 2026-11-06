@@ -197,7 +197,7 @@ export function Dashboard() {
           <h3 className="text-lg font-bold text-foreground">Financial & Inventory Position</h3>
           <span className="text-xs text-muted-foreground bg-muted/40 border border-border rounded-full px-3 py-1">As of {asOfLabel}</span>
         </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <KpiCard
             icon={CircleDollarSign}
             iconClassName="text-emerald-500"
