@@ -143,8 +143,8 @@ export function Purchases() {
           <DataTable 
             data={enrichedPurchases} 
             columns={columns} 
-            searchKeys={["purchaseNo", "supplierName", "materialName"]} 
-            searchPlaceholder="Search purchases by PO, supplier or material..."
+            searchKeys={["purchaseNo", "supplierName", "materialName", "formattedDate", "weight", "calculatedPcs", "amount"]} 
+            searchPlaceholder="Search purchases by PO, supplier, material, date, weight, pcs or amount..."
             persistKey="purchases-table"
             defaultSortKey="date"
           />
