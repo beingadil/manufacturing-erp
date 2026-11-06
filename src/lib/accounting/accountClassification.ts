@@ -45,6 +45,10 @@ export function getCashAccounts(accounts: Account[], subtypes: AccountSubtype[])
   return accounts.filter(a => isCashAccount(a, subtypes));
 }
 
+export function getChequeAccounts(accounts: Account[], subtypes: AccountSubtype[]): Account[] {
+  return accounts.filter(a => getSubtypeName(a, subtypes) === 'Cheques');
+}
+
 export function getBankAccounts(accounts: Account[], subtypes: AccountSubtype[]): Account[] {
   return accounts.filter(a => isBankAccount(a, subtypes));
 }

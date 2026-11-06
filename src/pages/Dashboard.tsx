@@ -1,5 +1,5 @@
 import { format, startOfMonth, startOfWeek, startOfYear, subDays } from 'date-fns';
-import { AlertTriangle, ArrowDownCircle, ArrowLeftRight, ArrowRight, ArrowUpCircle, Building2, CircleDollarSign, DollarSign, Factory, Landmark, Layers, Package, PackageSearch, Scale, ShoppingCart, TrendingUp, Truck, Users, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowDownCircle, ArrowLeftRight, ArrowRight, ArrowUpCircle, Building2, CircleDollarSign, DollarSign, Factory, FileCheck, Landmark, Layers, Package, PackageSearch, Scale, ShoppingCart, TrendingUp, Truck, Users, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -213,6 +213,14 @@ export function Dashboard() {
             value={formatCurrency(summary.bankTotal)}
             description={bankSub}
             onClick={() => navigate(firstBankAccount ? `/accounting/general-ledger?id=${firstBankAccount.id}` : '/accounting/general-ledger')}
+          />
+          <KpiCard
+            icon={FileCheck}
+            iconClassName="text-indigo-500"
+            label="Cheques in Hand"
+            value={formatCurrency(summary.chequeInHand)}
+            description={<span>Cheques received, not yet deposited</span>}
+            onClick={() => navigate('/accounting/cashbook')}
           />
           <KpiCard
             icon={Users}

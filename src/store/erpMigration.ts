@@ -245,12 +245,29 @@ export function migrateERPState(state: any): any {
     });
   }
 
+  // 5d. Cheques in Hand: ensure the system cheque account + subtype exist for
+  //     installs that predate the seed addition. Cheap and idempotent.
+  let migratedSubtypes = Array.isArray(state.accountSubtypes) ? [...state.accountSubtypes] : [];
+  let chequesSubtype = migratedSubtypes.find(s => s.name === 'Cheques');
+  if (!chequesSubtype) {
+    chequesSubtype = { id: uuidv4(), name: 'Cheques', type: 'Assets', isSystem: true } as AccountSubtype;
+    migratedSubtypes.push(chequesSubtype);
+  }
+  let migratedAccountsInner = migratedAccounts;
+  if (!migratedAccountsInner.some(a => a.name === 'Cheques in Hand' && a.subtypeId === chequesSubtype!.id)) {
+    migratedAccountsInner = [
+      ...migratedAccountsInner,
+      { id: uuidv4(), code: '1015', name: 'Cheques in Hand', type: 'Assets' as const, subtypeId: chequesSubtype!.id, openingBalance: 0, openingBalanceType: 'Debit' as const, status: 'Active' as const, isSystem: true },
+    ];
+  }
+
   // 6. Drop legacy parallel trail
   const { ledgerEntries, ...rest } = state;
 
   return {
     ...rest,
-    accounts: migratedAccounts,
+    accounts: migratedAccountsInner,
+    accountSubtypes: migratedSubtypes,
     vouchers,
     batches: migratedBatches,
     materials: migratedMaterials,
