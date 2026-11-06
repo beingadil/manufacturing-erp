@@ -27,6 +27,7 @@ import { Ledgers } from './pages/Ledgers';
 import { Login } from './pages/Login';
 import { MaterialDetail } from './pages/MaterialDetail';
 import { MonitorScreen } from './pages/MonitorScreen';
+import { PurchaseDetail } from './pages/PurchaseDetail';
 import { Processors } from './pages/Processors';
 import PurchaseFormPage from './pages/PurchaseFormPage';
 import { Purchases } from './pages/Purchases';
@@ -138,6 +139,7 @@ export default function App() {
           <Route path="categories" element={<RouteGuard requireModule="Master Data" requireAction="View"><Categories /></RouteGuard>} />
           <Route path="materials" element={<RouteGuard requireModule="Master Data" requireAction="View"><RawMaterials /></RouteGuard>} />
           <Route path="materials/:id" element={<RouteGuard requireModule="Master Data" requireAction="View"><MaterialDetail /></RouteGuard>} />
+          <Route path="materials/:id/purchases/:batchId" element={<RouteGuard requireModule="Master Data" requireAction="View"><PurchaseDetail /></RouteGuard>} />
           <Route path="products" element={<RouteGuard requireModule="Master Data" requireAction="View"><FinishedGoods /></RouteGuard>} />
           
           <Route path="ledgers" element={<RouteGuard requireModule="Ledgers" requireAction="View"><Ledgers /></RouteGuard>} />

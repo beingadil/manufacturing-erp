@@ -24,8 +24,8 @@ export function adaptiveAmountClass(value: unknown, size: 'sm' | 'md' | 'lg' = '
   const len = typeof value === 'string' ? value.trim().length : 0;
   const steps: Record<'sm' | 'md' | 'lg', Array<[number, string]>> = {
     sm: [[8, 'text-lg'], [11, 'text-base'], [14, 'text-sm'], [Number.POSITIVE_INFINITY, 'text-xs']],
-    md: [[9, 'text-2xl'], [12, 'text-xl'], [16, 'text-lg'], [Number.POSITIVE_INFINITY, 'text-base']],
-    lg: [[9, 'text-3xl'], [12, 'text-2xl'], [16, 'text-xl'], [Number.POSITIVE_INFINITY, 'text-base']],
+    md: [[8, 'text-2xl'], [11, 'text-xl'], [14, 'text-lg'], [18, 'text-sm'], [Number.POSITIVE_INFINITY, 'text-xs']],
+    lg: [[9, 'text-3xl'], [12, 'text-2xl'], [16, 'text-xl'], [20, 'text-lg'], [Number.POSITIVE_INFINITY, 'text-base']],
   };
   for (const [max, cls] of steps[size]) {
     if (len <= max) return cls;

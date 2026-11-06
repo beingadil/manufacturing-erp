@@ -287,58 +287,48 @@ export function Dashboard() {
         </div>
       </section>
 
-      {/* ── Period activity ────────────────────────────────────────────────── */}
-      <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex items-center justify-between">
-          <div className="flex items-center gap-3 text-muted-foreground">
-            <ArrowUpCircle className="h-5 w-5 text-emerald-500" />
-            <div>
-              <div className="text-sm font-medium">Cash Receipts</div>
-              <div className="text-xs text-muted-foreground/70">Period</div>
-            </div>
-          </div>
-          <div className={cn(adaptiveAmountClass(formatCurrency(summary.periodCashReceipts), 'md'), 'font-bold tabular-nums text-success')}>{formatCurrency(summary.periodCashReceipts)}</div>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex items-center justify-between">
-          <div className="flex items-center gap-3 text-muted-foreground">
-            <ArrowDownCircle className="h-5 w-5 text-red-500" />
-            <div>
-              <div className="text-sm font-medium">Cash Payments</div>
-              <div className="text-xs text-muted-foreground/70">Period</div>
-            </div>
-          </div>
-          <div className={cn(adaptiveAmountClass(formatCurrency(summary.periodCashPayments), 'md'), 'font-bold tabular-nums text-destructive')}>{formatCurrency(summary.periodCashPayments)}</div>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex items-center justify-between">
-          <div className="flex items-center gap-3 text-muted-foreground">
-            <DollarSign className="h-5 w-5 text-blue-500" />
-            <div>
-              <div className="text-sm font-medium">Sales</div>
-              <div className="text-xs text-muted-foreground/70">Period</div>
-            </div>
-          </div>
-          <div className={cn(adaptiveAmountClass(formatCurrency(summary.periodSales), 'md'), 'font-bold tabular-nums text-foreground')}>{formatCurrency(summary.periodSales)}</div>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex items-center justify-between">
-          <div className="flex items-center gap-3 text-muted-foreground">
-            <ShoppingCart className="h-5 w-5 text-violet-500" />
-            <div>
-              <div className="text-sm font-medium">Purchases</div>
-              <div className="text-xs text-muted-foreground/70">Period</div>
-            </div>
-          </div>
-          <div className={cn(adaptiveAmountClass(formatCurrency(summary.periodPurchases), 'md'), 'font-bold tabular-nums text-foreground')}>{formatCurrency(summary.periodPurchases)}</div>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-sm flex items-center justify-between">
-          <div className="flex items-center gap-3 text-muted-foreground">
-            <Factory className="h-5 w-5 text-orange-500" />
-            <div>
-              <div className="text-sm font-medium">Processing Bills</div>
-              <div className="text-xs text-muted-foreground/70">Period</div>
-            </div>
-          </div>
-          <div className={cn(adaptiveAmountClass(formatCurrency(summary.periodProcessing), 'md'), 'font-bold tabular-nums text-foreground')}>{formatCurrency(summary.periodProcessing)}</div>
-        </div>
+      {/* ── Period activity ── */}
+      <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 min-w-0">
+        <ActivityMetricCard
+          icon={ArrowUpCircle}
+          iconClassName="text-emerald-500"
+          label="Cash Receipts"
+          value={formatCurrency(summary.periodCashReceipts)}
+          valueClassName="text-emerald-600"
+          onClick={() => navigate('/accounting/cashbook')}
+        />
+        <ActivityMetricCard
+          icon={ArrowDownCircle}
+          iconClassName="text-destructive"
+          label="Cash Payments"
+          value={formatCurrency(summary.periodCashPayments)}
+          valueClassName="text-destructive"
+          onClick={() => navigate('/accounting/cashbook')}
+        />
+        <ActivityMetricCard
+          icon={DollarSign}
+          iconClassName="text-blue-500"
+          label="Sales"
+          value={formatCurrency(summary.periodSales)}
+          valueClassName="text-foreground"
+          onClick={() => navigate('/sales')}
+        />
+        <ActivityMetricCard
+          icon={ShoppingCart}
+          iconClassName="text-violet-500"
+          label="Purchases"
+          value={formatCurrency(summary.periodPurchases)}
+          valueClassName="text-foreground"
+          onClick={() => navigate('/purchases')}
+        />
+        <ActivityMetricCard
+          icon={Factory}
+          iconClassName="text-orange-500"
+          label="Processing Bills"
+          value={formatCurrency(summary.periodProcessing)}
+          valueClassName="text-foreground"
+          onClick={() => navigate('/processing')}
+        />
       </section>
 
       {/* ── Inventory Position ─────────────────────────────────────────────── */}
@@ -512,6 +502,69 @@ export function Dashboard() {
             </table>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * ActivityMetricCard — single metric card for the dashboard activity strip.
+ *
+ * Design basis (amicro-design-system + impeccable Operate mode):
+ *   - Scanability first: icon + label + value at a glance
+ *   - Shape consistency: rounded-2xl, same shadow/padding as every KPI card
+ *   - No overflow: min-w-0 on every container, adaptive sizing, no break-words
+ *   - Hover feedback: border lift + shadow increase
+ *   - One accent color per metric (icon + value), neutral text elsewhere
+ */
+function ActivityMetricCard({
+  icon: Icon,
+  iconClassName,
+  label,
+  value,
+  valueClassName,
+  onClick,
+}: {
+  icon: typeof ArrowUpCircle;
+  iconClassName: string;
+  label: string;
+  value: string;
+  valueClassName?: string;
+  onClick?: () => void;
+}) {
+  return (
+    <div
+      className={cn(
+        'relative rounded-2xl border border-border bg-card shadow-sm min-w-0 p-4 transition-all duration-200',
+        onClick
+          ? 'hover:border-primary/30 hover:shadow-md cursor-pointer'
+          : 'hover:border-border/60',
+      )}
+      onClick={onClick}
+    >
+      <div className="flex items-center justify-between pb-3">
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 items-center justify-center rounded-xl bg-black/5">
+            <Icon className={cn('h-4 w-4 shrink-0', iconClassName)} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              {label}
+            </div>
+            <div className="text-xs text-muted-foreground">Period</div>
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 flex items-end justify-between gap-2 min-w-0">
+        <span
+          className={cn(
+            adaptiveAmountClass(value, 'sm'),
+            'font-bold tabular-nums leading-none min-w-0',
+            valueClassName || 'text-foreground',
+          )}
+        >
+          {value}
+        </span>
       </div>
     </div>
   );

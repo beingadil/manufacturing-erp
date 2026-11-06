@@ -76,21 +76,22 @@ export function FinishedGoods() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !sellingPrice) return;
-    const isAssembled = usageType === 'assembled';
-    if (isAssembled) {
-      if (components.length === 0) return toast.error('Pick at least one material this product is made from.');
-    } else if (!materialId) {
-      return;
+    if (components.length === 0) {
+      return toast.error('Pick at least one material this product takes.');
     }
+    const isAssembled = components.length > 1;
+    const catFromLinked = isAssembled
+      ? ''
+      : categories.find(c => c.id === materials.find(m => m.id === components[0].materialId)?.categoryId)?.id || '';
 
     const payload = {
       name: name.trim(),
-      materialId: isAssembled ? undefined : materialId,
+      materialId: isAssembled ? undefined : components[0].materialId,
       usageType: (isAssembled ? 'assembled' : 'simple') as ProductUsageType,
       components: isAssembled ? components : undefined,
-      categoryId,
+      categoryId: catFromLinked,
       sellingPrice: parseFloat(sellingPrice),
-      sku: sku.trim() || undefined,
+      sku: editingProduct?.sku || undefined,
       description,
     };
 
@@ -277,7 +278,7 @@ export function FinishedGoods() {
         <form onSubmit={handleSubmit} className="space-y-5">
           <FormSection icon={<Package />} eyebrow="Product Identity" first>
             <FormGrid cols={2}>
-              <FormField id="product-name" label="Product Name" required className="sm:col-span-2">
+              <FormField id="product-name" label="Product Name" required>
                 <input
                   id="product-name"
                   name="product-name"
@@ -287,20 +288,7 @@ export function FinishedGoods() {
                   value={name}
                   onChange={e => setFormData({ ...formData, name: e.target.value })}
                   className={formInputClass}
-                  placeholder="Product Name"
-                />
-              </FormField>
-              <FormField id="product-sku" label="SKU (Optional)">
-                <input
-                  id="product-sku"
-                  name="product-sku"
-                  type="text"
-                  spellCheck={false}
-                  autoComplete="off"
-                  value={sku}
-                  onChange={e => setFormData({ ...formData, sku: e.target.value })}
-                  className={formInputClass}
-                  placeholder="SKU (Optional)"
+                  placeholder="e.g. Steel Jug 8 Litre"
                 />
               </FormField>
               <FormField id="product-price" label="Selling Price (PKR)" required>
@@ -314,125 +302,92 @@ export function FinishedGoods() {
                   value={sellingPrice}
                   onChange={e => setFormData({ ...formData, sellingPrice: e.target.value })}
                   className={formInputClass}
-                  placeholder="Selling Price (PKR)"
+                  placeholder="e.g. 1850"
                 />
               </FormField>
             </FormGrid>
           </FormSection>
 
-          <FormSection icon={<Boxes />} eyebrow="Product Type">
-            <fieldset className="space-y-2">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {([
-                  { v: 'simple', t: 'One material', d: 'Sold straight from that material\u2019s finished stock.' },
-                  { v: 'assembled', t: 'Several materials', d: 'A jug = circle + no.4 + handle. Each sale deducts all of them.' },
-                ] as const).map(o => (
-                  <button
-                    key={o.v}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, usageType: o.v })}
-                    aria-pressed={usageType === o.v}
-                    className={`rounded-xl border px-4 py-3 text-left transition-colors ${usageType === o.v ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}
-                  >
-                    <span className={`block text-sm font-medium ${usageType === o.v ? 'text-primary' : 'text-foreground'}`}>{o.t}</span>
-                    <span className="mt-0.5 block text-xs text-muted-foreground">{o.d}</span>
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-          </FormSection>
 
           <FormSection icon={<Layers />} eyebrow="Materials">
-            {isAssembled ? (
-              <div className="space-y-2">
-                <FormField id="product-component" label="Made from these materials">
-                  <SearchableSelect
-                    options={componentMaterials
-                      .filter(m => !components.some(c => c.materialId === m.id))
-                      .map(m => ({ id: m.id, label: m.name, secondaryLabel: m.code }))}
-                    value=""
-                    onChange={addComponent}
-                    placeholder="Add Material..."
-                  />
-                </FormField>
+            <FormField id="product-materials" label="Materials in this product" required>
+              <SearchableSelect
+                options={materials
+                  .filter(m => m.status !== 'Inactive')
+                  .filter(m => !components.some(c => c.materialId === m.id))
+                  .map(m => ({ id: m.id, label: m.name, secondaryLabel: m.usageType === 'component' ? `${m.code || ''} · part` : m.code }))}
+                value=""
+                onChange={addComponent}
+                placeholder="Add a material..."
+                onAdd={() => setIsAddMaterialOpen(true)}
+              />
+            </FormField>
 
-                {components.length === 0 ? (
-                  <p className="rounded-lg border border-border bg-muted/30 px-3 py-3 text-xs text-muted-foreground">
-                    {componentMaterials.length === 0
-                      ? 'No materials are marked as "a part of another product" yet. Set that on the Raw Materials page first.'
-                      : 'Add the materials above. One Jug, for example, might take 1 Circle, 1 No.4 and 1 Handle.'}
-                  </p>
-                ) : (
-                  <div className="overflow-hidden rounded-xl border border-border">
-                    <table className="w-full text-sm">
-                      <thead className="bg-muted/50 text-xs text-muted-foreground">
-                        <tr>
-                          <th className="px-3 py-2 text-left font-medium">Material</th>
-                          <th className="px-3 py-2 text-right font-medium">Qty per unit</th>
-                          <th className="px-3 py-2 text-right font-medium" />
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border/50">
-                        {components.map(c => {
-                          const m = materials.find(x => x.id === c.materialId);
-                          return (
-                            <tr key={c.materialId}>
-                              <td className="px-3 py-2">
-                                <span className="font-medium text-foreground">{m?.name ?? '(deleted material)'}</span>
-                                {m?.code && <span className="ml-2 font-mono text-xs text-muted-foreground">{m.code}</span>}
-                              </td>
-                              <td className="px-3 py-2 text-right">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.000001"
-                                  aria-label={`Quantity of ${m?.name ?? c.materialId} per product`}
-                                  value={c.quantity}
-                                  onChange={e => setComponentQty(c.materialId, parseFloat(e.target.value) || 0)}
-                                  className="w-24 rounded-lg border border-border bg-background px-2 py-1 text-right text-sm tabular-nums"
-                                />
-                              </td>
-                              <td className="px-3 py-2 text-right">
-                                <button
-                                  type="button"
-                                  onClick={() => removeComponent(c.materialId)}
-                                  aria-label={`Remove ${m?.name ?? c.materialId}`}
-                                  className="text-muted-foreground/80 hover:text-destructive"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
+            {components.length === 0 ? (
+              <p className="rounded-lg border border-border bg-muted/30 px-3 py-3 text-sm text-foreground/70">
+                One entry makes a simple product linked to that material. Add several to assemble a product from multiple materials — the list below takes them in the order you add them.
+              </p>
             ) : (
-              <div>
-                <FormField id="product-material" label="Linked Material" required>
-                  <SearchableSelect
-                    options={sellableMaterials.map(m => ({ id: m.id, label: m.name, secondaryLabel: m.code }))}
-                    value={materialId}
-                    onChange={(id: string) => setFormData({ ...formData, materialId: id })}
-                    placeholder="Select Linked Material..."
-                    onAdd={() => setIsAddMaterialOpen(true)}
-                    required
-                  />
-                </FormField>
+              <div className="overflow-hidden rounded-xl border border-border">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 text-xs text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium">Material</th>
+                      <th className="px-3 py-2 text-right font-medium">Qty per unit</th>
+                      <th className="px-3 py-2 text-right font-medium" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/50">
+                    {components.map(c => {
+                      const m = materials.find(x => x.id === c.materialId);
+                      return (
+                        <tr key={c.materialId}>
+                          <td className="px-3 py-2">
+                            <span className="font-medium text-foreground">{m?.name ?? '(deleted material)'}</span>
+                            {m?.code && <span className="ml-2 font-mono text-xs text-muted-foreground">{m.code}</span>}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.000001"
+                              aria-label={`Quantity of ${m?.name ?? c.materialId} per product`}
+                              value={c.quantity}
+                              onChange={e => setComponentQty(c.materialId, parseFloat(e.target.value) || 0)}
+                              className="w-24 rounded-lg border border-border bg-background px-2 py-1 text-right text-sm tabular-nums"
+                            />
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <button
+                              type="button"
+                              onClick={() => removeComponent(c.materialId)}
+                              aria-label={`Remove ${m?.name ?? c.materialId}`}
+                              className="text-muted-foreground/80 hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
 
-            {linkedMaterial && (
-              <div className="rounded-xl bg-muted/40 border border-border px-4 py-3 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Category (from material)</span>
-                  <span className="font-medium text-foreground">{categories.find(c => c.id === linkedMaterial.categoryId)?.name || '—'}</span>
+            {(() => {
+              const catFromLinked = components.length === 1
+                ? categories.find(c => c.id === materials.find(m => m.id === components[0]?.materialId)?.categoryId)?.name
+                : undefined;
+              return catFromLinked ? (
+                <div className="rounded-xl bg-muted/40 border border-border px-4 py-3 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Category (from material)</span>
+                    <span className="font-medium text-foreground">{catFromLinked}</span>
+                  </div>
                 </div>
-              </div>
-            )}
+              ) : null;
+            })()}
           </FormSection>
 
           <FormSection icon={<FileText />} eyebrow="Details">

@@ -75,7 +75,7 @@ export function KpiCard({
       </div>
 
       <div className="mt-2 flex items-baseline gap-2">
-        <span className={cn(adaptiveAmountClass(value, size), 'font-bold tracking-tight tabular-nums leading-none min-w-0 break-words', accent || 'text-foreground', valueClassName)}>
+        <span className={cn(adaptiveAmountClass(value, size), 'font-bold tracking-tight tabular-nums min-w-0 break-words', accent || 'text-foreground', valueClassName)}>
           {value}
         </span>
         {trend && (
@@ -100,7 +100,7 @@ export function KpiCard({
         type="button"
         onClick={onClick}
         className={cn(
-          'rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col text-left transition-[box-shadow,border-color] hover:shadow-md hover:border-primary/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          'rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col min-w-0 text-left transition-[box-shadow,border-color] hover:shadow-md hover:border-primary/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
           className
         )}
       >
@@ -110,7 +110,7 @@ export function KpiCard({
   }
 
   return (
-    <div className={cn('rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col', className)}>
+    <div className={cn('rounded-2xl border border-border bg-card p-5 shadow-sm flex flex-col min-w-0', className)}>
       {content}
     </div>
   );
