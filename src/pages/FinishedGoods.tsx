@@ -1,17 +1,16 @@
-import { Boxes, FileText, Layers, Package, Pencil, Plus, Trash2 } from "lucide-react";
+import { FileText, Layers, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import React, { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
 import { DeleteConfirmationModal } from "../components/DeleteConfirmationModal";
-import { QuickAddMaterial } from "../components/QuickAddModals";
-import { SearchableSelect } from "../components/SearchableSelect";
-import { KpiCard } from '../components/ui/KpiCard';
-import { FormModal } from '../components/form/FormModal';
-import { FormSection } from '../components/form/FormSection';
-import { FormGrid } from '../components/form/FormGrid';
 import { FormField } from '../components/form/FormField';
 import { FormFooter } from '../components/form/FormFooter';
+import { FormGrid } from '../components/form/FormGrid';
+import { FormModal } from '../components/form/FormModal';
+import { FormSection } from '../components/form/FormSection';
 import { formInputClass } from '../components/form/formStyles';
+import { QuickAddMaterial } from "../components/QuickAddModals";
+import { SearchableSelect } from "../components/SearchableSelect";
 import { formatCurrency, formatNumber } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
 import type { ProductComponent, ProductUsageType } from "../types/erp";
@@ -39,7 +38,7 @@ export function FinishedGoods() {
   const [components, setComponents] = useState<ProductComponent[]>([]);
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; id: string; no: string }>({ isOpen: false, id: '', no: '' });
 
-  const { name, sku, sellingPrice, usageType, materialId, description } = formData;
+  const { name, sku:_sku, sellingPrice, usageType, materialId, description } = formData;
 
   const openEditModal = (product: any) => {
     setEditingProduct(product);
@@ -71,7 +70,7 @@ export function FinishedGoods() {
 
   // Category is inherited from the linked material — never entered separately.
   const linkedMaterial = materials.find(m => m.id === materialId);
-  const categoryId = linkedMaterial?.categoryId || '';
+  const _categoryId = linkedMaterial?.categoryId || '';
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,8 +120,8 @@ export function FinishedGoods() {
     setDeleteModal({ isOpen: false, id: '', no: '' });
   };
 
-  const componentMaterials = materials.filter(m => m.usageType === 'component' && m.status !== 'Inactive');
-  const sellableMaterials = materials.filter(m => m.usageType !== 'component' && m.status !== 'Inactive');
+  const _componentMaterials = materials.filter(m => m.usageType === 'component' && m.status !== 'Inactive');
+  const _sellableMaterials = materials.filter(m => m.usageType !== 'component' && m.status !== 'Inactive');
 
   const addComponent = (materialId: string) => {
     if (!materialId) return;
@@ -152,7 +151,7 @@ export function FinishedGoods() {
     };
   }), [products, materials, categories]);
 
-  const isAssembled = usageType === 'assembled';
+  const _isAssembled = usageType === 'assembled';
 
   const columns: Column<typeof enrichedProducts[0]>[] = [
     { key: "name", label: "Product Name", sortable: true, render: (item) => <span className="font-medium">{item.name}</span> },

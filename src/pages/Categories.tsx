@@ -1,12 +1,11 @@
-import { Cloud, Layers, ListOrdered, Package, Pencil, Plus, RefreshCw, Tags, Trash2 } from 'lucide-react';
+import { Cloud, ListOrdered, Pencil, Plus, RefreshCw, Tags, Trash2 } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { InlineEditInput } from '../components/common/InlineEditInput';
 import { SafeDeleteDialog } from '../components/common/SafeDeleteDialog';
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
-import { KpiCard } from '../components/ui/KpiCard';
-import { FormFooter } from '../components/form/FormFooter';
 import { FormField } from '../components/form/FormField';
+import { FormFooter } from '../components/form/FormFooter';
 import { FormGrid } from '../components/form/FormGrid';
 import { FormModal } from '../components/form/FormModal';
 import { FormSection } from '../components/form/FormSection';

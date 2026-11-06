@@ -1,6 +1,6 @@
 import { Account, AccountSubtype, JournalEntry, Voucher } from '../../types/erp';
-import { getCashBankAccounts } from '../accounting/accountClassification';
 import { compareLedgerEntries } from '../accounting/AccountingEngine';
+import { getCashBankAccounts } from '../accounting/accountClassification';
 
 export interface CashBookRow {
   date: string;

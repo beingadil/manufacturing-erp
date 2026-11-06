@@ -1,5 +1,5 @@
-import { cn } from '@/lib/utils';
 import * as React from 'react';
+import { cn } from '@/lib/utils';
 
 export interface FormGridProps {
   /** 2 → sm:2 columns; 3 → sm:2 / lg:3 columns. Always 1 column below sm. */

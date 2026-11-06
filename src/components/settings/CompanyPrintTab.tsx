@@ -19,9 +19,9 @@ import { FileText, Image as ImageIcon, Layout } from "lucide-react";
 import React, { useRef } from "react";
 import { toast } from "sonner";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
+import { cn } from "@/lib/utils";
 import { useERPStore } from "@/store/useERPStore";
 import { useSettingsStore } from "@/store/useSettingsStore";
-import { cn } from "@/lib/utils";
 import { CompanySettings, DocumentSettings } from "@/types/erp";
 
 type IdentityField = Extract<

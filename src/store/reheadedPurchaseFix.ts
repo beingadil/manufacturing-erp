@@ -1,5 +1,5 @@
-import type { Batch, InventoryMovement } from '../types/erp';
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
+import type { Batch, InventoryMovement } from '../types/erp';
 
 /**
  * One-time data repair for purchase entries that were re-"headed" to a different

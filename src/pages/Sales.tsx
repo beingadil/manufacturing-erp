@@ -1,10 +1,8 @@
-import { Banknote, CalendarDays, Edit, Eye, Plus, Printer, ReceiptText, ShoppingBag, Trash2 } from 'lucide-react';
-import React, { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
+import { Edit, Eye, Plus, Printer, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
-import { KpiCard } from "../components/ui/KpiCard";
 import { VoucherHistoryTab } from "../components/VoucherHistoryTab";
 import { generateInvoicePDF } from "../lib/documentGenerators";
 import { formatCurrency } from "../lib/utils";

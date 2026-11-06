@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
+import type { Account, JournalEntry, Voucher } from "../../types/erp";
+import { CashBookEngine } from "../finance/CashBookEngine";
 import {
   AccountingEngine,
   compareLedgerEntries,
   compareVoucherRows,
 } from "./AccountingEngine";
-import { CashBookEngine } from "../finance/CashBookEngine";
-import type { Account, JournalEntry, Voucher } from "../../types/erp";
 
 const mkVoucher = (
   id: string,

@@ -1,21 +1,20 @@
-import { Link, useParams } from 'react-router-dom';
-import { useMemo } from 'react';
 import {
   ArrowLeft,
+  CheckCircle2,
+  Clock,
   Package,
   PackageCheck,
   Truck,
   Wallet,
-  Clock,
-  CheckCircle2,
 } from 'lucide-react';
-import { cn, formatCurrency, formatNumber } from '../lib/utils';
-import {
-  batchCostBreakdown,
-  type BatchCostBreakdown,
-} from '../lib/processing/batchCosts';
+import { useMemo } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
-import { type Batch, type ProcessingStage } from '../types/erp';
+import {
+  type BatchCostBreakdown,
+  batchCostBreakdown,
+} from '../lib/processing/batchCosts';
+import { cn, formatCurrency, formatNumber } from '../lib/utils';
 import { useERPStore } from '../store/useERPStore';
 
 export function PurchaseDetail() {
@@ -55,7 +54,7 @@ export function PurchaseDetail() {
     return batchCostBreakdown(batch, processingSends, sortedStages, processingReceipts);
   }, [batch, processingSends, sortedStages, processingReceipts]);
 
-  const stageValues = useMemo(() => {
+  const _stageValues = useMemo(() => {
     if (!batch) return null;
     return InventoryCalculationService.getMaterialStageValues(materialId, batches);
   }, [materialId, batches]);
@@ -73,7 +72,7 @@ export function PurchaseDetail() {
   }
 
   const finishedPcs = batch.processedPcs || 0;
-  const costPerFinishedPcs = finishedPcs > 0 ? cost.totalCostPerPcs * batch.initialPcs : 0;
+  const _costPerFinishedPcs = finishedPcs > 0 ? cost.totalCostPerPcs * batch.initialPcs : 0;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">

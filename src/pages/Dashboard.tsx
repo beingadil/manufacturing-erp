@@ -1,5 +1,5 @@
 import { format, startOfMonth, startOfWeek, startOfYear, subDays } from 'date-fns';
-import { AlertTriangle, ArrowDownCircle, ArrowLeftRight, ArrowRight, ArrowUpCircle, Building2, CircleDollarSign, DollarSign, Factory, FileCheck, Landmark, Layers, Package, PackageSearch, Scale, ShoppingCart, TrendingUp, Truck, Users, Wallet } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, ArrowUpCircle, Building2, CircleDollarSign, FileCheck, Landmark, PackageSearch, Scale, TrendingUp, Truck, Users, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -12,7 +12,7 @@ import { filterFinancialData } from "../lib/abac";
 import { getSystemAccountBySubtype } from '../lib/accounting/accountClassification';
 import { DashboardSummaryService } from '../lib/dashboard/DashboardSummaryService';
 import { FinancialReportService } from '../lib/reporting/FinancialReportService';
-import { adaptiveAmountClass, cn, formatCurrency, formatNumber } from "../lib/utils";
+import { adaptiveAmountClass, cn, formatCurrency, } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
 
 type Preset = 'today' | 'week' | 'month' | 'year' | 'custom';
@@ -94,8 +94,8 @@ export function Dashboard() {
       });
   }, [secureSales, products]);
 
-  const lowStockMaterials = materials.filter(m => m.stockPcs < 500 && m.stockPcs > 0);
-  const outOfStockMaterials = materials.filter(m => m.stockPcs === 0);
+  const _lowStockMaterials = materials.filter(m => m.stockPcs < 500 && m.stockPcs > 0);
+  const _outOfStockMaterials = materials.filter(m => m.stockPcs === 0);
 
   const presets: { key: Preset; label: string }[] = [
     { key: 'today', label: 'Today' },
@@ -366,7 +366,7 @@ export function Dashboard() {
  *   - Hover feedback: border lift + shadow increase
  *   - One accent color per metric (icon + value), neutral text elsewhere
  */
-function ActivityMetricCard({
+function _ActivityMetricCard({
   icon: Icon,
   iconClassName,
   label,

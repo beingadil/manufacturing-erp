@@ -4,8 +4,8 @@ import { Column, DataTable } from '@/components/DataTable';
 import { Badge } from '@/components/ui/badge';
 import { useAccessStore } from '@/store/useAccessStore';
 import { AuditLog } from '@/types/access';
-import { SearchInput } from '../ui/SearchInput';
 import { formInputClass } from '../../components/form/formStyles';
+import { SearchInput } from '../ui/SearchInput';
 
 export function AuditLogsTab() {
   const storeLogs = useAccessStore((state) => state.auditLogs);

@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import type { Product } from '../../types/erp';
 import {
   breakdownForSale,
   isAssembled,
+  type MaterialAvailability,
   perUnitRequirement,
   roundQty,
   runningLowAfterSale,
   shortfallMessage,
   validateComponents,
-  type MaterialAvailability,
 } from './ProductAssemblyService';
-import type { Product } from '../../types/erp';
 
 /**
  * The engine behind the sale screen: "selling N of this product takes how much

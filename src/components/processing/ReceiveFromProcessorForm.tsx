@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { formInputClass } from '../../components/form/formStyles';
 import { formatNumber } from '../../lib/utils';
 import { ErrorManagement } from '../../lib/validation';
 import { ProcessingService } from '../../services/ProcessingService';
@@ -7,7 +8,6 @@ import { QuickAddProcessor } from '../QuickAddModals';
 import { SearchableSelect } from '../SearchableSelect';
 import { DatePicker } from '../ui/date-picker';
 import { PageModal } from '../ui/PageModal';
-import { formInputClass } from '../../components/form/formStyles';
 
 interface ReceiveFromProcessorFormProps {
   isOpen: boolean;

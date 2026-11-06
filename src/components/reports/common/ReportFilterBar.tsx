@@ -1,9 +1,9 @@
 import { Calendar as CalendarIcon, SlidersHorizontal, X } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
+import { formInputClass } from '../../form/formStyles';
 import { DatePicker } from '../../ui/date-picker';
 import { SearchInput } from '../../ui/SearchInput';
 import { ReportExportBar } from './ReportExportBar';
-import { formInputClass } from '../../form/formStyles';
 
 interface ReportFilterBarProps {
   onSearch?: (value: string) => void;

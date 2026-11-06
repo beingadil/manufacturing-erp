@@ -6,8 +6,8 @@ import { AccountingEngine } from '../lib/accounting/AccountingEngine';
 import { getSystemAccountBySubtype, getSystemCOGSAccount, getSystemInventoryAccount } from '../lib/accounting/accountClassification';
 import { DocumentNumberingService } from '../lib/business/DocumentNumberingService';
 import { batchAvailableAtSource, batchTotalPcs, InsufficientStockError, InventoryCalculationService } from '../lib/business/InventoryCalculationService';
+import { findMaterialCodeConflict, isAssembled, perUnitRequirement, roundQty, validateComponents } from '../lib/business/ProductAssemblyService';
 import { UnitConversionService } from '../lib/business/UnitConversionService';
-import { isAssembled, findMaterialCodeConflict, perUnitRequirement, roundQty, validateComponents } from '../lib/business/ProductAssemblyService';
 import { AppError } from '../lib/errorHandler';import {Account, 
   AccountSubtype, 
   Batch, 

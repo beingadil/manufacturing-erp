@@ -7,11 +7,11 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { hashPassword, useAccessStore } from '@/store/useAccessStore';
 import { Role, UserRow } from '@/types/access';
+import { formInputClass } from '../../components/form/formStyles';
 import { SearchInput } from '../ui/SearchInput';
 import { ConfirmDialog } from './ConfirmDialog';
 import { PasswordDialog, PasswordFormValues } from './PasswordDialog';
 import { UserFormDialog, UserFormValues } from './UserFormDialog';
-import { formInputClass } from '../../components/form/formStyles';
 
 const statusVariant: Record<string, 'default' | 'secondary' | 'destructive'> = {
   active: 'default',

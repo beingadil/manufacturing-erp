@@ -1,8 +1,8 @@
+import { format } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { format } from 'date-fns';
-import { getPrintSettings, formatPrintDate, formatPrintCurrency } from './print/printSettings';
 import { Desktop } from './desktop/DesktopInterop';
+import { formatPrintCurrency, formatPrintDate, getPrintSettings } from './print/printSettings';
 
 export interface PDFTableColumn {
   header: string;

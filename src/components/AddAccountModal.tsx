@@ -1,10 +1,10 @@
 import { X } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
+import { formInputClass } from '../components/form/formStyles';
 import { useERPStore } from '../store/useERPStore';
 import { AccountType, } from '../types/erp';
 import { SearchableSelect } from './SearchableSelect';
 import { ModalOverlay } from './ui/ModalOverlay';
-import { formInputClass } from '../components/form/formStyles';
 
 interface Props {
   isOpen: boolean;

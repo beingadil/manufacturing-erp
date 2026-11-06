@@ -6,15 +6,12 @@
  * breakdown is shown but never editable — the product record is the authority.
  */
 import { ArrowLeft, Check, Plus, X } from 'lucide-react';
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
+import { QuickAddCustomer, } from '../components/QuickAddModals';
 import { SearchableSelect } from '../components/SearchableSelect';
-import { QuickAddCustomer, QuickAddProduct } from '../components/QuickAddModals';
 import { DatePicker } from '../components/ui/date-picker';
-import { adaptiveAmountClass, cn, formatCurrency } from '../lib/utils';
-import { SalesService } from '../services/SalesService';
-import { useERPStore } from '../store/useERPStore';
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
 import {
   breakdownForSale,
@@ -22,6 +19,9 @@ import {
   runningLowAfterSale,
   shortfallMessage,
 } from '../lib/business/ProductAssemblyService';
+import { adaptiveAmountClass, cn, formatCurrency } from '../lib/utils';
+import { SalesService } from '../services/SalesService';
+import { useERPStore } from '../store/useERPStore';
 
 type Line = {
   id: string;
@@ -138,7 +138,7 @@ export default function SalesFormPage() {
 
   const currentProductId = lines[0]?.productId ?? '';
   const originalProductId = originalProductIdRef.current;
-  const productChanged = isEdit && originalProductId !== null && currentProductId !== originalProductId;
+  const _productChanged = isEdit && originalProductId !== null && currentProductId !== originalProductId;
 
   const summary = useMemo(() => {
     const pcs = lineView.reduce((s, v) => s + v.pcs, 0);
@@ -155,7 +155,7 @@ export default function SalesFormPage() {
     setLine(index, { productId: id });
 
   /** After the inline product form saves: fill the first empty line, or add one. */
-  const handleNewProduct = (id: string) => {
+  const _handleNewProduct = (id: string) => {
     const patch: Partial<Line> = { productId: id };
     const emptyIndex = lines.findIndex(l => !l.productId);
     if (emptyIndex >= 0) setLine(emptyIndex, patch);

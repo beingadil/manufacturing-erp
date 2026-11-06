@@ -16,10 +16,10 @@
  * them that way.
  */
 import { beforeEach, describe, expect, it } from "vitest";
-import { InventoryCalculationService } from "./InventoryCalculationService";
-import { buildDefaultStages } from "../processing/processingStageSeed";
 import { migrateERPState } from "../../store/erpMigration";
 import { useERPStore } from "../../store/useERPStore";
+import { buildDefaultStages } from "../processing/processingStageSeed";
+import { InventoryCalculationService } from "./InventoryCalculationService";
 
 function resetState() {
   useERPStore.setState({

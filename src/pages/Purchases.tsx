@@ -1,9 +1,8 @@
-import { CalendarDays, Edit, Eye, PackagePlus, Plus, Printer, ReceiptText, Trash2, Wallet } from 'lucide-react';
+import { Edit, Eye, Plus, Printer, Trash2, } from 'lucide-react';
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
-import { KpiCard } from "../components/ui/KpiCard";
 import { VoucherHistoryTab } from "../components/VoucherHistoryTab";
 import { generatePurchaseInvoicePDF } from "../lib/documentGenerators";
 import { formatCurrency } from "../lib/utils";

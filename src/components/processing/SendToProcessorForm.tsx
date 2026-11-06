@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { formInputClass } from '../../components/form/formStyles';
 import { batchAvailableAtSource, batchRawAvailableOf, InventoryCalculationService } from '../../lib/business/InventoryCalculationService';
 import { batchCanSendToStage, getMaterialBatchProgress, getSortedStages } from '../../lib/processing/stageProgress';
 import { formatNumber } from '../../lib/utils';
@@ -9,7 +10,6 @@ import { SearchableSelect } from '../SearchableSelect';
 import { DatePicker } from '../ui/date-picker';
 import { PageModal } from '../ui/PageModal';
 import { StageProgressStepper } from './StageProgressStepper';
-import { formInputClass } from '../../components/form/formStyles';
 
 interface SendToProcessorFormProps {
   isOpen: boolean;

@@ -5,23 +5,21 @@ import {
   ArrowLeft,
   ArrowRightLeft,
   ArrowUp,
-  ChevronDown,
-  ChevronRight,
   CheckCircle2,
+  ChevronDown,
   Clock,
   Layers,
   Package,
   PackageCheck,
-  Target,
   Truck,
   Wallet,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { InventoryCalculationService, stageAvailableEntries } from '../lib/business/InventoryCalculationService';
+import { materialCostSummary } from '../lib/processing/batchCosts';
 import { getMaterialBatchProgress, getSortedStages } from '../lib/processing/stageProgress';
-import { batchCostBreakdown, materialCostSummary } from '../lib/processing/batchCosts';
-import { adaptiveAmountClass, cn, formatCurrency, formatNumber } from '../lib/utils';
+import { cn, formatCurrency, formatNumber } from '../lib/utils';
 import { useERPStore } from '../store/useERPStore';
 
 /** Collapsible tall section — no scroll traps, opens inline. */

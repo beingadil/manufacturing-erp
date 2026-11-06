@@ -1,4 +1,4 @@
-import { Layers, PackageSearch, Pencil, Plus, Trash2, Wallet } from "lucide-react";
+import { PackageSearch, Pencil, Plus, Trash2, } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from 'sonner';
@@ -24,7 +24,7 @@ import { useERPStore } from "../store/useERPStore";
  */
 export function RawMaterials() {
   const { materials, categories, purchases, processingSends, processingReceipts, batches } = useERPStore();
-  const navigate = useNavigate();
+  const _navigate = useNavigate();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<any | null>(null);

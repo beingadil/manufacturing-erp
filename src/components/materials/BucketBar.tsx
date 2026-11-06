@@ -1,5 +1,4 @@
-import { formatNumber } from '../../lib/utils';
-import { cn } from '../../lib/utils';
+import { cn, formatNumber } from '../../lib/utils';
 
 export interface BucketShare {
   raw: number;

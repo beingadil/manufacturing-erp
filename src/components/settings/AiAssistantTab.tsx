@@ -10,8 +10,8 @@ import { toast } from 'sonner';
 import { aiClient, FALLBACK_MODELS } from '../../lib/ai/aiClient';
 import { cn } from '../../lib/utils';
 import { useSettingsStore } from '../../store/useSettingsStore';
-import { ToggleSwitch } from '../ui/toggle-switch';
 import { formInputClass } from '../form/formStyles';
+import { ToggleSwitch } from '../ui/toggle-switch';
 
 function SettingsCard({ title, subtitle, icon: Icon, children }: {
   title: string;

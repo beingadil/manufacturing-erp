@@ -1,4 +1,4 @@
-import type { Batch, ProcessingStage, ProcessingReceipt, ProcessingSend } from '../../types/erp';
+import type { Batch, ProcessingReceipt, ProcessingSend, ProcessingStage } from '../../types/erp';
 
 export interface StageCostRow {
   name: string;
@@ -41,7 +41,7 @@ export function stageCostBreakdown(
   batchId?: string,
 ): StageCostBreakdown {
   const stageMap = new Map(stages.map(s => [s.id, s]));
-  const sendMap = new Map(sends.map(s => [s.id, s]));
+  const _sendMap = new Map(sends.map(s => [s.id, s]));
 
   const scopedSends = batchId ? sends.filter(s => s.batchId === batchId) : sends;
   const scopedSendIds = new Set(scopedSends.map(s => s.id));
@@ -146,8 +146,8 @@ export function batchCostBreakdown(
 ): BatchCostBreakdown {
   const { rows, totals } = stageCostBreakdown(sends, receipts, stages, batch.id);
   const purchaseCost = pcsOf(batch.amount);
-  const finishedPcs = pcsOf(batch.processedPcs);
-  const totalReceived = rows.reduce((s, l) => s + l.received, 0);
+  const _finishedPcs = pcsOf(batch.processedPcs);
+  const _totalReceived = rows.reduce((s, l) => s + l.received, 0);
 
   return {
     batchId: batch.id,

@@ -1,12 +1,12 @@
 import { ArrowDown, ArrowUp, Edit, Plus, Trash2, TriangleAlert } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { formInputClass } from '../../components/form/formStyles';
 import { ProcessingService } from '../../services/ProcessingService';
 import { useERPStore } from '../../store/useERPStore';
 import type { ProcessingStage } from '../../types/erp';
 import { DataTable } from '../DataTable';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog';
 import { PageModal } from '../ui/PageModal';
-import { formInputClass } from '../../components/form/formStyles';
 
 /**
  * Processing Stage Master — configure the manufacturing chain. The chain order

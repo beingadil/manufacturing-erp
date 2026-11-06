@@ -1,11 +1,11 @@
 import { ArrowDown, PackageCheck } from 'lucide-react';
 import { useMemo } from 'react';
+import { formInputClass } from '../../components/form/formStyles';
 import { InventoryCalculationService } from '../../lib/business/InventoryCalculationService';
 import { getSortedStages } from '../../lib/processing/stageProgress';
 import { formatCurrency, formatDate, formatNumber } from '../../lib/utils';
 import type { Batch, ProcessingReceipt, ProcessingSend, ProcessingStage, Processor, RawMaterial } from '../../types/erp';
 import { StageProgressStepper } from './StageProgressStepper';
-import { formInputClass } from '../../components/form/formStyles';
 
 interface StageTimelinePanelProps {
   batches: Batch[];
