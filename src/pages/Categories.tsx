@@ -225,31 +225,22 @@ export default function Categories() {
         </button>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <KpiCard
-          label="Total Categories"
-          value={formatNumber(categories.length)}
-          icon={<Tags className="h-5 w-5" />}
-          iconClassName="text-indigo-500"
-          size="sm"
-        />
-        <KpiCard
-          label="Materials in System"
-          value={formatNumber(materials.length)}
-          icon={<Package className="h-5 w-5" />}
-          iconClassName="text-blue-500"
-          size="sm"
-          description="Raw materials across all categories"
-        />
-        <KpiCard
-          label="Uncategorized Materials"
-          value={formatNumber(uncategorized)}
-          icon={<Layers className="h-5 w-5" />}
-          iconClassName={uncategorized > 0 ? 'text-warning' : 'text-success'}
-          size="sm"
-          description={uncategorized > 0 ? 'Assign these to a category' : 'All materials are categorized'}
-        />
-      </div>
+      <section className="flex flex-wrap items-center gap-x-10 gap-y-3 rounded-2xl border border-border bg-card px-6 py-4 shadow-sm">
+        <div>
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Categories</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{formatNumber(categories.length)}</div>
+        </div>
+        <div className="border-l border-border/60 pl-10">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Materials</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{formatNumber(materials.length)}</div>
+          <div className="text-xs text-muted-foreground">Across all categories</div>
+        </div>
+        <div className="border-l border-border/60 pl-10">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Uncategorized</div>
+          <div className={`mt-1 text-2xl font-bold tracking-tight tabular-nums ${uncategorized > 0 ? 'text-warning' : 'text-success'}`}>{formatNumber(uncategorized)}</div>
+          <div className="text-xs text-muted-foreground">{uncategorized > 0 ? 'Assign these to a category' : 'All materials are categorized'}</div>
+        </div>
+      </section>
 
       <DataTable
         data={enriched}

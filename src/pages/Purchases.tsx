@@ -134,12 +134,28 @@ export function Purchases() {
       {activeTab === 'data' ? (
         <>
           {/* Live totals strip — mirrors exactly what the table below shows */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <KpiCard size="sm" icon={ReceiptText} label="Total Purchases" value={String(purchaseStats.count)} description={<span>Records in the register</span>} />
-            <KpiCard size="sm" icon={PackagePlus} iconClassName="text-success" label="PCS Added" value={purchaseStats.pcs.toLocaleString()} description={<span>Raw pieces received</span>} />
-            <KpiCard size="sm" icon={Wallet} iconClassName="text-destructive" label="Total Spend" value={formatCurrency(purchaseStats.value)} description={<span>All recorded purchases</span>} />
-            <KpiCard size="sm" icon={CalendarDays} iconClassName="text-blue-500" label="This Month" value={formatCurrency(purchaseStats.monthValue)} description={<span>Spend in {new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>} />
-          </div>
+          <section className="flex flex-wrap items-center gap-x-10 gap-y-3 rounded-2xl border border-border bg-card px-6 py-4 shadow-sm">
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Purchases</div>
+              <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{purchaseStats.count}</div>
+              <div className="text-xs text-muted-foreground">Records in the register</div>
+            </div>
+            <div className="border-l border-border/60 pl-10">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">PCS Added</div>
+              <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{purchaseStats.pcs.toLocaleString()}</div>
+              <div className="text-xs text-muted-foreground">Raw pieces received</div>
+            </div>
+            <div className="border-l border-border/60 pl-10">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Total Spend</div>
+              <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-destructive">{formatCurrency(purchaseStats.value)}</div>
+              <div className="text-xs text-muted-foreground">All recorded purchases</div>
+            </div>
+            <div className="border-l border-border/60 pl-10">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">This Month</div>
+              <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-blue-500">{formatCurrency(purchaseStats.monthValue)}</div>
+              <div className="text-xs text-muted-foreground">Spend in {new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</div>
+            </div>
+          </section>
           <DataTable 
             data={enrichedPurchases} 
             columns={columns} 
