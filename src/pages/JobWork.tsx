@@ -212,6 +212,17 @@ export function JobWork() {
     { key: "stageName", label: "Stage", sortable: true },
     { key: "materialName", label: "Material", sortable: true },
     { key: "pcsReceived", label: "Received", align: "right", sortable: true, render: (item) => <span className="font-medium text-success">+{item.pcsReceived} PCS</span> },
+    {
+      key: "billedStatus",
+      label: "Billing",
+      align: "right",
+      sortable: true,
+      render: (item) => (
+        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-md ${item.billedStatus === 'Billed' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
+          {item.billedStatus === 'Billed' ? 'Billed' : 'Unbilled'}
+        </span>
+      )
+    },
     { key: "billAmount", label: "Bill Amount", align: "right", sortable: true, render: (item) => <span className="font-bold text-foreground">{formatCurrency(item.billAmount)}</span> }
   ];
 
