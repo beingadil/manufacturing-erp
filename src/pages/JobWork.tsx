@@ -1,23 +1,20 @@
-import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, Edit, Eye, Printer, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, Edit, Eye, Factory, Printer, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { toast } from 'sonner';
 import { Column, DataTable } from "../components/DataTable";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
 import { formInputClass } from "../components/form/formStyles";
-import { CreateProcessorBillForm } from '../components/processing/CreateProcessorBillForm';
 import { DispatchDetailModal } from '../components/processing/DispatchDetailModal';
-import { ReceiveFromProcessorForm } from '../components/processing/ReceiveFromProcessorForm';
-import { SendToProcessorForm } from '../components/processing/SendToProcessorForm';
 import { StageManagerPanel } from '../components/processing/StageManagerPanel';
 import { StageTimelinePanel } from '../components/processing/StageTimelinePanel';
 import { WipBoard } from '../components/processing/WipBoard';
-import { WipStageStrip } from '../components/processing/WipStageStrip';
 import { PageModal } from "../components/ui/PageModal";
 import { VoucherHistoryTab } from "../components/VoucherHistoryTab";
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
 import { generateDispatchSlipPDF, generateProcessorBillPDF } from "../lib/documentGenerators";
 import { getSortedStages } from '../lib/processing/stageProgress';
-import { formatCurrency } from "../lib/utils";
+import { formatCurrency, formatNumber } from "../lib/utils";
 import { ErrorManagement } from '../lib/validation';
 import { ProcessingService } from '../services/ProcessingService';
 import { useERPStore } from "../store/useERPStore";
@@ -33,26 +30,20 @@ export function JobWork() {
   const [activeTab, setActiveTab] = useState<JobWorkTab>("Board");
 
   // ── Modal state ──────────────────────────────────────────────────────────
-  const [isSendOpen, setIsSendOpen] = useState(false);
-  const [editSendId, setEditSendId] = useState<string | undefined>();
-  const [isReceiveOpen, setIsReceiveOpen] = useState(false);
-  const [editReceiveId, setEditReceiveId] = useState<string | undefined>();
-  const [isBillOpen, setIsBillOpen] = useState(false);
-  const [editBillId, setEditBillId] = useState<string | undefined>();
   const [detailSendId, setDetailSendId] = useState<string | null>(null);
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; type: 'send' | 'receipt' | 'bill'; id: string; no: string }>({ isOpen: false, type: 'send', id: '', no: '' });
   const [lossModal, setLossModal] = useState<{ isOpen: boolean; sendId: string; dispatchNo: string; pending: number }>({ isOpen: false, sendId: '', dispatchNo: '', pending: 0 });
   const [lossQty, setLossQty] = useState('');
 
   // Deep links from Quick Entry / command surfaces: ?new=send|receive|bill
-  // opens the matching create form directly and switches to its records tab;
-  // the param is consumed by the tab writer below.
+  // navigates to the dedicated create page instead of opening a modal.
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const newAction = searchParams.get('new');
   useEffect(() => {
-    if (newAction === 'send') { setActiveTab('Send'); setEditSendId(undefined); setIsSendOpen(true); }
-    else if (newAction === 'receive') { setActiveTab('Receive'); setEditReceiveId(undefined); setIsReceiveOpen(true); }
-    else if (newAction === 'bill') { setActiveTab('Billing'); setEditBillId(undefined); setIsBillOpen(true); }
+    if (newAction === 'send') navigate('/processing/send', { replace: true });
+    else if (newAction === 'receive') navigate('/processing/receive', { replace: true });
+    else if (newAction === 'bill') navigate('/processing/generate-bill', { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newAction]);
 
@@ -72,12 +63,12 @@ export function JobWork() {
   // WIP-by-stage derivation for the header strip (same basis as the dashboard).
   const stageWip = useMemo(() => sortedStages
     .filter(s => !s.isFinalStage)
-    .map(stage => {
-      const pcs = InventoryCalculationService.getStageWIP(stage.id, processingSends, processingReceipts);
-      const totalWip = materials.reduce((sum, m) => sum + (m.atProcessorPcs || 0), 0);
-      const value = totalWip > 0 ? pcs * (totalWip > 0 ? 1 : 0) : 0;
-      return { stageId: stage.id, name: stage.name, sequence: stage.sequence, pcs, value };
-    }), [sortedStages, processingSends, processingReceipts, materials]);
+    .map(stage => ({
+      stageId: stage.id,
+      name: stage.name,
+      sequence: stage.sequence,
+      pcs: InventoryCalculationService.getStageWIP(stage.id, processingSends, processingReceipts),
+    })), [sortedStages, processingSends, processingReceipts]);
   const totalWipPcs = materials.reduce((sum, m) => sum + (m.atProcessorPcs || 0), 0);
 
   // ── Enriched rows for tables ─────────────────────────────────────────────
@@ -166,7 +157,7 @@ export function JobWork() {
           <Printer className="h-4 w-4" />
         </button>
         <button onClick={() => setDetailSendId(item.id)} aria-label="View dispatch details" className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Eye className="h-4 w-4" /></button>
-        <button onClick={() => { setEditSendId(item.id); setIsSendOpen(true); }} aria-label="Edit dispatch" className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Edit className="h-4 w-4" /></button>
+        <button onClick={() => navigate(`/processing/send/${item.id}`)} aria-label="Edit dispatch" className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Edit className="h-4 w-4" /></button>
         <button
           onClick={() => setLossModal({ isOpen: true, sendId: item.id, dispatchNo: item.dispatchNo || 'Unknown', pending: item.pendingPcs })}
           disabled={item.pendingPcs <= 0}
@@ -206,7 +197,7 @@ export function JobWork() {
   const receiptColumns: Column<typeof enrichedReceipts[0]>[] = [
     { key: 'actions', label: 'Actions', align: 'right', render: (item) => (
       <div className="flex justify-end gap-2">
-        <button onClick={() => { setEditReceiveId(item.id); setIsReceiveOpen(true); }} aria-label="Edit receipt" className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Edit className="h-4 w-4" /></button>
+        <button onClick={() => navigate(`/processing/receive/${item.id}`)} aria-label="Edit receipt" className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Edit className="h-4 w-4" /></button>
         <button
           onClick={() => setDeleteModal({ isOpen: true, type: 'receipt', id: item.id, no: item.receiveNo || 'Unknown' })}
           disabled={item.billedStatus === 'Billed'}
@@ -238,7 +229,7 @@ export function JobWork() {
         >
           <Printer className="h-4 w-4" />
         </button>
-        <button onClick={() => { setEditBillId(item.id); setIsBillOpen(true); }} aria-label="Edit processor bill" className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Edit className="h-4 w-4" /></button>
+        <button onClick={() => navigate(`/processing/generate-bill/${item.id}`)} aria-label="Edit processor bill" className="p-1.5 hover:bg-muted rounded-md text-muted-foreground transition-colors"><Edit className="h-4 w-4" /></button>
         <button onClick={() => setDeleteModal({ isOpen: true, type: 'bill', id: item.id, no: item.billNo || 'Unknown' })} aria-label="Delete processor bill" className="p-1.5 hover:bg-destructive/10 text-destructive rounded-md transition-colors"><Trash2 className="h-4 w-4" /></button>
       </div>
     ) },
@@ -252,9 +243,17 @@ export function JobWork() {
   ];
 
   const handleDelete = () => {
-    if (deleteModal.type === 'send') ProcessingService.deleteDispatch(deleteModal.id);
-    else if (deleteModal.type === 'receipt') ProcessingService.deleteReceive(deleteModal.id);
-    else if (deleteModal.type === 'bill') ProcessingService.deleteBill(deleteModal.id);
+    try {
+      if (deleteModal.type === 'send') ProcessingService.deleteDispatch(deleteModal.id);
+      else if (deleteModal.type === 'receipt') ProcessingService.deleteReceive(deleteModal.id);
+      else if (deleteModal.type === 'bill') ProcessingService.deleteBill(deleteModal.id);
+      toast.success(`${deleteModal.no} deleted.`);
+      setDeleteModal({ ...deleteModal, isOpen: false });
+    } catch (error: any) {
+      // Guarded deletes surface the reason here — a silent no-op previously
+      // left users staring at a canonical modal that "did nothing".
+      toast.error(error?.message || 'Could not delete.');
+    }
   };
 
   const handleRecordLoss = () => {
@@ -279,49 +278,129 @@ export function JobWork() {
   ];
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-foreground">Processing (Job Work)</h2>
-          <p className="text-sm text-muted-foreground mt-1">Send raw materials through each processing stage and receive finished goods.</p>
+    <div className="min-h-[calc(100vh-4rem)] animate-in fade-in duration-500 pb-10">
+      {/* ── Page header ── */}
+      <header className="sticky top-16 z-20 -mx-4 border-b border-border/60 bg-background/85 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">Processing</p>
+            <h1 className="text-lg font-semibold leading-tight text-foreground">Job Work</h1>
+            <p className="mt-0.5 text-xs text-muted-foreground">Send raw material through each processing stage and receive finished goods.</p>
+          </div>
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => navigate('/processing/generate-bill')}
+              className="inline-flex h-10 items-center gap-2 rounded-lg border border-amber-500/70 bg-amber-500 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-amber-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-1"
+            >
+              <CheckCircle2 className="h-4 w-4" /> Generate Bill
+            </button>
+            <button
+              onClick={() => navigate('/processing/receive')}
+              className="inline-flex h-10 items-center gap-2 rounded-lg border border-emerald-600/70 bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-1"
+            >
+              <ArrowLeft className="h-4 w-4" /> Receive
+            </button>
+            <button
+              onClick={() => navigate('/processing/send')}
+              className="inline-flex h-10 items-center gap-2 rounded-lg border border-primary bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+            >
+              <ArrowRight className="h-4 w-4" /> Send
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => { setEditBillId(undefined); setIsBillOpen(true); }}
-            className="inline-flex items-center gap-2 rounded-lg bg-card border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted/40"
-          >
-            <CheckCircle2 className="h-4 w-4" /> Generate Bill
-          </button>
-          <button
-            onClick={() => { setEditReceiveId(undefined); setIsReceiveOpen(true); }}
-            className="inline-flex items-center gap-2 rounded-lg bg-card border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted/40"
-          >
-            <ArrowLeft className="h-4 w-4" /> Receive
-          </button>
-          <button
-            onClick={() => { setEditSendId(undefined); setIsSendOpen(true); }}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            <ArrowRight className="h-4 w-4" /> Send
-          </button>
+      </header>
+
+      <div className="mx-auto max-w-7xl space-y-5 py-5">
+
+      {/* WIP-by-stage strip — the chain at a glance, enhanced to the current design language */}
+      <section className="overflow-hidden rounded-xl border border-border bg-card">
+        <div className="flex items-center justify-between gap-4 border-b border-border/60 px-4 py-3 sm:px-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40 text-muted-foreground">
+              <Factory className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold text-foreground">Work in Progress by Stage</h2>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                {formatNumber(totalWipPcs)} PCS in the chain ·{' '}
+                {stageWip.filter(s => (s.pcs || 0) > 0).length} active stage{stageWip.filter(s => (s.pcs || 0) > 0).length === 1 ? '' : 's'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {(() => {
+              const active = stageWip.filter(s => (s.pcs || 0) > 0).length;
+              return active > 0 ? (
+                <span className="hidden items-center rounded-md border border-warning/40 bg-warning/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-warning sm:inline-flex">
+                  {active} active stage{active === 1 ? '' : 's'}
+                </span>
+              ) : null;
+            })()}
+          </div>
         </div>
-      </div>
+        <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3 sm:gap-3 sm:p-4 lg:grid-cols-6">
+          {sortedStages.map(stage => {
+            const wip = stageWip.find(w => w.stageId === stage.id);
+            const pcs = wip?.pcs || 0;
+            const active = pcs > 0;
+            return (
+              <div
+                key={stage.id}
+                className={`flex min-h-[104px] flex-col justify-between rounded-xl border p-3 transition-colors sm:min-h-[112px] ${
+                  active ? 'border-warning/40 bg-warning/[0.06]' : 'border-border/50 bg-muted/20'
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span
+                    aria-hidden="true"
+                    className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[10px] font-bold tabular-nums ${
+                      stage.isFinalStage ? 'bg-violet-500/20 text-violet-600 dark:text-violet-300' : 'bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    {stage.sequence}
+                  </span>
+                  <span className="min-w-0 truncate text-[11px] font-medium text-muted-foreground" title={stage.name}>
+                    {stage.name}{stage.isFinalStage ? ' · Final' : ''}
+                  </span>
+                </div>
+                <div className="mt-2">
+                  <div className={`text-xl font-bold tabular-nums tracking-tight ${active ? 'text-warning' : 'text-foreground/30'}`}>
+                    {formatNumber(pcs)}<span className="ml-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">PCS</span>
+                  </div>
+                  {totalWipPcs > 0 && (
+                    <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted" role="presentation">
+                      <div
+                        className={`h-full rounded-full ${active ? 'bg-warning/70' : 'bg-foreground/10'}`}
+                        style={{ width: `${Math.min(100, ((pcs || 0) / totalWipPcs) * 100)}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
-      {/* WIP-by-stage strip (always visible, multi-stage at a glance) */}
-      {activeTab !== 'Board' && (
-        <WipStageStrip stages={sortedStages} stageWip={stageWip} totalPcs={totalWipPcs} totalValue={0} />
-      )}
-
-      <div className="flex gap-6 border-b border-border overflow-x-auto">
-        {tabs.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setActiveTab(t.id)}
-            className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap ${activeTab === t.id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground/80"}`}
-          >
-            {t.label}
-          </button>
-        ))}
+      {/* Section tabs — segmented control, consistent with the rest of the redesign */}
+      <div className="overflow-x-auto">
+        <div role="tablist" aria-label="Processing views" className="inline-flex min-w-max gap-1 rounded-xl border border-border/60 bg-muted p-1">
+          {tabs.map(t => (
+            <button
+              key={t.id}
+              role="tab"
+              aria-selected={activeTab === t.id}
+              onClick={() => setActiveTab(t.id)}
+              className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                activeTab === t.id
+                  ? 'bg-card text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Record totals strip — shown on the three record tabs (WIP Board has its own stage strip) */}
@@ -348,17 +427,14 @@ export function JobWork() {
       )}
 
       {activeTab === "Board" ? (
-        <div className="space-y-5">
-          <WipStageStrip stages={sortedStages} stageWip={stageWip} totalPcs={totalWipPcs} totalValue={0} />
-          <WipBoard
-            stages={sortedStages}
-            batches={batches || []}
-            materials={materials}
-            processors={processors}
-            sends={processingSends}
-            onOpenDispatch={setDetailSendId}
-          />
-        </div>
+        <WipBoard
+          stages={sortedStages}
+          batches={batches || []}
+          materials={materials}
+          processors={processors}
+          sends={processingSends}
+          onOpenDispatch={setDetailSendId}
+        />
       ) : activeTab === "Send" ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
@@ -446,23 +522,6 @@ export function JobWork() {
         <StageManagerPanel />
       )}
 
-      {/* Forms (extracted components — each owns its QuickAdd modals) */}
-      <SendToProcessorForm
-        isOpen={isSendOpen}
-        onClose={() => setIsSendOpen(false)}
-        editSendId={editSendId}
-      />
-      <ReceiveFromProcessorForm
-        isOpen={isReceiveOpen}
-        onClose={() => setIsReceiveOpen(false)}
-        editReceiveId={editReceiveId}
-      />
-      <CreateProcessorBillForm
-        isOpen={isBillOpen}
-        onClose={() => setIsBillOpen(false)}
-        editBillId={editBillId}
-      />
-
       {/* Dispatch detail drill-down */}
       <DispatchDetailModal
         send={detailSend}
@@ -503,6 +562,7 @@ export function JobWork() {
           <button type="submit" className="w-full rounded-xl bg-destructive p-3 text-destructive-foreground font-semibold">Record Loss</button>
         </form>
       </PageModal>
+      </div>
     </div>
   );
 }

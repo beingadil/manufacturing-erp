@@ -24,6 +24,9 @@ import { CashReceiptVoucher } from './pages/finance/CashReceiptVoucher';
 import { JournalVoucher } from './pages/finance/JournalVoucher';
 import { JobWork } from './pages/JobWork';
 import { Ledgers } from './pages/Ledgers';
+import BillFormPage from './pages/processing/BillFormPage';
+import SendFormPage from './pages/processing/SendFormPage';
+import ReceiveFormPage from './pages/processing/ReceiveFormPage';
 import { Login } from './pages/Login';
 import { Manufacturing } from './pages/Manufacturing';
 import { MaterialDetail } from './pages/MaterialDetail';
@@ -137,6 +140,9 @@ export default function App() {
           <Route path="purchases/new" element={<RouteGuard requireModule="Purchases" requireAction="View"><PurchaseFormPage /></RouteGuard>} />
           <Route path="purchases/edit/:id" element={<RouteGuard requireModule="Purchases" requireAction="View"><PurchaseFormPage /></RouteGuard>} />
           <Route path="processing" element={<RouteGuard requireModule="Processing" requireAction="View"><JobWork /></RouteGuard>} />
+          <Route path="processing/send/:id?" element={<RouteGuard requireModule="Processing" requireAction="View"><SendFormPage /></RouteGuard>} />
+          <Route path="processing/receive/:id?" element={<RouteGuard requireModule="Processing" requireAction="View"><ReceiveFormPage /></RouteGuard>} />
+          <Route path="processing/generate-bill/:id?" element={<RouteGuard requireModule="Processing" requireAction="View"><BillFormPage /></RouteGuard>} />
           <Route path="manufacturing" element={<RouteGuard requireModule="Manufacturing" requireAction="View"><Manufacturing /></RouteGuard>} />
           <Route path="sales" element={<RouteGuard requireModule="Sales" requireAction="View"><Sales /></RouteGuard>} />
           <Route path="sales/new" element={<RouteGuard requireModule="Sales" requireAction="View"><SalesFormPage /></RouteGuard>} />
