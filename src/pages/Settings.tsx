@@ -963,12 +963,14 @@ function AboutUpdatesTab() {
     }
   }, [isElectron]);
 
+  const [showAllChanges, setShowAllChanges] = useState(false);
   const brandingLogo = (typeof logo === 'string' && logo.trim().length > 0) ? logo : '';
   const releaseDateLabel = new Date(`${RELEASE_DATE}T00:00:00`).toLocaleDateString('en-GB', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
   });
+  const visibleChangelog = showAllChanges ? CHANGELOG : CHANGELOG.slice(0, 1);
 
   return (
     <SettingsCard title="About & Updates" subtitle="Version information and automatic update management." icon={Info}>
@@ -1007,12 +1009,24 @@ function AboutUpdatesTab() {
         </div>
 
         {/* ── What's New — Changelog ── */}
-        <div className="space-y-4">
-          <h4 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
-            <Sparkles className="h-4 w-4" /> What's New
-          </h4>
-          <div className="rounded-xl border border-border/60 bg-muted/10 overflow-hidden">
-            {CHANGELOG.map((entry, idx) => (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h4 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+              <Sparkles className="h-4 w-4" /> What's New
+            </h4>
+            <button
+              type="button"
+              onClick={() => setShowAllChanges(v => !v)}
+              aria-expanded={showAllChanges}
+              aria-controls="changelog-list"
+              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {showAllChanges ? 'Hide all' : `Show all ${CHANGELOG.length}`}
+              <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-200', showAllChanges && 'rotate-180')} aria-hidden="true" />
+            </button>
+          </div>
+          <div id="changelog-list" className="rounded-xl border border-border/60 bg-muted/10 overflow-hidden">
+            {visibleChangelog.map((entry, idx) => (
               <ChangelogAccordionItem
                 key={entry.version}
                 entry={entry}
@@ -1170,7 +1184,7 @@ function ChangelogAccordionItem({
       >
         <div className="flex items-center gap-3 min-w-0">
           <div className={cn(
-            "flex-shrink-0 h-8 w-8 rounded-lg flex items-center justify-center text-xs font-bold",
+            "flex-shrink-0 h-8 min-w-16 px-2 rounded-lg flex items-center justify-center text-[11px] font-bold tabular-nums whitespace-nowrap",
             isCurrent
               ? "bg-primary text-primary-foreground"
               : "bg-muted text-muted-foreground border border-border"
