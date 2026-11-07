@@ -176,6 +176,9 @@ export function migrateERPState(state: any): any {
   const receipts = Array.isArray(state.processingReceipts) ? state.processingReceipts : [];
   const salesArr = Array.isArray(state.sales) ? state.sales : [];
   const products = Array.isArray(state.products) ? state.products : [];
+  const manufacturingOrders = Array.isArray(state.manufacturingOrders) ? state.manufacturingOrders : [];
+  const finishedGoodsLots = Array.isArray(state.finishedGoodsLots) ? state.finishedGoodsLots : [];
+  const processingLosses = Array.isArray(state.processingLosses) ? state.processingLosses : [];
 
   let migratedBatches = batches;
   if (batches.length > 0) {
@@ -200,7 +203,8 @@ export function migrateERPState(state: any): any {
           products,
           undefined,
           processingStages,
-          mat ? { processingPath: mat.processingPath, fixedStageId: mat.fixedStageId, allowedStageIds: mat.allowedStageIds } : undefined
+          mat ? { processingPath: mat.processingPath, fixedStageId: mat.fixedStageId, allowedStageIds: mat.allowedStageIds } : undefined,
+          manufacturingOrders
         );
       } catch (e: any) {
         // One material whose history cannot be safely replayed (stage-chain
@@ -221,6 +225,30 @@ export function migrateERPState(state: any): any {
       return rest;
     });
   }
+
+  // 5a-iii. Stamp the processing charges that predate the v4 capitalization
+  //        policy. The trail keeps them in `processingCost`; the historical
+  //        ledger expensed them instead. The one-time reclassification needs
+  //        that legacy share separately from v4 receipt accruals, so freeze it
+  //        once and never let later v4 receipts leak into it.
+  const accruedByBatch = new Map<string, number>();
+  for (const r of receipts as any[]) {
+    if (!(r.accruedVoucherId || (r.accruedProcessingCost || 0) > 0)) continue;
+    const send = (sends as any[]).find((s: any) => s.id === r.sendId);
+    const batchId = send?.batchId;
+    if (!batchId) continue;
+    const amount = Number(r.accruedProcessingCost ?? r.billAmount) || 0;
+    accruedByBatch.set(batchId, (accruedByBatch.get(batchId) || 0) + amount);
+  }
+  migratedBatches = migratedBatches.map((b: any) => {
+    if (b.legacyProcessingCost !== undefined) return b;
+    const processing = Number(b.processingCost) || 0;
+    const capitalised = accruedByBatch.get(b.id) || 0;
+    return {
+      ...b,
+      legacyProcessingCost: Math.max(0, Math.round((processing - capitalised + Number.EPSILON) * 100) / 100),
+    };
+  });
 
   // 5b. Re-derive material counters from the rebuilt batch trail — the trail
   //     is the single source of truth (pipeline semantics: atProcessorPcs
@@ -274,6 +302,69 @@ export function migrateERPState(state: any): any {
     ];
   }
 
+  // 5e. Manufacturing v4 (data contract 4): ensure the system accounts the
+  //     new postings depend on, and mark every product as manufactured. The
+  //     schema stamp is what switches the store's sale/receipt behaviour on —
+  //     un-migrated data (and legacy test fixtures) keep the old paths.
+  const priorSchemaVersion = Number(state.stateSchemaVersion) || 0;
+
+  let processingExpenseSubtype = migratedSubtypes.find(s => s.name === 'Processing Expense');
+  if (!processingExpenseSubtype) {
+    processingExpenseSubtype = {
+      id: uuidv4(),
+      name: 'Processing Expense',
+      type: 'Expenses',
+      isSystem: true,
+    } as AccountSubtype;
+    migratedSubtypes.push(processingExpenseSubtype);
+  }
+
+  let apSubtype = migratedSubtypes.find(s => s.name === 'Accounts Payable');
+  if (!apSubtype) {
+    apSubtype = {
+      id: uuidv4(),
+      name: 'Accounts Payable',
+      type: 'Liabilities',
+      isSystem: true,
+    } as AccountSubtype;
+    migratedSubtypes.push(apSubtype);
+  }
+
+  const ensureSystemAccount = (
+    name: string,
+    type: Account['type'],
+    subtypeId: string,
+    parentId?: string,
+  ): Account => {
+    const found = migratedAccountsInner.find(a => a.name === name && a.subtypeId === subtypeId);
+    if (found) return found;
+    const account: Account = {
+      id: uuidv4(),
+      code: DocumentNumberingService.generateAccountCode(type, typeCount(type)),
+      name,
+      type,
+      subtypeId,
+      openingBalance: 0,
+      openingBalanceType: type === 'Assets' || type === 'Expenses' ? 'Debit' : 'Credit',
+      status: 'Active',
+      isSystem: true,
+      parentId,
+    };
+    migratedAccountsInner.push(account);
+    return account;
+  };
+
+  ensureSystemAccount('Accrued Expenses', 'Liabilities', apSubtype.id, apControlId);
+  ensureSystemAccount('Processing Loss', 'Expenses', processingExpenseSubtype.id);
+
+  const migratedProducts = priorSchemaVersion < 4
+    ? products.map((p: any) => ({
+        ...p,
+        stockModel: p.stockModel ?? 'manufactured',
+        bomVersion: p.bomVersion ?? 1,
+      }))
+    : products;
+
   // 6. Drop legacy parallel trail
   const { ledgerEntries, ...rest } = state;
 
@@ -284,6 +375,11 @@ export function migrateERPState(state: any): any {
     vouchers,
     batches: migratedBatches,
     materials: normalizedMaterials,
+    products: migratedProducts,
+    manufacturingOrders,
+    finishedGoodsLots,
+    processingLosses,
+    stateSchemaVersion: Math.max(priorSchemaVersion, 4),
     processingStages,
     customers: migratedCustomers,
     suppliers: migratedSuppliers,

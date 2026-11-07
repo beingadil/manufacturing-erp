@@ -1,18 +1,24 @@
 /**
  * Sale Entry — full-page form (routes /sales/new and /sales/edit/:id).
  *
- * One line = one product. Selling deducts finished stock for a single-material
- * product, or every component in the recipe for an assembled product; the
- * breakdown is shown but never editable — the product record is the authority.
+ * One line = one product. In the manufacturing data contract every sale is
+ * fulfilled from finished-goods lots produced by manufacturing orders; the
+ * lot stock is shown per line and FIFO allocation runs when the invoice saves.
+ * Un-migrated (pre-v4) data keeps the legacy material-stock behaviour.
  */
 import { ArrowLeft, Check, Plus, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { QuickAddCustomer, } from '../components/QuickAddModals';
+import { QuickAddCustomer, QuickAddProduct } from '../components/QuickAddModals';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { DatePicker } from '../components/ui/date-picker';
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
+import {
+  isManufacturingEnabled,
+  lotAverageCost,
+  lotStockForProduct,
+} from '../lib/business/ManufacturingService';
 import {
   breakdownForSale,
   isAssembled,
@@ -41,6 +47,7 @@ const label = 'mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.16em
 const headCell = 'text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60';
 
 const fmtNum = (n: number) => n.toLocaleString('en-PK');
+const round3 = (n: number) => Math.round(n * 1000) / 1000;
 
 export default function SalesFormPage() {
   const { id: editId } = useParams<{ id?: string }>();
@@ -49,7 +56,9 @@ export default function SalesFormPage() {
   const isEdit = Boolean(editId);
   const deepNew = searchParams.get('new') === '1';
 
-  const { sales, products, materials, customers, batches } = useERPStore();
+  const { sales, products, materials, customers, batches, finishedGoodsLots, stateSchemaVersion } =
+    useERPStore();
+  const v4 = isManufacturingEnabled({ stateSchemaVersion });
 
   const [customerId, setCustomerId] = useState('');
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -95,35 +104,61 @@ export default function SalesFormPage() {
   }
 
   // ── Line-level derived values ──
-  const lineView = useMemo(
-    () =>
-      lines.map(l => {
-        const p = products.find(prod => prod.id === l.productId);
-        const pcs = Number(l.pcs) || 0;
-        const price = Number(l.price) || 0;
-        const amount = pcs * price;
-        return { p: p ?? null, pcs, price, amount };
-      }),
-    [lines, products],
-  );
+  // In v4 `available` is the finished-goods lot stock BEFORE this line runs;
+  // when the same product appears on two lines, the first line reserves its
+  // quantity so the second line can never promise the same pieces twice.
+  const lineView = useMemo(() => {
+    const remaining = new Map<string, number>();
+    const existing = isEdit && editId ? sales.find(s => s.id === editId) : undefined;
+    return lines.map(l => {
+      const p = products.find(prod => prod.id === l.productId) ?? null;
+      const pcs = Number(l.pcs) || 0;
+      const price = Number(l.price) || 0;
+      const amount = pcs * price;
+      let available = 0;
+      let shortage = 0;
+      let avgCost = 0;
 
-  // ── Stock guard for an assembled product: each sale consumes every part ──
+      if (v4 && p) {
+        if (!remaining.has(p.id)) {
+          let base = lotStockForProduct(finishedGoodsLots ?? [], p.id);
+          // An edit returns its own allocation before re-drawing, so the
+          // quantity this sale already holds is available again.
+          if (existing && existing.productId === p.id && existing.stockModelAtSale === 'manufactured') {
+            base += (existing.lotAllocations ?? []).reduce((sum, a) => sum + a.pcs, 0);
+          }
+          remaining.set(p.id, round3(base));
+        }
+        available = remaining.get(p.id) ?? 0;
+        avgCost = lotAverageCost(finishedGoodsLots ?? [], p.id);
+        shortage = round3(Math.max(0, pcs - available));
+        remaining.set(p.id, round3(Math.max(0, available - pcs)));
+      }
+
+      return { p, pcs, price, amount, available, avgCost, shortage };
+    });
+  }, [lines, products, v4, finishedGoodsLots, isEdit, editId, sales]);
+
+  // ── Legacy stock guard for an assembled product (pre-v4 data only) ──
   const componentAvailability = useMemo(
     () =>
-      materials.map(m => ({
-        materialId: m.id,
-        availablePcs: InventoryCalculationService.calculateSaleStock(m.id, batches),
-        unitCost: InventoryCalculationService.getWeightedAverageCostPerPiece(m.id, batches),
-      })),
-    [materials, batches],
+      v4
+        ? []
+        : materials.map(m => ({
+            materialId: m.id,
+            availablePcs: InventoryCalculationService.calculateSaleStock(m.id, batches),
+            unitCost: InventoryCalculationService.getWeightedAverageCostPerPiece(m.id, batches),
+          })),
+    [materials, batches, v4],
   );
 
   const breakdown = useMemo(() => {
+    if (v4) return null;
     const p = lineView[0]?.p;
     const pcs = Number(lines[0]?.pcs) || 0;
     if (!p || !isAssembled(p) || !(pcs > 0)) return null;
     return breakdownForSale(p, pcs, componentAvailability);
-  }, [lineView, lines, componentAvailability]);
+  }, [v4, lineView, lines, componentAvailability]);
 
   const shortfall = breakdown
     ? shortfallMessage(
@@ -136,6 +171,13 @@ export default function SalesFormPage() {
     return runningLowAfterSale(breakdown, 100);
   }, [breakdown, shortfall]);
 
+  const lotShortfall = useMemo(() => {
+    if (!v4) return null;
+    const hit = lineView.find(v => v.shortage > 0);
+    if (!hit?.p) return null;
+    return `Not enough finished stock for ${hit.p.name}: need ${fmtNum(hit.pcs)} PCS but only ${fmtNum(hit.available)} are on hand. Manufacture more before selling it.`;
+  }, [v4, lineView]);
+
   const currentProductId = lines[0]?.productId ?? '';
   const originalProductId = originalProductIdRef.current;
   const _productChanged = isEdit && originalProductId !== null && currentProductId !== originalProductId;
@@ -143,10 +185,18 @@ export default function SalesFormPage() {
   const summary = useMemo(() => {
     const pcs = lineView.reduce((s, v) => s + v.pcs, 0);
     const amount = lineView.reduce((s, v) => s + v.amount, 0);
-    return { pcs, amount };
-  }, [lineView]);
+    const cogs = v4
+      ? lineView.reduce((s, v) => s + v.avgCost * v.pcs, 0)
+      : 0;
+    return { pcs, amount, cogs, margin: amount - cogs };
+  }, [lineView, v4]);
 
   const customer = customers.find(c => c.id === customerId);
+
+  const legacyStockForProduct = (productId: string) => {
+    const product = products.find(p => p.id === productId);
+    return materials.find(m => m.id === product?.materialId)?.processedStockPcs || 0;
+  };
 
   const setLine = (index: number, patch: Partial<Line>) =>
     setLines(prev => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)));
@@ -155,7 +205,7 @@ export default function SalesFormPage() {
     setLine(index, { productId: id });
 
   /** After the inline product form saves: fill the first empty line, or add one. */
-  const _handleNewProduct = (id: string) => {
+  const handleNewProduct = (id: string) => {
     const patch: Partial<Line> = { productId: id };
     const emptyIndex = lines.findIndex(l => !l.productId);
     if (emptyIndex >= 0) setLine(emptyIndex, patch);
@@ -169,42 +219,67 @@ export default function SalesFormPage() {
 
   const lineIsReady = (l: Line) => {
     if (!l.productId || !(Number(l.price) > 0)) return false;
-    const pcs = Number(l.pcs) > 0;
-    return pcs;
+    return Number(l.pcs) > 0;
   };
+  const lineHasInput = (l: Line) => Boolean(l.productId || l.pcs.trim() || l.price.trim());
 
   const readyCount = lines.filter(lineIsReady).length;
-  const canSave = Boolean(customerId) && readyCount > 0 && !shortfall;
+  const incompleteCount = lines.filter(l => lineHasInput(l) && !lineIsReady(l)).length;
+  const canSave =
+    Boolean(customerId) && readyCount > 0 && incompleteCount === 0 && !shortfall && !lotShortfall;
 
   const handleSave = () => {
-    if (!canSave) {
-      setFormError(
-        shortfall
-          ? `Not enough stock — ${shortfall}`
-          : 'Choose a customer and complete at least one line before saving.',
-      );
+    if (incompleteCount > 0) {
+      setFormError('Finish or remove every incomplete line before saving.');
+      return;
+    }
+    if (!customerId || readyCount === 0) {
+      setFormError('Choose a customer and complete at least one line before saving.');
+      return;
+    }
+    if (lotShortfall) {
+      setFormError(lotShortfall);
+      return;
+    }
+    if (shortfall) {
+      setFormError(`Not enough stock — ${shortfall}`);
       return;
     }
     setFormError(null);
+    const readyLines = lines.filter(lineIsReady);
     try {
-      const l = lines[0];
-      const pcs = Number(l.pcs) || 0;
-      const price = Number(l.price) || 0;
       if (isEdit && editId) {
+        const l = readyLines[0];
         SalesService.update(editId, {
           productId: l.productId,
           customerId,
-          pcsSold: pcs,
-          pricePerPiece: price,
+          pcsSold: Math.round(Number(l.pcs)),
+          pricePerPiece: Number(l.price),
           date,
         });
         toast.success('Sale updated successfully.');
+      } else if (v4) {
+        // One invoice number, one sale row (and voucher) per line — every line
+        // is saved, unlike the old form which silently kept only lines[0].
+        SalesService.createGroup({
+          customerId,
+          date,
+          lines: readyLines.map(l => ({
+            productId: l.productId,
+            pcsSold: Math.round(Number(l.pcs)),
+            pricePerPiece: Number(l.price),
+          })),
+        });
+        toast.success(
+          `Sale saved — ${readyLines.length} line${readyLines.length === 1 ? '' : 's'}, stock and ledger updated.`,
+        );
       } else {
+        const l = readyLines[0];
         SalesService.create({
           productId: l.productId,
           customerId,
-          pcsSold: pcs,
-          pricePerPiece: price,
+          pcsSold: Math.round(Number(l.pcs)),
+          pricePerPiece: Number(l.price),
           date,
         });
         toast.success('Sale saved — stock and ledger updated.');
@@ -331,14 +406,16 @@ export default function SalesFormPage() {
                   <Plus className="h-4 w-4" />
                   Add product
                 </button>
-                <button
-                  type="button"
-                  onClick={addLine}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add line
-                </button>
+                {!isEdit && (
+                  <button
+                    type="button"
+                    onClick={addLine}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add line
+                  </button>
+                )}
               </div>
             </div>
 
@@ -364,11 +441,17 @@ export default function SalesFormPage() {
                       <label className={cn(label, 'lg:hidden')}>Product</label>
                       <SearchableSelect
                         options={products.map(p => {
+                          if (v4) {
+                            return {
+                              id: p.id,
+                              label: p.name,
+                              secondaryLabel: `In stock: ${fmtNum(lotStockForProduct(finishedGoodsLots ?? [], p.id))} PCS`,
+                            };
+                          }
                           if (isAssembled(p)) {
                             return { id: p.id, label: p.name, secondaryLabel: `Made from ${p.components?.length ?? 0} materials` };
                           }
-                          const m = materials.find(mat => mat.id === p.materialId);
-                          return { id: p.id, label: p.name, secondaryLabel: `Available: ${m?.processedStockPcs || 0} PCS` };
+                          return { id: p.id, label: p.name, secondaryLabel: `Available: ${legacyStockForProduct(p.id)} PCS` };
                         })}
                         value={l.productId}
                         onChange={val => handleProductChange(i, val)}
@@ -400,8 +483,17 @@ export default function SalesFormPage() {
                           PCS
                         </span>
                       </div>
-                      <p className="mt-1.5 text-right text-[10px] tabular-nums text-muted-foreground/70">
-                        {v.pcs} PCS
+                      <p
+                        className={cn(
+                          'mt-1.5 text-right text-[10px] tabular-nums',
+                          v4 && v.shortage > 0 ? 'font-semibold text-destructive' : 'text-muted-foreground/70',
+                        )}
+                      >
+                        {v4
+                          ? v.shortage > 0
+                            ? `Short ${fmtNum(v.shortage)} PCS`
+                            : `${fmtNum(v.available)} in stock`
+                          : `${v.pcs} PCS`}
                       </p>
                     </div>
 
@@ -442,7 +534,7 @@ export default function SalesFormPage() {
                       <button
                         type="button"
                         onClick={() => removeLine(i)}
-                        disabled={lines.length === 1}
+                        disabled={lines.length === 1 || isEdit}
                         className="inline-flex h-[46px] w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:pointer-events-none disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         aria-label={`Remove line ${i + 1}`}
                       >
@@ -461,8 +553,59 @@ export default function SalesFormPage() {
             </div>
           )}
 
-          {/* Assembled-product breakdown */}
-          {breakdown && (
+          {/* Manufacturing fulfilment (v4) */}
+          {v4 && lineView.some(v => v.p) && (
+            <div className="overflow-hidden rounded-xl border border-border bg-card">
+              <div className="border-b border-border/60 px-4 py-3">
+                <h2 className="text-sm font-semibold text-foreground">Finished-goods fulfilment</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Every line is sold from finished-goods lots built by manufacturing orders. The ledger uses
+                  each lot's own cost; the figures below are an estimate until the invoice saves.
+                </p>
+              </div>
+              <table className="w-full text-sm">
+                <thead className="bg-muted/30 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60">
+                  <tr>
+                    <th className="px-4 py-2 text-left font-semibold">Product</th>
+                    <th className="px-2 py-2 text-right font-semibold">Selling</th>
+                    <th className="px-2 py-2 text-right font-semibold">In stock</th>
+                    <th className="px-2 py-2 text-right font-semibold">Avg lot cost</th>
+                    <th className="px-4 py-2 text-right font-semibold">Est. COGS</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/50">
+                  {lineView.filter(v => v.p && v.pcs > 0).map((v, i) => (
+                    <tr key={`${v.p!.id}-${i}`}>
+                      <td className="px-4 py-2 font-medium text-foreground">{v.p!.name}</td>
+                      <td className="px-2 py-2 text-right tabular-nums text-muted-foreground">{fmtNum(v.pcs)} PCS</td>
+                      <td
+                        className={cn(
+                          'px-2 py-2 text-right tabular-nums',
+                          v.shortage > 0 ? 'font-semibold text-destructive' : 'text-muted-foreground',
+                        )}
+                      >
+                        {fmtNum(v.available)}
+                      </td>
+                      <td className="px-2 py-2 text-right tabular-nums text-muted-foreground">
+                        {formatCurrency(v.avgCost)}
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums font-medium text-foreground">
+                        {formatCurrency(v.avgCost * v.pcs)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {v4 && lineView.some(v => v.shortage > 0) && (
+                <p className="border-t border-destructive/30 bg-destructive/5 px-4 py-2 text-xs font-medium text-destructive">
+                  {lotShortfall}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Legacy assembled-product breakdown (pre-v4 data only) */}
+          {!v4 && breakdown && (
             <div className={`rounded-xl border px-4 py-3 ${shortfall ? 'border-destructive/40 bg-destructive/5' : 'border-border bg-muted/30'}`}>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-semibold text-foreground">
@@ -559,6 +702,25 @@ export default function SalesFormPage() {
                 <dt className="text-xs text-muted-foreground">PCS</dt>
                 <dd className="text-sm font-medium tabular-nums text-foreground">{fmtNum(summary.pcs)}</dd>
               </div>
+              {v4 && (
+                <>
+                  <div className="flex items-center justify-between gap-4 py-2.5">
+                    <dt className="text-xs text-muted-foreground">Est. COGS</dt>
+                    <dd className="text-sm font-medium tabular-nums text-foreground">{formatCurrency(summary.cogs)}</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 py-2.5">
+                    <dt className="text-xs text-muted-foreground">Est. margin</dt>
+                    <dd
+                      className={cn(
+                        'text-sm font-medium tabular-nums',
+                        summary.margin < 0 ? 'text-destructive' : 'text-foreground',
+                      )}
+                    >
+                      {formatCurrency(summary.margin)}
+                    </dd>
+                  </div>
+                </>
+              )}
               <div className="flex items-baseline justify-between gap-4 py-3.5">
                 <dt className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Total</dt>
                 <dd className={cn(adaptiveAmountClass(formatCurrency(summary.amount), 'md'), 'font-bold tabular-nums text-foreground')}>
@@ -567,7 +729,9 @@ export default function SalesFormPage() {
               </div>
             </dl>
             <p className="mt-3 px-1 text-xs leading-relaxed text-muted-foreground">
-              Selling deducts finished stock (single-material) or every component (assembled) immediately.
+              {v4
+                ? 'Sales are fulfilled FIFO from finished-goods lots created by manufacturing orders. Raw materials are never sold directly.'
+                : 'Selling deducts finished stock (single-material) or every component (assembled) immediately.'}
             </p>
           </div>
         </aside>
@@ -577,7 +741,11 @@ export default function SalesFormPage() {
       <div className="sticky bottom-0 z-20 -mx-4 border-t border-border/60 bg-background/90 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">
-            {readyCount === 0 ? 'No complete lines yet.' : `${readyCount} line${readyCount === 1 ? '' : 's'} ready · ${formatCurrency(summary.amount)}`}
+            {incompleteCount > 0
+              ? `${incompleteCount} incomplete line${incompleteCount === 1 ? '' : 's'} — finish ${incompleteCount === 1 ? 'it' : 'them'} or remove ${incompleteCount === 1 ? 'it' : 'them'}.`
+              : readyCount === 0
+                ? 'No complete lines yet.'
+                : `${readyCount} line${readyCount === 1 ? '' : 's'} ready · ${formatCurrency(summary.amount)}`}
           </p>
           <div className="flex items-center gap-2">
             <button
@@ -599,6 +767,13 @@ export default function SalesFormPage() {
           </div>
         </div>
       </div>
+
+      {/* Inline product form (portaled) */}
+      <QuickAddProduct
+        isOpen={showProductForm}
+        onSuccess={handleNewProduct}
+        onClose={() => setShowProductForm(false)}
+      />
     </div>
   );
 }

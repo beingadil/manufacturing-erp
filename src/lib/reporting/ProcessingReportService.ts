@@ -169,11 +169,18 @@ return Array.from(processorMap.values()).map(p => ({
 
   static getProcessingLossReportData(dateRange: any, search: any) {
     const state = useERPStore.getState();
-    const { processingSends, processors, processingStages } = state;
+    const { processingSends, processors, processingStages, processingLosses } = state;
     const stageName = (stageId?: string) => {
       if (!stageId) return 'Initial Processor';
       return processingStages.find(s => s.id === stageId)?.name || 'Initial Processor';
     };
+
+    // Voucher-backed write-offs (v4) — the pcs × batch cost posted to
+    // Processing Loss at the time the loss was recorded.
+    const lossCostBySend = new Map<string, number>();
+    for (const loss of processingLosses || []) {
+      lossCostBySend.set(loss.sendId, (lossCostBySend.get(loss.sendId) || 0) + (loss.cost || 0));
+    }
 
     // Loss/wastage is EXPLICITLY recorded (send.lossQuantity) — never derived
     // automatically from pending pcs (spec §8). For legacy sends without a
@@ -195,16 +202,18 @@ return Array.from(processorMap.values()).map(p => ({
       const processorName = processors.find(p => p.id === send.processorId)?.name || 'Unknown';
       const key = `${processorName}|${send.stageId || ''}`;
       if (!processorMap.has(key)) {
-        processorMap.set(key, { processorName, stageName: stageName(send.stageId), sentPcs: 0, receivedPcs: 0, recordedLossPcs: 0 });
+        processorMap.set(key, { processorName, stageName: stageName(send.stageId), sentPcs: 0, receivedPcs: 0, recordedLossPcs: 0, lossCost: 0 });
       }
       const c = processorMap.get(key);
       c.sentPcs += send.pcsSent;
       c.receivedPcs += send.pcsReceived;
       c.recordedLossPcs += send.lossQuantity || 0;
+      c.lossCost += lossCostBySend.get(send.id) || 0;
     });
 
     return Array.from(processorMap.values()).map(p => ({
       ...p,
+      lossCost: Math.round(p.lossCost * 100) / 100,
       // Recorded loss is authoritative; legacy unreturned pending is the derived fallback.
       lossPcs: p.recordedLossPcs > 0 ? p.recordedLossPcs : Math.max(0, p.sentPcs - p.receivedPcs),
       pendingPcs: Math.max(0, p.sentPcs - p.receivedPcs - p.recordedLossPcs),

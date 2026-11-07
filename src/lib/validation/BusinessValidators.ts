@@ -1,4 +1,5 @@
 import { useERPStore } from '../../store/useERPStore';
+import { isManufacturingEnabled, lotStockForProduct } from '../business/ManufacturingService';
 import { ValidationResult } from './ValidationTypes';
 
 export class BusinessValidators {
@@ -37,11 +38,21 @@ export class BusinessValidators {
     if (!productId || requiredPcs <= 0) return;
     const state = useERPStore.getState();
     const product = state.products.find(p => p.id === productId);
-    if (product) {
-      const material = state.materials.find(m => m.id === product.materialId);
-      if (material && (material.processedStockPcs || 0) < requiredPcs) {
-        result.addError(`Insufficient product stock. Required: ${requiredPcs}, Available: ${material.processedStockPcs || 0}`, 'Product Stock');
+    if (!product) return;
+
+    // v4: sellable stock lives in finished-goods lots produced by MOs — the
+    // linked material's processed pcs are inputs, not saleable output.
+    if (isManufacturingEnabled(state)) {
+      const available = lotStockForProduct(state.finishedGoodsLots || [], productId);
+      if (available < requiredPcs) {
+        result.addError(`Insufficient product stock. Required: ${requiredPcs}, Available: ${available}`, 'Product Stock');
       }
+      return;
+    }
+
+    const material = state.materials.find(m => m.id === product.materialId);
+    if (material && (material.processedStockPcs || 0) < requiredPcs) {
+      result.addError(`Insufficient product stock. Required: ${requiredPcs}, Available: ${material.processedStockPcs || 0}`, 'Product Stock');
     }
   }
 

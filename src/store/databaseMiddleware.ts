@@ -16,10 +16,21 @@ type DatabaseMiddlewareImpl = <T>(
 ) => StateCreator<T, [], []>;
 
 export const databaseMiddlewareImpl: DatabaseMiddlewareImpl = (f, _name) => (set, get, api) => {
-  const loggedSet: typeof set = (...a) => {
-    const nextStateRaw = typeof a[0] === 'function' ? (a[0] as Function)(get()) : a[0];
+  const loggedSet: typeof set = (...a: any[]) => {
+    // The updater is invoked EXACTLY ONCE here. The old implementation called
+    // it once to validate and then again inside `set`, which silently ran every
+    // UUID allocation, FIFO mutation and document-number lookup twice. We
+    // compute the next partial, validate it, then hand the ALREADY COMPUTED
+    // value to zustand as a thunk.
     const prevState = get() as any;
-    const nextState = { ...prevState, ...nextStateRaw };
+    const first = a[0];
+    const replace = a[1] as boolean | undefined;
+    const nextStateRaw = typeof first === 'function' ? first(prevState) : first;
+    const nextState = replace
+      ? nextStateRaw
+      : (nextStateRaw && typeof nextStateRaw === 'object'
+        ? { ...prevState, ...nextStateRaw }
+        : prevState);
 
     try {
       validateBusinessRules(prevState, nextState);
@@ -28,7 +39,7 @@ export const databaseMiddlewareImpl: DatabaseMiddlewareImpl = (f, _name) => (set
       throw e;
     }
 
-    (set as any)(...a);
+    (set as any)(() => nextStateRaw, replace);
   };
 
   return f(loggedSet, get, api);
@@ -69,6 +80,27 @@ function validateBusinessRules(prevState: any, nextState: any) {
       const totalCredit = entries.reduce((sum: number, e: any) => sum + (e.credit || 0), 0);
       if (Math.abs(totalDebit - totalCredit) > 0.01) {
         throw new AppError(`Voucher ${voucher.voucherNo} does not balance (Debit: ${totalDebit}, Credit: ${totalCredit})`, 'DATABASE_ERROR');
+      }
+    }
+  }
+
+  // Manufacturing invariants — a finished-goods lot can never go negative, and
+  // a completed order can never claim more output than it planned.
+  for (const lot of (nextState.finishedGoodsLots || []) as any[]) {
+    if ((lot.pcsRemaining || 0) < -1e-6) {
+      throw new AppError(`Finished-goods lot ${lot.lotNo || lot.id} has negative stock`, 'DATABASE_ERROR');
+    }
+    if ((lot.pcsProduced || 0) <= 0 && (lot.pcsRemaining || 0) > 0) {
+      throw new AppError(`Finished-goods lot ${lot.lotNo || lot.id} has stock but no production`, 'DATABASE_ERROR');
+    }
+  }
+  for (const order of (nextState.manufacturingOrders || []) as any[]) {
+    if (order.status === 'Completed') {
+      if (!(order.finishedQty > 0)) {
+        throw new AppError(`Completed manufacturing order ${order.orderNo || order.id} has no output`, 'DATABASE_ERROR');
+      }
+      if (order.finishedQty > order.plannedQty + 1e-6) {
+        throw new AppError(`Manufacturing order ${order.orderNo || order.id} produced more than planned`, 'DATABASE_ERROR');
       }
     }
   }

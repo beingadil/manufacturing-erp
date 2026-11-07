@@ -84,6 +84,7 @@ const accounts: { name: string; type: AccountType; subtype: string; isSystem?: b
   { name: 'Manufacturing Overhead', type: 'Cost of Goods Sold', subtype: 'Purchases' },
   // Expenses
   { name: 'Processing Expense', type: 'Expenses', subtype: 'Processing Expense', isSystem: true },
+  { name: 'Processing Loss', type: 'Expenses', subtype: 'Processing Expense', isSystem: true },
   { name: 'Salaries Expense', type: 'Expenses', subtype: 'Administrative Expenses', isSystem: true },
   { name: 'Rent Expense', type: 'Expenses', subtype: 'Operating Expenses', isSystem: true },
   { name: 'Utilities Expense', type: 'Expenses', subtype: 'Operating Expenses', isSystem: true },

@@ -11,12 +11,14 @@ import { FormSection } from '../components/form/FormSection';
 import { formInputClass } from '../components/form/formStyles';
 import { QuickAddMaterial } from "../components/QuickAddModals";
 import { SearchableSelect } from "../components/SearchableSelect";
+import { isManufacturingEnabled, lotAverageCost, lotStockForProduct } from "../lib/business/ManufacturingService";
 import { formatCurrency, formatNumber } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
 import type { ProductComponent, ProductUsageType } from "../types/erp";
 
 export function FinishedGoods() {
-  const { products, materials, categories, sales, addProduct, updateModuleItem, removeModuleItem } = useERPStore();
+  const { products, materials, categories, sales, finishedGoodsLots, manufacturingOrders, stateSchemaVersion, addProduct, updateModuleItem, removeModuleItem } = useERPStore();
+  const v4 = isManufacturingEnabled({ stateSchemaVersion });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAddMaterialOpen, setIsAddMaterialOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
@@ -102,6 +104,8 @@ export function FinishedGoods() {
       sellingPrice: parseFloat(sellingPrice),
       sku: editingProduct?.sku || undefined,
       description,
+      bomVersion: editingProduct ? (editingProduct.bomVersion ?? 1) + 1 : 1,
+      stockModel: 'manufactured' as const,
     };
 
     try {
@@ -123,6 +127,16 @@ export function FinishedGoods() {
     const saleCount = sales.filter(s => s.productId === deleteModal.id).length;
     if (saleCount > 0) {
       toast.error(`Cannot delete — this product is referenced by ${saleCount} sale record(s). Deactivate it instead if it is no longer sold.`);
+      setDeleteModal({ isOpen: false, id: '', no: '' });
+      return;
+    }
+    const orderCount = (manufacturingOrders || []).filter(o => o.productId === deleteModal.id).length;
+    const lotCount = (finishedGoodsLots || []).filter(l => l.productId === deleteModal.id).length;
+    if (orderCount > 0 || lotCount > 0) {
+      toast.error(
+        `Cannot delete — this product is referenced by ${orderCount} manufacturing order(s) and ${lotCount} finished-goods lot(s). ` +
+        'Its production history must stay intact.',
+      );
       setDeleteModal({ isOpen: false, id: '', no: '' });
       return;
     }
@@ -158,9 +172,19 @@ export function FinishedGoods() {
       ...p,
       categoryName: cat?.name || '-',
       materialName: m?.name || 'Unknown',
-      availableStock: m?.processedStockPcs || 0
+      availableStock: v4
+        ? lotStockForProduct(finishedGoodsLots || [], p.id)
+        : (m?.processedStockPcs || 0),
+      averageCost: v4 ? lotAverageCost(finishedGoodsLots || [], p.id) : 0,
+      stockValue: v4
+        ? lotStockForProduct(finishedGoodsLots || [], p.id) * lotAverageCost(finishedGoodsLots || [], p.id)
+        : 0,
+      bomLines: p.usageType === 'assembled' && (p.components?.length ?? 0) > 0
+        ? p.components!.length
+        : (p.materialId ? 1 : 0),
+      bomVersion: p.bomVersion ?? 1,
     };
-  }), [products, materials, categories]);
+  }), [products, materials, categories, finishedGoodsLots, v4]);
 
   const _isAssembled = usageType === 'assembled';
 
@@ -171,27 +195,38 @@ export function FinishedGoods() {
     { key: "materialName", label: "Made From", sortable: true,
       render: (item) => {
         const assembled = item.usageType === 'assembled' && (item.components?.length ?? 0) > 0;
-        if (!assembled) {
-          return <span>{item.materialName}</span>;
-        }
-        const names = item.components!.map(c =>
-          materials.find(m => m.id === c.materialId)?.name ?? '?',
-        );
+        const names = assembled
+          ? item.components!.map(c => materials.find(m => m.id === c.materialId)?.name ?? '?')
+          : [item.materialName];
         return (
-          <span className="text-xs text-foreground">
-            {names.join(' + ')}
-          </span>
+          <div className="flex flex-col gap-0.5">
+            <span className={assembled ? 'text-xs text-foreground' : ''}>{names.join(' + ')}</span>
+            <span className="font-mono text-[10px] text-muted-foreground">
+              BOM v{item.bomVersion} · {item.bomLines} line{item.bomLines === 1 ? '' : 's'}
+            </span>
+          </div>
         );
       },
     },
+    ...(v4 ? [{
+      key: "averageCost",
+      label: "Avg Cost (PKR)",
+      align: "right" as const,
+      sortable: true,
+      render: (item: typeof enrichedProducts[0]) => (
+        <span className="tabular-nums text-muted-foreground">{formatCurrency(item.averageCost)}</span>
+      ),
+    }] : []),
     { key: "sellingPrice", label: "Selling Price (PKR)", align: "right", sortable: true, render: (item) => <span className="font-medium">{formatCurrency(item.sellingPrice)}</span> },
-    { key: "availableStock", label: "Available Stock (PCS)", align: "right", sortable: true,
-      render: (item) => {
-        if (item.usageType === 'assembled' && (item.components?.length ?? 0) > 0) {
-          return <span className="text-xs text-muted-foreground">Made on sale</span>;
-        }
-        return <span className="font-bold text-success">{item.availableStock}</span>;
-      },
+    { key: "availableStock", label: v4 ? "Finished Stock (PCS)" : "Available Stock (PCS)", align: "right", sortable: true,
+      render: (item) => (
+        <div className="flex flex-col items-end gap-0.5">
+          <span className={item.availableStock > 0 ? "font-bold text-success" : "font-bold text-muted-foreground"}>{item.availableStock}</span>
+          {v4 && item.availableStock > 0 && (
+            <span className="text-[10px] tabular-nums text-muted-foreground">{formatCurrency(item.stockValue)}</span>
+          )}
+        </div>
+      ),
     },
     {
       key: "actions",
@@ -243,13 +278,20 @@ export function FinishedGoods() {
         <div className="border-l border-border/60 pl-10">
           <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">In Stock</div>
           <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{formatNumber(enrichedProducts.filter(p => (p.availableStock || 0) > 0).length)}</div>
-          <div className="text-xs text-muted-foreground">With processed stock</div>
+          <div className="text-xs text-muted-foreground">{v4 ? 'With finished-goods lots' : 'With processed stock'}</div>
         </div>
         <div className="border-l border-border/60 pl-10">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Available Stock</div>
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Finished Stock</div>
           <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-sky-500">{formatNumber(enrichedProducts.reduce((s, p) => s + (p.availableStock || 0), 0))}</div>
           <div className="text-xs text-muted-foreground">PCS ready to sell</div>
         </div>
+        {v4 && (
+          <div className="border-l border-border/60 pl-10">
+            <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Stock Value</div>
+            <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{formatCurrency(enrichedProducts.reduce((s, p) => s + (p.stockValue || 0), 0))}</div>
+            <div className="text-xs text-muted-foreground">At produced cost</div>
+          </div>
+        )}
       </section>
 
       <DataTable

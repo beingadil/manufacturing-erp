@@ -25,6 +25,7 @@ import { JournalVoucher } from './pages/finance/JournalVoucher';
 import { JobWork } from './pages/JobWork';
 import { Ledgers } from './pages/Ledgers';
 import { Login } from './pages/Login';
+import { Manufacturing } from './pages/Manufacturing';
 import { MaterialDetail } from './pages/MaterialDetail';
 import { MonitorScreen } from './pages/MonitorScreen';
 import { Processors } from './pages/Processors';
@@ -136,6 +137,7 @@ export default function App() {
           <Route path="purchases/new" element={<RouteGuard requireModule="Purchases" requireAction="View"><PurchaseFormPage /></RouteGuard>} />
           <Route path="purchases/edit/:id" element={<RouteGuard requireModule="Purchases" requireAction="View"><PurchaseFormPage /></RouteGuard>} />
           <Route path="processing" element={<RouteGuard requireModule="Processing" requireAction="View"><JobWork /></RouteGuard>} />
+          <Route path="manufacturing" element={<RouteGuard requireModule="Manufacturing" requireAction="View"><Manufacturing /></RouteGuard>} />
           <Route path="sales" element={<RouteGuard requireModule="Sales" requireAction="View"><Sales /></RouteGuard>} />
           <Route path="sales/new" element={<RouteGuard requireModule="Sales" requireAction="View"><SalesFormPage /></RouteGuard>} />
           <Route path="sales/edit/:id" element={<RouteGuard requireModule="Sales" requireAction="View"><SalesFormPage /></RouteGuard>} />

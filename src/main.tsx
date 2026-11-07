@@ -336,6 +336,19 @@ async function bootstrap() {
       Logger.warn('Startup', `Processing stage seed skipped: ${e.message}`);
     }
 
+    // Stamp the manufacturing data contract on a genuine first install. Existing
+    // installs get the same stamp from migrateERPState when their persisted blob
+    // loads; this path only covers the no-blob case (and dev demo data).
+    if (firstInstall) {
+      try {
+        const { useERPStore } = await import('./store/useERPStore');
+        useERPStore.setState({ stateSchemaVersion: 4 });
+        Logger.info('Startup', 'Manufacturing data contract v4 enabled (first install)');
+      } catch (e: any) {
+        Logger.warn('Startup', `Manufacturing schema stamp skipped: ${e.message}`);
+      }
+    }
+
     // Dev-only: seed realistic demo data across ALL modules (never in
     // production — Vite replaces import.meta.env.DEV with false at build time
     // and tree-shakes this whole branch, so the installer ships no demo data).

@@ -1,12 +1,136 @@
 import { v4 as uuidv4 } from 'uuid';
 import { StoreApi } from 'zustand';
 import { getSystemAccountBySubtype, getSystemCOGSAccount, getSystemInventoryAccount } from '../lib/accounting/accountClassification';
+import {
+  buildManufacturedSale,
+  buildProcessorBill,
+  buildReceiptAccrual,
+  postingTotal,
+} from '../lib/accounting/manufacturingPosting';
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
+import {
+  consumeLotsFIFO,
+  isManufacturingEnabled,
+  restoreLotAllocations,
+} from '../lib/business/ManufacturingService';
 import { consumeComponentStock, isAssembled, perUnitRequirement, restoreComponentStock, roundQty } from '../lib/business/ProductAssemblyService';
 import { UnitConversionService } from '../lib/business/UnitConversionService';
 import { AppError } from '../lib/errorHandler';
-import type { Batch, InventoryMovement, ProcessingReceipt, ProcessingSend, Product, RawMaterial, Sale } from '../types/erp';
+import type { Batch, InventoryMovement, JournalEntry, ProcessingReceipt, ProcessingSend, Product, RawMaterial, Sale, Voucher } from '../types/erp';
 import { ERPState } from './useERPStore';
+
+/**
+ * A completed manufacturing order freezes the cost and quantity of every batch
+ * it drew from. Changing or deleting that stock afterwards would silently
+ * rewrite a posted cost, so destructive paths that touch such a batch are
+ * refused with a clear instruction instead.
+ */
+function assertBatchesNotConsumedByManufacturing(
+  state: ERPState,
+  batchIds: Iterable<string | undefined>,
+  action: string,
+): void {
+  const ids = new Set([...batchIds].filter((id): id is string => !!id));
+  if (ids.size === 0) return;
+  for (const order of state.manufacturingOrders || []) {
+    if (order.status !== 'Completed') continue;
+    const hit = (order.consumptions || []).find(c => ids.has(c.batchId));
+    if (hit) {
+      throw new AppError(
+        `This ${action} would change stock that completed manufacturing order ${order.orderNo} already consumed. ` +
+        'Completed manufacturing costs are immutable — record a new purchase or reverse the order before editing this batch.',
+      );
+    }
+  }
+}
+
+/**
+ * Material-level guard for processing edits that cannot name a single batch
+ * (legacy dispatches/receipts created without one). If any completed MO drew
+ * this material, the replay could shrink stock below what the MO consumed.
+ */
+function assertMaterialNotConsumedByManufacturing(
+  state: ERPState,
+  materialId: string | undefined,
+  action: string,
+): void {
+  if (!materialId) return;
+  for (const order of state.manufacturingOrders || []) {
+    if (order.status !== 'Completed') continue;
+    if ((order.consumptions || []).some(c => c.materialId === materialId)) {
+      throw new AppError(
+        `This ${action} would replay stock for a material already consumed by completed manufacturing order ${order.orderNo}. ` +
+        'Completed manufacturing costs are immutable.',
+      );
+    }
+  }
+}
+
+/**
+ * Rebuild a processing bill's voucher after its receipts or total changed.
+ * Legacy bills keep the old two-leg shape; v4 bills clear the receipt accrual
+ * and post only the true-up difference to Processing Expense.
+ */
+function rebuildProcessingBillVoucher(
+  state: ERPState,
+  bill: { id: string; billNo: string; date: string; processorId: string; receiptIds: string[]; totalAmount: number },
+  receipts: ProcessingReceipt[],
+  vouchers: Voucher[],
+  entries: JournalEntry[],
+): { vouchers: Voucher[]; journalEntries: JournalEntry[] } {
+  const voucher = vouchers.find(v => v.sourceId === bill.id && v.sourceModule === 'Processing');
+  if (!voucher) return { vouchers, journalEntries: entries };
+
+  const payableAccount = state.accounts.find(a => a.linkedEntityId === bill.processorId)
+    || getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Accounts Payable');
+
+  if (isManufacturingEnabled(state)) {
+    const accruedTotal = bill.receiptIds.reduce((sum, rid) => {
+      const receipt = receipts.find(r => r.id === rid);
+      return sum + Math.max(0, Number(receipt?.accruedProcessingCost) || 0);
+    }, 0);
+    const posting = buildProcessorBill(
+      state.accounts,
+      state.accountSubtypes,
+      payableAccount,
+      bill.totalAmount,
+      accruedTotal,
+      `Processing Bill ${bill.billNo}`,
+    );
+    const total = postingTotal(posting);
+    const existing = entries.filter(je => je.voucherId === voucher.id);
+    return {
+      vouchers: vouchers.map(v =>
+        v.id === voucher.id ? { ...v, date: bill.date, totalDebit: total, totalCredit: total } : v
+      ),
+      journalEntries: [
+        ...entries.filter(je => je.voucherId !== voucher.id),
+        ...posting.map(line => {
+          const match = existing.find(e => e.accountId === line.accountId);
+          return {
+            id: match?.id || uuidv4(),
+            voucherId: voucher.id,
+            accountId: line.accountId,
+            debit: line.debit,
+            credit: line.credit,
+            narration: line.narration,
+          };
+        }),
+      ],
+    };
+  }
+
+  return {
+    vouchers: vouchers.map(v =>
+      v.id === voucher.id ? { ...v, date: bill.date, totalDebit: bill.totalAmount, totalCredit: bill.totalAmount } : v
+    ),
+    journalEntries: entries.map(je =>
+      je.voucherId === voucher.id
+        ? { ...je, debit: je.debit > 0 ? bill.totalAmount : 0, credit: je.credit > 0 ? bill.totalAmount : 0 }
+        : je
+    ),
+  };
+}
 
 /**
  * Rebuild one material's batch trail from the authoritative history, using the
@@ -31,7 +155,9 @@ function applyBatchReplayForMaterial(
     sales,
     products,
     undefined,
-    state.processingStages || []
+    state.processingStages || [],
+    undefined,
+    state.manufacturingOrders || []
   );
 }
 
@@ -147,11 +273,13 @@ function materialChangeFallback(
     ];
     trail = InventoryCalculationService.recomputeFinishedPcsForMaterial(
       oldMaterialId, trail, remainingReceipts, remainingSends,
-      state.sales ?? [], state.products ?? [], undefined, stages
+      state.sales ?? [], state.products ?? [], undefined, stages,
+      undefined, state.manufacturingOrders ?? []
     );
     trail = InventoryCalculationService.recomputeFinishedPcsForMaterial(
       newMaterialId, trail, remainingReceipts, remainingSends,
-      state.sales ?? [], state.products ?? [], undefined, stages
+      state.sales ?? [], state.products ?? [], undefined, stages,
+      undefined, state.manufacturingOrders ?? []
     );
   }
 
@@ -226,6 +354,9 @@ export const createCRUDActions = (
       // 1. Remove associated batch
       const batch = state.batches.find(b => b.purchaseId === id);
       const batchId = batch?.id;
+      if (batch) {
+        assertBatchesNotConsumedByManufacturing(state, [batch.id], 'purchase deletion');
+      }
       
       // 2. Reduce material stock — ready-made purchases landed in the
       // FINISHED pool, so the reversal must come from the same pool.
@@ -316,6 +447,18 @@ export const createCRUDActions = (
 
       const diffPcs = newCalculatedPcs - oldPurchase.calculatedPcs;
 
+      // Completed manufacturing orders freeze the lots they consumed. A
+      // material change or a quantity reduction would rewrite that trail, so
+      // it is refused before any mutation happens.
+      const quantityEdited = purchaseData.weight !== undefined || purchaseData.directPcs !== undefined;
+      if (oldBatch && (materialChanged || (quantityEdited && newCalculatedPcs < (oldBatch.initialPcs || 0)))) {
+        assertBatchesNotConsumedByManufacturing(
+          state,
+          [oldBatch.id],
+          materialChanged ? 'material change' : 'quantity reduction',
+        );
+      }
+
       if (materialChanged) {
         return materialChangeFallback(
           state, id, purchaseData, oldPurchase, oldBatch,
@@ -394,6 +537,27 @@ export const createCRUDActions = (
       const sale = state.sales.find(s => s.id === id);
       if (!sale) return state;
 
+      // Manufacturing v4: the sale was fulfilled from finished-goods lots, so
+      // deleting it hands exactly those lot quantities back. Material batches
+      // are untouched — a manufactured sale never consumed them.
+      if (sale.stockModelAtSale === 'manufactured') {
+        const saleVoucherIds = new Set(
+          state.vouchers
+            .filter(v => v.sourceId === id && v.sourceModule === 'Sales')
+            .map(v => v.id),
+        );
+        return {
+          ...state,
+          sales: state.sales.filter(s => s.id !== id),
+          finishedGoodsLots: restoreLotAllocations(state.finishedGoodsLots || [], sale.lotAllocations),
+          inventoryMovements: (state.inventoryMovements || []).filter(im =>
+            !(im.referenceNo === sale.invoiceNo && im.module === 'Sale' && im.productId === sale.productId)
+          ),
+          vouchers: state.vouchers.filter(v => !saleVoucherIds.has(v.id)),
+          journalEntries: state.journalEntries.filter(je => !saleVoucherIds.has(je.voucherId)),
+        };
+      }
+
       const product = state.products.find(p => p.id === sale.productId);
 
       // NOTE: the customer's balanceReceivable is derived from the linked
@@ -440,7 +604,9 @@ export const createCRUDActions = (
           state.sales || [],
           state.products || [],
           id,
-          state.processingStages || []
+          state.processingStages || [],
+          undefined,
+          state.manufacturingOrders || []
         );
       }
       const updatedMaterials = InventoryCalculationService.syncMaterialCounters(state.materials, updatedBatches);
@@ -471,6 +637,118 @@ export const createCRUDActions = (
     set((state) => {
       const oldSale = state.sales.find(s => s.id === id);
       if (!oldSale) return state;
+
+      // Manufacturing v4: a manufactured sale consumed specific FG lots. An
+      // edit returns the old allocations first, then draws the new product /
+      // quantity FIFO — so changing 5 → 8 never double-deducts and changing
+      // the product releases the abandoned product's stock.
+      if (oldSale.stockModelAtSale === 'manufactured') {
+        const newProductId = data.productId ?? oldSale.productId;
+        const product = state.products.find(p => p.id === newProductId);
+        if (!product) throw new AppError('Choose a valid product before saving the sale.');
+
+        const newPcsSold = data.pcsSold !== undefined ? Math.round(Number(data.pcsSold)) : oldSale.pcsSold;
+        const newPricePerPiece = data.pricePerPiece !== undefined
+          ? Number(data.pricePerPiece)
+          : oldSale.pricePerPiece;
+        if (!Number.isFinite(newPcsSold) || newPcsSold <= 0) {
+          throw new AppError('Quantity sold must be a whole number greater than zero.');
+        }
+        if (!(newPricePerPiece > 0)) {
+          throw new AppError('Price per piece must be greater than zero.');
+        }
+        const newDate = data.date ?? oldSale.date;
+        const newTotalAmount = roundQty(newPcsSold * newPricePerPiece);
+
+        let lots = restoreLotAllocations(state.finishedGoodsLots || [], oldSale.lotAllocations);
+        const consumed = consumeLotsFIFO(lots, newProductId, newPcsSold);
+        if (consumed.shortage) {
+          throw new AppError(
+            `Not enough finished stock for ${product.name}: need ${consumed.shortage.required} PCS ` +
+            `but only ${consumed.shortage.available} are in finished-goods lots.`,
+          );
+        }
+        lots = consumed.lots;
+
+        const updatedSale: Sale = {
+          ...oldSale,
+          ...data,
+          productId: newProductId,
+          date: newDate,
+          pcsSold: newPcsSold,
+          pricePerPiece: newPricePerPiece,
+          totalAmount: newTotalAmount,
+          lotAllocations: consumed.allocations,
+          cogsAmount: consumed.cogs,
+          stockModelAtSale: 'manufactured',
+        };
+        const updatedSales = state.sales.map(s => (s.id === id ? updatedSale : s));
+
+        const remaining = lots
+          .filter(l => l.productId === newProductId)
+          .reduce((sum, l) => sum + (l.pcsRemaining || 0), 0);
+        const updatedInventoryMovements = [
+          {
+            id: uuidv4(),
+            materialId: product.materialId || '',
+            productId: product.id,
+            date: newDate,
+            referenceNo: oldSale.invoiceNo,
+            module: 'Sale' as const,
+            transactionType: 'OUT' as const,
+            quantity: newPcsSold,
+            runningBalance: remaining,
+            remarks: `Sold as finished goods: ${product.name}`,
+          },
+          ...(state.inventoryMovements || []).filter(im =>
+            !(im.referenceNo === oldSale.invoiceNo && im.module === 'Sale' && im.productId === oldSale.productId)
+          ),
+        ];
+
+        const voucher = state.vouchers.find(v => v.sourceId === id && v.sourceModule === 'Sales');
+        let updatedVouchers = state.vouchers;
+        let updatedJournalEntries = state.journalEntries;
+        if (voucher) {
+          const posting = buildManufacturedSale(
+            state.accounts,
+            state.accountSubtypes,
+            data.customerId ?? oldSale.customerId,
+            newTotalAmount,
+            consumed.cogs,
+            `Sale ${oldSale.invoiceNo} — ${newPcsSold} × ${product.name}`,
+          );
+          const total = postingTotal(posting);
+          updatedVouchers = state.vouchers.map(v =>
+            v.id === voucher.id
+              ? { ...v, date: newDate, totalDebit: total, totalCredit: total }
+              : v,
+          );
+          const existingEntries = state.journalEntries.filter(je => je.voucherId === voucher.id);
+          updatedJournalEntries = [
+            ...state.journalEntries.filter(je => je.voucherId !== voucher.id),
+            ...posting.map(line => {
+              const match = existingEntries.find(e => e.accountId === line.accountId);
+              return {
+                id: match?.id || uuidv4(),
+                voucherId: voucher.id,
+                accountId: line.accountId,
+                debit: line.debit,
+                credit: line.credit,
+                narration: line.narration,
+              };
+            }),
+          ];
+        }
+
+        return {
+          ...state,
+          sales: updatedSales,
+          finishedGoodsLots: lots,
+          inventoryMovements: updatedInventoryMovements,
+          vouchers: updatedVouchers,
+          journalEntries: updatedJournalEntries,
+        };
+      }
 
       // `data` is Partial<Sale>: an edit that only touches the date must not
       // silently rewrite the quantity and price to NaN.
@@ -511,6 +789,8 @@ export const createCRUDActions = (
             state.products || [],
             undefined,
             state.processingStages || [],
+            undefined,
+            state.manufacturingOrders || [],
           );
         }
 
@@ -636,7 +916,9 @@ export const createCRUDActions = (
           updatedSales,
           state.products || [],
           undefined,
-          state.processingStages || []
+          state.processingStages || [],
+          undefined,
+          state.manufacturingOrders || []
         );
       }
       const updatedMaterials = InventoryCalculationService.syncMaterialCounters(state.materials, updatedBatches);
@@ -775,21 +1057,30 @@ export const createCRUDActions = (
       const send = state.processingSends.find(s => s.id === id);
       if (!send) return state;
 
+      if (send.batchId) {
+        assertBatchesNotConsumedByManufacturing(state, [send.batchId], 'dispatch deletion');
+      } else {
+        assertMaterialNotConsumedByManufacturing(state, send.materialId, 'dispatch deletion');
+      }
+
       // ── Cascade receipts ────────────────────────────────────────────────
       const receiptsToDelete = (state.processingReceipts || []).filter(r => r.sendId === id);
       const receiptIds = new Set(receiptsToDelete.map(r => r.id));
+      const remainingReceipts = (state.processingReceipts || []).filter(r => r.sendId !== id);
 
       // Safety: a receipt whose finished goods were already sold cannot be
       // deleted — the remaining production could not cover the sales, so the
       // material counters and batch trail would diverge. Abort the cascade.
       if (receiptsToDelete.length > 0) {
-        const remainingReceiptsAll = (state.processingReceipts || []).filter(r => r.sendId !== id);
-        const remainingProduction = remainingReceiptsAll
+        const remainingProduction = remainingReceipts
           .filter(r => r.materialId === send.materialId)
           .reduce((sum, r) => sum + r.pcsReceived, 0);
         const productIds = new Set(state.products.filter(p => p.materialId === send.materialId).map(p => p.id));
         const soldPcs = state.sales
-          .filter(sale => productIds.has(sale.productId))
+          .filter(sale =>
+            sale.stockModelAtSale !== 'manufactured'
+            && productIds.has(sale.productId)
+          )
           .reduce((sum, sale) => sum + sale.pcsSold, 0);
         if (remainingProduction < soldPcs) return state;
       }
@@ -829,28 +1120,38 @@ export const createCRUDActions = (
         } else {
           const newTotal = remaining.reduce((sum, rid) => {
             const r = state.processingReceipts.find(x => x.id === rid);
-            return sum + (r?.billAmount || 0);
+            return sum + (bill.lineAmounts?.[rid] ?? r?.billAmount ?? 0);
           }, 0);
           const lineAmounts = { ...(bill.lineAmounts || {}) };
           for (const rid of receiptIds) delete lineAmounts[rid];
-          updatedBills = updatedBills.map(b => b.id === bill.id
-            ? { ...b, receiptIds: remaining, totalAmount: newTotal, lineAmounts }
-            : b);
-          const voucher = updatedVouchers.find(v => v.sourceId === bill.id && v.sourceModule === 'Processing');
-          if (voucher) {
-            updatedVouchers = updatedVouchers.map(v =>
-              v.id === voucher.id ? { ...v, totalDebit: newTotal, totalCredit: newTotal } : v
-            );
-            updatedJournalEntries = updatedJournalEntries.map(je =>
-              je.voucherId === voucher.id
-                ? { ...je, debit: je.debit > 0 ? newTotal : 0, credit: je.credit > 0 ? newTotal : 0 }
-                : je
-            );
-          }
+          const updatedBill = { ...bill, receiptIds: remaining, totalAmount: newTotal, lineAmounts };
+          updatedBills = updatedBills.map(b => b.id === bill.id ? updatedBill : b);
+          const rebuilt = rebuildProcessingBillVoucher(
+            state,
+            updatedBill,
+            remainingReceipts,
+            updatedVouchers,
+            updatedJournalEntries,
+          );
+          updatedVouchers = rebuilt.vouchers;
+          updatedJournalEntries = rebuilt.journalEntries;
         }
       }
 
-      const remainingReceipts = (state.processingReceipts || []).filter(r => r.sendId !== id);
+      // Remove the accrual vouchers of the cascaded receipts and the write-off
+      // vouchers of this dispatch's recorded losses. Deleting the source
+      // document must never leave orphaned journal entries behind.
+      const orphanVoucherIds = new Set<string>();
+      for (const receipt of receiptsToDelete) {
+        if (receipt.accruedVoucherId) orphanVoucherIds.add(receipt.accruedVoucherId);
+      }
+      for (const loss of state.processingLosses || []) {
+        if (loss.sendId === id && loss.voucherId) orphanVoucherIds.add(loss.voucherId);
+      }
+      if (orphanVoucherIds.size > 0) {
+        updatedVouchers = updatedVouchers.filter(v => !orphanVoucherIds.has(v.id));
+        updatedJournalEntries = updatedJournalEntries.filter(je => !orphanVoucherIds.has(je.voucherId));
+      }
 
       // Rebuild the batch trail from the remaining history (idempotent,
       // stage-aware FIFO replay — the deleted send's loss is removed with it),
@@ -863,7 +1164,9 @@ export const createCRUDActions = (
         state.sales || [],
         state.products || [],
         undefined,
-        state.processingStages || []
+        state.processingStages || [],
+        undefined,
+        state.manufacturingOrders || []
       );
       const updatedMaterials = InventoryCalculationService.syncMaterialCounters(state.materials, updatedBatches);
 
@@ -881,6 +1184,7 @@ export const createCRUDActions = (
         journalEntries: updatedJournalEntries,
         materials: updatedMaterials,
         batches: updatedBatches,
+        processingLosses: (state.processingLosses || []).filter(l => l.sendId !== id),
         inventoryMovements: state.inventoryMovements.filter(im => !removedReferenceNos.has(im.referenceNo))
       };
     });
@@ -892,6 +1196,15 @@ export const createCRUDActions = (
     set((state) => {
       const oldSend = state.processingSends.find(s => s.id === id);
       if (!oldSend) return state;
+
+      const touchesStock = ['pcsSent', 'stageId', 'batchId', 'date', 'lossQuantity'].some(k => k in data);
+      if (touchesStock) {
+        if (oldSend.batchId) {
+          assertBatchesNotConsumedByManufacturing(state, [oldSend.batchId], 'dispatch edit');
+        } else {
+          assertMaterialNotConsumedByManufacturing(state, oldSend.materialId, 'dispatch edit');
+        }
+      }
 
       const updatedSends = state.processingSends.map(s =>
         s.id === id ? { ...s, ...data } : s
@@ -938,6 +1251,13 @@ export const createCRUDActions = (
       // Guard: billed receipts must be un-billed (delete the bill) first.
       if (receipt.billedStatus === 'Billed') return state;
 
+      const receiptSend = state.processingSends.find(s => s.id === receipt.sendId);
+      if (receiptSend?.batchId) {
+        assertBatchesNotConsumedByManufacturing(state, [receiptSend.batchId], 'receipt deletion');
+      } else {
+        assertMaterialNotConsumedByManufacturing(state, receipt.materialId, 'receipt deletion');
+      }
+
       // Guard: don't allow deleting a receipt whose finished goods were already
       // sold — the remaining production could not cover the sales, so the
       // material counters and batch trail would diverge.
@@ -947,7 +1267,7 @@ export const createCRUDActions = (
         .reduce((sum, r) => sum + r.pcsReceived, 0);
       const productIds = new Set(state.products.filter(p => p.materialId === receipt.materialId).map(p => p.id));
       const soldPcs = state.sales
-        .filter(s => productIds.has(s.productId))
+        .filter(s => s.stockModelAtSale !== 'manufactured' && productIds.has(s.productId))
         .reduce((sum, s) => sum + s.pcsSold, 0);
       if (remainingProduction < soldPcs) return state;
 
@@ -971,13 +1291,21 @@ export const createCRUDActions = (
       );
       const updatedMaterials = InventoryCalculationService.syncMaterialCounters(state.materials, updatedBatches);
 
-      // Remove this receipt's inventory movement
+      // Remove this receipt's inventory movement and, on v4 data, its receipt
+      // accrual voucher (the cost was capitalised at receipt).
+      const accrualVoucherId = receipt.accruedVoucherId;
       return {
         ...state,
         processingReceipts: remainingReceipts,
         processingSends: updatedSends,
         materials: updatedMaterials,
         batches: updatedBatches,
+        vouchers: accrualVoucherId
+          ? state.vouchers.filter(v => v.id !== accrualVoucherId)
+          : state.vouchers,
+        journalEntries: accrualVoucherId
+          ? state.journalEntries.filter(je => je.voucherId !== accrualVoucherId)
+          : state.journalEntries,
         inventoryMovements: state.inventoryMovements.filter(im => im.referenceNo !== receipt.receiveNo)
       };
     });
@@ -988,6 +1316,25 @@ export const createCRUDActions = (
     set((state) => {
       const oldReceipt = state.processingReceipts.find(r => r.id === id);
       if (!oldReceipt) return state;
+
+      const oldSend = state.processingSends.find(s => s.id === oldReceipt.sendId);
+      const touchesStock = ['pcsReceived', 'stageId', 'sendId', 'rateMethod', 'date'].some(k => k in data);
+      if (touchesStock) {
+        if (oldSend?.batchId) {
+          assertBatchesNotConsumedByManufacturing(state, [oldSend.batchId], 'receipt edit');
+        } else {
+          assertMaterialNotConsumedByManufacturing(state, oldReceipt.materialId, 'receipt edit');
+        }
+      }
+
+      // v4 bills clear the receipt accrual and post only a true-up. Changing a
+      // billed receipt would require rewriting both documents, so the bill is
+      // deliberately the unit of correction: delete it first.
+      if (isManufacturingEnabled(state) && oldReceipt.billedStatus === 'Billed') {
+        throw new AppError(
+          `Receipt ${oldReceipt.receiveNo} is already billed. Delete its processor bill before editing the receipt.`,
+        );
+      }
 
       const updatedReceipts = state.processingReceipts.map(r =>
         r.id === id ? { ...r, ...data } : r
@@ -1009,8 +1356,56 @@ export const createCRUDActions = (
         stage
       );
       const finalReceipts = updatedReceipts.map(r =>
-        r.id === id ? { ...r, billAmount, rateMethod, billingUnit: r.billingUnit ?? stage?.billingUnit } : r
+        r.id === id
+          ? {
+              ...r,
+              billAmount,
+              rateMethod,
+              billingUnit: r.billingUnit ?? stage?.billingUnit,
+              ...(isManufacturingEnabled(state) && oldReceipt.accruedProcessingCost !== undefined
+                ? { accruedProcessingCost: billAmount }
+                : {}),
+            }
+          : r
       );
+
+      // On v4 receipts the processing charge was capitalised at receipt. An
+      // edit that changes the quantity/rate must therefore rewrite that same
+      // accrual voucher — not post a second one.
+      let accrualPatch: { vouchers: Voucher[]; journalEntries: JournalEntry[] } | null = null;
+      if (isManufacturingEnabled(state) && oldReceipt.accruedVoucherId) {
+        const accrualVoucher = state.vouchers.find(v => v.id === oldReceipt.accruedVoucherId);
+        if (accrualVoucher) {
+          const posting = buildReceiptAccrual(
+            state.accounts,
+            state.accountSubtypes,
+            billAmount,
+            `Processing accrued — ${oldReceipt.receiveNo}`,
+          );
+          if (posting.length > 0) {
+            const existing = state.journalEntries.filter(je => je.voucherId === accrualVoucher.id);
+            accrualPatch = {
+              vouchers: state.vouchers.map(v =>
+                v.id === accrualVoucher.id ? { ...v, totalDebit: billAmount, totalCredit: billAmount } : v
+              ),
+              journalEntries: [
+                ...state.journalEntries.filter(je => je.voucherId !== accrualVoucher.id),
+                ...posting.map(line => {
+                  const match = existing.find(e => e.accountId === line.accountId);
+                  return {
+                    id: match?.id || uuidv4(),
+                    voucherId: accrualVoucher.id,
+                    accountId: line.accountId,
+                    debit: line.debit,
+                    credit: line.credit,
+                    narration: line.narration,
+                  };
+                }),
+              ],
+            };
+          }
+        }
+      }
 
       // If the edited receipt is Billed, cascade the new amount into its bill
       // and that bill's voucher so the ledger and processor balance never drift.
@@ -1023,21 +1418,25 @@ export const createCRUDActions = (
           if (!bill.receiptIds.includes(id)) return bill;
           const newTotal = bill.receiptIds.reduce((sum, rid) => {
             const r = finalReceipts.find(x => x.id === rid);
-            return sum + (r?.billAmount || 0);
+            return sum + (bill.lineAmounts?.[rid] ?? r?.billAmount ?? 0);
           }, 0);
-          const voucher = state.vouchers.find(v => v.sourceId === bill.id && v.sourceModule === 'Processing');
-          if (voucher) {
-            updatedVouchers = state.vouchers.map(v =>
-              v.id === voucher.id ? { ...v, totalDebit: newTotal, totalCredit: newTotal } : v
-            );
-            updatedJournalEntries = state.journalEntries.map(je =>
-              je.voucherId === voucher.id
-                ? { ...je, debit: je.debit > 0 ? newTotal : 0, credit: je.credit > 0 ? newTotal : 0 }
-                : je
-            );
-          }
-          return { ...bill, totalAmount: newTotal };
+          const updatedBill = { ...bill, totalAmount: newTotal };
+          const rebuilt = rebuildProcessingBillVoucher(
+            state,
+            updatedBill,
+            finalReceipts,
+            updatedVouchers,
+            updatedJournalEntries,
+          );
+          updatedVouchers = rebuilt.vouchers;
+          updatedJournalEntries = rebuilt.journalEntries;
+          return updatedBill;
         });
+      }
+
+      if (accrualPatch) {
+        updatedVouchers = accrualPatch.vouchers;
+        updatedJournalEntries = accrualPatch.journalEntries;
       }
 
       const updatedSends = state.processingSends.map(s => {
@@ -1139,30 +1538,25 @@ export const createCRUDActions = (
           ...(lineAmounts ? { lineAmounts } : {}),
         } : b
       );
+      const updatedBill = updatedBills.find(b => b.id === id)!;
 
       // NOTE: the processor's balancePayable is derived from the linked
       // account's COMPLETE ledger via the afterMutation callback — never
       // adjusted here (spec §14).
 
-      const voucher = state.vouchers.find(v => v.sourceId === id && v.sourceModule === 'Processing');
-      let updatedVouchers = state.vouchers;
-      let updatedJournalEntries = state.journalEntries;
-      if (voucher) {
-        updatedVouchers = state.vouchers.map(v =>
-          v.id === voucher.id ? { ...v, totalDebit: newTotalAmount, totalCredit: newTotalAmount, date: data.date } : v
-        );
-        updatedJournalEntries = state.journalEntries.map(je =>
-          je.voucherId === voucher.id
-            ? { ...je, debit: je.debit > 0 ? newTotalAmount : 0, credit: je.credit > 0 ? newTotalAmount : 0 }
-            : je
-        );
-      }
+      const rebuilt = rebuildProcessingBillVoucher(
+        state,
+        updatedBill,
+        state.processingReceipts,
+        state.vouchers,
+        state.journalEntries,
+      );
 
       return {
         ...state,
         processorBills: updatedBills,
-        vouchers: updatedVouchers,
-        journalEntries: updatedJournalEntries
+        vouchers: rebuilt.vouchers,
+        journalEntries: rebuilt.journalEntries
       };
     });
     afterMutation?.();
