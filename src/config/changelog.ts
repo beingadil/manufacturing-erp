@@ -20,6 +20,72 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.49',
+    date: '2026-11-07',
+    title: 'Master Data Saves and Parts Keep Their Path',
+    sections: [
+      {
+        title: 'Save buttons work again',
+        items: [
+          'Category, product, customer and processor forms had a Save button that did nothing — the footer sat outside the form it was meant to submit. Save now writes the record.',
+          'Editing a simple product no longer opens an empty parts list; its material is filled in, so the form saves without changes.',
+          'The delete warning now shows the real number of sales that reference a product instead of the literal ${saleCount} placeholder.',
+        ],
+      },
+      {
+        title: 'Parts stay ready-made',
+        items: [
+          'Choosing "A part of another product" was being overridden by the category default, so the part was pushed back onto the full processor chain. Parts now save as ready-made, and purchase entry shows them as ready-made in PCS.',
+          'Parts that were already saved the wrong way are repaired when the app loads.',
+        ],
+      },
+      {
+        title: 'Raw Materials register',
+        items: [
+          'The register uses full-width rows that reflow on narrow windows instead of a table that clipped and scrolled sideways.',
+          'Click a row to open that material. The page now follows the app’s Montserrat type scale.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '1.0.48',
+    date: '2026-11-07',
+    title: 'Full-Page Sale Entry and a Cleaner Workspace',
+    sections: [
+      {
+        title: 'Sales get a full page',
+        items: [
+          'New Sale and Edit Sale open a full-page form with as many lines as the invoice needs.',
+          'The item breakdown and totals sit in a summary panel beside the form, so nothing is hidden behind a modal.',
+        ],
+      },
+      {
+        title: 'Cheques in Hand',
+        items: [
+          'A new Cheques in Hand account tracks cheques received but not yet cleared.',
+          'The dashboard shows the balance as its own card, and existing databases receive the account automatically on update.',
+        ],
+      },
+      {
+        title: 'Tables that fit',
+        items: [
+          'Sales, purchases, raw materials and the other registers are more compact, default to oldest first, and show 25 rows per page.',
+          'Search covers all fields, and the horizontal scroll bars are gone.',
+          'In a material’s batch list, each row opens that batch’s purchase detail.',
+        ],
+      },
+      {
+        title: 'Dashboard and forms',
+        items: [
+          'Dashboard charts have a new theme, and the Alerts section is gone.',
+          'Purchases, Sales, Categories and Raw Materials show their key figures as stat strips instead of large cards.',
+          'The product form drops the unused SKU field and uses one materials picker, with the product type derived from your selection.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.47',
     date: '2026-11-05',
     title: 'Purchase Edits Repair Stock Automatically',
