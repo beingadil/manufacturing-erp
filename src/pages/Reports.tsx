@@ -257,7 +257,7 @@ export function Reports() {
                 </div>
                 <div className="hidden lg:block min-w-0">
                   <h1 className="text-xl font-bold tracking-tight text-foreground leading-tight">Report Center</h1>
-                  <p className="text-xs text-muted-foreground">{TOTAL_REPORTS} reports · 5 categories</p>
+                  <p className="text-xs text-muted-foreground">{TOTAL_REPORTS} reports · {REPORT_CATEGORIES.length} categories</p>
                 </div>
               </div>
 
