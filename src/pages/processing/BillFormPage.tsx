@@ -57,9 +57,9 @@ export default function BillFormPage() {
   const unbilledReceipts = useMemo(() => {
     if (!processorId) return [];
     // In edit mode the receipts the bill already holds stay visible so the
-    // user can keep or remove them; the rest are filtered the same way.
+    // user can keep or remove them. In create mode only truly unbilled receipts qualify.
     const belongsToBill = (r: typeof processingReceipts[number]) =>
-      !isEdit || processorBills.find(b => b.id === editId)?.receiptIds.includes(r.id);
+      isEdit && !!processorBills.find(b => b.id === editId)?.receiptIds.includes(r.id);
     return processingReceipts.filter(r =>
       r.processorId === processorId && (r.billedStatus === 'Unbilled' || belongsToBill(r))
     );
