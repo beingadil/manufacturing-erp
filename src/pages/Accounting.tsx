@@ -6,6 +6,7 @@ import { AddAccountModal } from "../components/AddAccountModal";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
 import { BalanceSheetStatement } from "../components/reports/financial/BalanceSheetStatement";
 import { ProfitLossStatement } from "../components/reports/financial/ProfitLossStatement";
+import { PnlPositionStrip } from "../components/reports/financial/PnlPositionStrip";
 import { SearchableSelect } from "../components/SearchableSelect";
 import { DatePicker } from "../components/ui/date-picker";
 import { SearchInput } from "../components/ui/SearchInput";
@@ -489,9 +490,14 @@ function ProfitAndLoss() {
     () => FinancialReportService.getProfitLossReportData({ start: dateFrom, end: dateTo, label: '' }),
     [dateFrom, dateTo]
   );
+  const positionData = useMemo(
+    () => FinancialReportService.getBalanceSheetData(dateTo || new Date().toISOString().split('T')[0]),
+    [dateTo]
+  );
   const periodLabel = dateFrom && dateTo
     ? `${new Date(dateFrom).toLocaleDateString()} → ${new Date(dateTo).toLocaleDateString()}`
     : 'the selected period';
+  const positionAsOf = dateTo ? new Date(dateTo).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'today';
 
   return (
     <div className="flex flex-col">
@@ -506,7 +512,8 @@ function ProfitAndLoss() {
           <DatePicker value={dateTo} onChange={setDateTo} size="sm" className="w-40" placeholder="To" />
         </div>
       </div>
-      <div className="p-6 flex justify-center items-start">
+      <div className="p-6 flex flex-col justify-center items-center gap-5">
+        <PnlPositionStrip data={positionData} asOfLabel={positionAsOf} />
         <ProfitLossStatement data={data} periodLabel={periodLabel} />
       </div>
     </div>
