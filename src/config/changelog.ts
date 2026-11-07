@@ -20,6 +20,45 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.1.0',
+    date: '2026-11-07',
+    title: 'Everything Sells Through Finished Goods',
+    sections: [
+      {
+        title: 'Manufacturing redesign',
+        items: [
+          'Products now carry a Bill of Materials, and every manufacturing order freezes a BOM snapshot when it is created.',
+          'Completed orders consume components at batch cost and post the cost into a finished-goods lot; sales fulfill from lots using FIFO.',
+          'One completion per order. A shortfall in finished quantity raises the lot unit cost instead of leaking work-in-progress into the ledger.',
+        ],
+      },
+      {
+        title: 'Processing accrual and loss accounting',
+        items: [
+          'Processing cost is capitalised exactly once at receipt, including partial receipts. The processor bill clears the accrual and posts any difference to Processing Expense.',
+          'Recorded processor losses write off to Processing Loss; under-billed amounts credit Processing Expense.',
+          'Work-in-progress stays at zero in the ledger.',
+        ],
+      },
+      {
+        title: 'Sales, reports and access',
+        items: [
+          'Every product, including ready-made ones, reaches the sale ledger only through finished-goods stock, with FIFO cost of goods sold per line.',
+          'New manufacturing reports and the Manufacturing workspace page; all roles get full manufacturing access.',
+          'A one-time reclassification capitalises historical processing cost embedded in on-hand batches. It is shown only when such costs exist.',
+        ],
+      },
+      {
+        title: 'Interface refresh',
+        items: [
+          'Every dropdown in the processing module is a searchable picker with secondary detail; native selects are gone.',
+          'Receipts History now shows a Billed or Unbilled badge on every receipt.',
+          'Receipts already billed no longer appear in the processor bill picker, so duplicate billing cannot be triggered by accident.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.49',
     date: '2026-11-07',
     title: 'Master Data Saves and Parts Keep Their Path',

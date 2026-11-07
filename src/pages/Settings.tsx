@@ -1,6 +1,6 @@
 import {
   AlertCircle,Bell,Bot, CheckCircle2, ChevronDown, ChevronRight, 
-  Database, DownloadCloud,ExternalLink, Hash, Image as ImageIcon, Info, Layout, Monitor, Palette, RotateCw, 
+  Database, DownloadCloud, Hash, Image as ImageIcon, Info, Layout, Monitor, Palette, RotateCw,
   Save, Settings as SettingsIcon,
   Sparkles, Trash2,
   User, 
@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { CHANGELOG, type ChangelogEntry } from '../config/changelog';
-import { APP_VERSION, BUILD_NUMBER, DATABASE_SCHEMA_VERSION, RELEASE_DATE } from '../config/version';
+import { APP_VERSION, BUILD_NUMBER, DATABASE_SCHEMA_VERSION, IS_PRODUCTION, RELEASE_DATE } from '../config/version';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from "../lib/utils";
 import { MODULE_WIPE_KEYS, useERPStore, WIPE_MODULE_LABELS } from "../store/useERPStore";
@@ -909,6 +909,7 @@ function VoucherNumberingTab({ onSave, showSavedToast }: { onSave: () => void, s
 }
 
 function AboutUpdatesTab() {
+  const { dashboardName, tagline, logo } = useSettingsStore();
   const [updateStatus, setUpdateStatus] = useState<{
     status: string;
     message: string;
@@ -962,35 +963,55 @@ function AboutUpdatesTab() {
     }
   }, [isElectron]);
 
+  const brandingLogo = (typeof logo === 'string' && logo.trim().length > 0) ? logo : '';
+  const releaseDateLabel = new Date(`${RELEASE_DATE}T00:00:00`).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+
   return (
     <SettingsCard title="About & Updates" subtitle="Version information and automatic update management." icon={Info}>
-      <div className="space-y-8">
-        
-        {/* Version Info */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <div className="p-5 rounded-xl border border-border/50 bg-muted/20">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">App Version</p>
-            <p className="text-2xl font-bold text-foreground">
+      <div className="space-y-6">
+
+        {/* ── Identity ── */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-5 rounded-xl border border-border/60 bg-muted/20 p-5 sm:p-6">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-primary/10 overflow-hidden">
+            {brandingLogo ? (
+              <img src={brandingLogo} alt="App logo" className="h-12 w-12 object-contain" />
+            ) : (
+              <span className="text-[22px] font-bold tracking-tight text-primary">{dashboardName.substring(0, 3).toUpperCase()}</span>
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{dashboardName}</p>
+            <p className="mt-0.5 text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground tabular-nums">
               v{APP_VERSION}
-              <span className="text-sm font-normal text-muted-foreground ml-2">
-                (Build {BUILD_NUMBER})
-              </span>
+              <span className="ml-2 align-middle text-xs font-semibold text-muted-foreground">Build {BUILD_NUMBER}</span>
             </p>
-            <p className="text-xs text-muted-foreground mt-2">Released {RELEASE_DATE}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{tagline || 'Enterprise Resource Planning'}</p>
           </div>
-          <div className="p-5 rounded-xl border border-border/50 bg-muted/20">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Schema Version</p>
-            <p className="text-2xl font-bold text-foreground">{DATABASE_SCHEMA_VERSION}</p>
-            <p className="text-xs text-muted-foreground mt-2">Database schema version</p>
-          </div>
+          <span className="self-start sm:self-center shrink-0 inline-flex items-center rounded-full border border-border/70 bg-background px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            {IS_PRODUCTION ? 'Production' : 'Development'}
+          </span>
         </div>
 
-        {/* What's New — Changelog */}
+        {/* ── Details — one hairline sheet, no floating gray boxes ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-px overflow-hidden rounded-xl border border-border/60 bg-border/60">
+          <DetailCell label="App Version" value={`v${APP_VERSION}`} />
+          <DetailCell label="Build" value={BUILD_NUMBER} mono />
+          <DetailCell label="Released" value={releaseDateLabel} />
+          <DetailCell label="Schema Version" value={DATABASE_SCHEMA_VERSION} mono />
+          <DetailCell label="Environment" value={IS_PRODUCTION ? 'Production' : 'Development'} />
+          <DetailCell label="License" value="MIT" />
+        </div>
+
+        {/* ── What's New — Changelog ── */}
         <div className="space-y-4">
           <h4 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
             <Sparkles className="h-4 w-4" /> What's New
           </h4>
-          <div className="rounded-xl border border-border/50 bg-muted/10 overflow-hidden">
+          <div className="rounded-xl border border-border/60 bg-muted/10 overflow-hidden">
             {CHANGELOG.map((entry, idx) => (
               <ChangelogAccordionItem
                 key={entry.version}
@@ -1002,59 +1023,64 @@ function AboutUpdatesTab() {
           </div>
         </div>
 
-        {/* Electron Detection */}
+        {/* ── Desktop-only notice ── */}
         {!isElectron && (
-          <div className="p-5 rounded-xl border border-warning/30 bg-warning/10">
-            <div className="flex items-center gap-3">
-              <Info className="h-5 w-5 text-warning shrink-0" />
-              <div>
+          <div className="rounded-xl border border-warning/30 bg-warning/5 px-4 py-3">
+            <div className="flex items-start gap-3">
+              <Info className="h-5 w-5 text-warning shrink-0 mt-0.5" />
+              <div className="min-w-0">
                 <p className="text-sm font-semibold text-warning">Desktop App Required</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Auto-updates are only available in the desktop version. 
-                  You are viewing this in a browser — download the app to receive automatic updates.
+                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                  Auto-updates are only available in the desktop version.
+                  You are viewing this in a browser; download the app to receive automatic updates.
                 </p>
               </div>
             </div>
           </div>
         )}
 
-        {/* Update Check Section */}
+        {/* ── Automatic Updates ── */}
         {isElectron && (
-          <div className="space-y-4">
+          <div className="space-y-3">
             <h4 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
               <DownloadCloud className="h-4 w-4" /> Automatic Updates
             </h4>
-
-            {/* Check for Updates Button */}
-            <div className="p-5 rounded-xl border border-border/50 bg-muted/20 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <div className="flex-1">
-                <p className="font-semibold text-sm text-foreground">Check for Updates</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  The app automatically checks for updates on startup. Use this button to check manually.
-                </p>
-              </div>
-              <button
-                onClick={handleCheckForUpdates}
-                disabled={checking}
-                className="px-5 py-2.5 text-sm font-semibold bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-all active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shrink-0"
-              >
-                {checking ? (
-                  <>
-                    <RotateCw className="h-4 w-4 animate-spin" />
-                    Checking...
-                  </>
-                ) : (
-                  <>
+            <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+              {/* Check for Updates Button */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 sm:p-5">
+                <div className="flex-1 min-w-0 flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                     <DownloadCloud className="h-4 w-4" />
-                    Check for Updates
-                  </>
-                )}
-              </button>
-            </div>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground">Check for Updates</p>
+                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                      The app checks for updates on startup. Use this to check manually.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleCheckForUpdates}
+                  disabled={checking}
+                  className="px-5 py-2.5 text-sm font-semibold bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-all active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shrink-0"
+                >
+                  {checking ? (
+                    <>
+                      <RotateCw className="h-4 w-4 animate-spin" />
+                      Checking...
+                    </>
+                  ) : (
+                    <>
+                      <DownloadCloud className="h-4 w-4" />
+                      Check for Updates
+                    </>
+                  )}
+                </button>
+              </div>
 
-            {/* Update Status */}
-            {updateStatus && (
-              <div className={`p-4 rounded-xl border ${
+              {/* Update Status */}
+              {updateStatus && (
+                <div className={`mx-4 mb-4 sm:mx-5 sm:mb-5 rounded-lg border p-4 ${
                 updateStatus.status === 'up-to-date' 
                   ? 'border-success/30 bg-success/10'
                   : updateStatus.status === 'available' || updateStatus.status === 'downloaded'
@@ -1099,35 +1125,23 @@ function AboutUpdatesTab() {
                 </div>
               </div>
             )}
+            </div>
           </div>
         )}
 
-        {/* Documentation Links */}
-        <div className="space-y-4 pt-6 border-t border-border/50">
-          <h4 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
-            <ExternalLink className="h-4 w-4" /> Resources
-          </h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                // Open the GitHub repo for releases
-                handleCheckForUpdates();
-              }}
-              className="flex items-center gap-3 p-4 rounded-xl border border-border/50 bg-muted/10 hover:bg-muted/20 transition-colors"
-            >
-              <DownloadCloud className="h-5 w-5 text-primary shrink-0" />
-              <div>
-                <p className="text-sm font-semibold text-foreground">Check for Updates</p>
-                <p className="text-xs text-muted-foreground">Download the latest version</p>
-              </div>
-            </a>
-
-          </div>
-        </div>
       </div>
     </SettingsCard>
+  );
+}
+
+// One cell of the About details sheet. Hairline borders come from the
+// parent's gap-px grid; each cell is an opaque surface.
+function DetailCell({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="bg-card px-4 py-3.5">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
+      <p className={`mt-1 text-sm font-semibold text-foreground ${mono ? 'tabular-nums' : ''}`}>{value}</p>
+    </div>
   );
 }
 
