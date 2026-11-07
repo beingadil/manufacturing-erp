@@ -2,7 +2,7 @@ import { ArrowDown, PackageCheck } from 'lucide-react';
 import { useMemo } from 'react';
 import { formInputClass } from '../../components/form/formStyles';
 import { InventoryCalculationService } from '../../lib/business/InventoryCalculationService';
-import { getSortedStages } from '../../lib/processing/stageProgress';
+import { getSortedStages, visibleStagesForMaterial } from '../../lib/processing/stageProgress';
 import { formatCurrency, formatDate, formatNumber } from '../../lib/utils';
 import type { Batch, ProcessingReceipt, ProcessingSend, ProcessingStage, Processor, RawMaterial } from '../../types/erp';
 import { StageProgressStepper } from './StageProgressStepper';
@@ -38,12 +38,19 @@ export function StageTimelinePanel({
   const batch = batches.find(b => b.id === selectedBatchId);
   const material = materials.find(m => m.id === batch?.materialId);
 
+  // Only the stages this material is configured to run — nothing else.
+  const viewStages = useMemo(
+    () => visibleStagesForMaterial(sorted, material),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sorted, material?.id],
+  );
+
   const rows = useMemo(() => {
     if (!batch) return [];
     const batchSends = sends.filter(s => s.batchId === batch.id && s.status !== 'Adjusted');
     const batchReceipts = receipts.filter(r => batchSends.some(s => s.id === r.sendId));
 
-    return sorted.map(stage => {
+    return viewStages.map(stage => {
       const sendsHere = batchSends.filter(s => s.stageId === stage.id);
       // Legacy receipts may carry no stageId — attribute them via their dispatch's stage.
       const receiptsHere = batchReceipts.filter(r =>
@@ -55,7 +62,7 @@ export function StageTimelinePanel({
       const wip = Math.max(0, sent - received - loss);
       return { stage, sendsHere, receiptsHere, sent, received, loss, wip };
     });
-  }, [batch, sends, receipts, sorted]);
+  }, [batch, sends, receipts, viewStages]);
 
   // Chain progress: stages fully received out of (sent > 0 and no wip held).
   const progressPct = useMemo(() => {
@@ -112,10 +119,10 @@ export function StageTimelinePanel({
           </div>
 
           {/* Compact chain stepper */}
-          {sorted.length > 0 && (
+          {viewStages.length > 0 && (
             <div className="rounded-xl border border-border bg-card p-3">
               <StageProgressStepper
-                stages={sorted}
+                stages={viewStages}
                 completedStageIds={rows.filter(r => r.sent > 0 && r.wip <= 0).map(r => r.stage.id)}
                 currentStageId={sorted.find(s => s.id === batch.currentStageId)?.id}
                 compact
