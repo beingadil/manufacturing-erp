@@ -33,7 +33,6 @@ import { formInputClass } from '../components/form/formStyles';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { DatePicker } from '../components/ui/date-picker';
 import { previewProcessingCostReclassification } from '../lib/accounting/processingCostReclassification';
-import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
 import {
   consumeComponentsForManufacturing,
   isManufacturingEnabled,
@@ -148,9 +147,6 @@ export function Manufacturing() {
     return map;
   }, [batches]);
 
-  const averageCost = (materialId: string) =>
-    InventoryCalculationService.getWeightedAverageCostPerPiece(materialId, batches || []);
-
   const formComponents = useMemo(() => {
     const product = products.find(p => p.id === form.productId);
     const qty = Math.round(Number(form.plannedQty));
@@ -168,9 +164,18 @@ export function Manufacturing() {
       batches || [],
       formComponents.map(c => ({ materialId: c.materialId, pcs: c.plannedQuantity })),
     );
+    // Per-material drawn cost — the SAME arithmetic the completion posts, so
+    // the column always sums to the header total and covers ready-made /
+    // processed buckets (which carry no remainingPcs for the raw-bucket
+    // average to see).
+    const costByMaterial = new Map<string, number>();
+    for (const draw of drawn.draws) {
+      costByMaterial.set(draw.materialId, (costByMaterial.get(draw.materialId) || 0) + draw.cost);
+    }
     return {
       totalCost: drawn.totalCost,
       shortage: drawn.shortage,
+      costByMaterial,
     };
   }, [formComponents, batches]);
 
@@ -740,7 +745,7 @@ export function Manufacturing() {
                             {available}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                            {formatCurrency(line.plannedQuantity * averageCost(line.materialId))}
+                            {formatCurrency(formPreview?.costByMaterial.get(line.materialId) ?? 0)}
                           </td>
                         </tr>
                       );
