@@ -4,7 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Column, DataTable } from "../components/DataTable";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
-import { formInputClass } from "../components/form/formStyles";
+import { SearchableSelect } from "../components/SearchableSelect";
 import { DispatchDetailModal } from '../components/processing/DispatchDetailModal';
 import { StageManagerPanel } from '../components/processing/StageManagerPanel';
 import { StageTimelinePanel } from '../components/processing/StageTimelinePanel';
@@ -442,14 +442,16 @@ export function JobWork() {
             <div className="flex flex-wrap items-center gap-2">
               <input type="date" value={sendDateFrom} onChange={e => setSendDateFrom(e.target.value)} className="rounded-lg border border-border bg-background/60 px-2 py-1.5 text-xs text-foreground" aria-label="From date" />
               <input type="date" value={sendDateTo} onChange={e => setSendDateTo(e.target.value)} className="rounded-lg border border-border bg-background/60 px-2 py-1.5 text-xs text-foreground" aria-label="To date" />
-              <select
+              <SearchableSelect
+                options={[
+                  { id: '', label: 'All stages' },
+                  ...sortedStages.map(s => ({ id: s.id, label: s.name + (s.isFinalStage ? ' (Final)' : '') })),
+                ]}
                 value={sendStageFilter}
-                onChange={e => setSendStageFilter(e.target.value)}
-                className={formInputClass}
-              >
-                <option value="">All stages</option>
-                {sortedStages.map(s => <option key={s.id} value={s.id}>{s.name}{s.isFinalStage ? ' (Final)' : ''}</option>)}
-              </select>
+                onChange={(val) => setSendStageFilter(val)}
+                placeholder="Filter by stage…"
+                size="sm"
+              />
             </div>
           </div>
           <DataTable
@@ -468,14 +470,16 @@ export function JobWork() {
             <div className="flex flex-wrap items-center gap-2">
               <input type="date" value={receiveDateFrom} onChange={e => setReceiveDateFrom(e.target.value)} className="rounded-lg border border-border bg-background/60 px-2 py-1.5 text-xs text-foreground" aria-label="From date" />
               <input type="date" value={receiveDateTo} onChange={e => setReceiveDateTo(e.target.value)} className="rounded-lg border border-border bg-background/60 px-2 py-1.5 text-xs text-foreground" aria-label="To date" />
-              <select
+              <SearchableSelect
+                options={[
+                  { id: '', label: 'All stages' },
+                  ...sortedStages.map(s => ({ id: s.id, label: s.name + (s.isFinalStage ? ' (Final)' : '') })),
+                ]}
                 value={receiveStageFilter}
-                onChange={e => setReceiveStageFilter(e.target.value)}
-                className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
-              >
-                <option value="">All stages</option>
-                {sortedStages.map(s => <option key={s.id} value={s.id}>{s.name}{s.isFinalStage ? ' (Final)' : ''}</option>)}
-              </select>
+                onChange={(val) => setReceiveStageFilter(val)}
+                placeholder="Filter by stage…"
+                size="sm"
+              />
             </div>
           </div>
           <DataTable

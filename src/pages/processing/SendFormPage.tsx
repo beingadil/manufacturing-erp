@@ -21,7 +21,6 @@ import { QuickAddMaterial, QuickAddProcessor } from '../../components/QuickAddMo
 import { SearchableSelect } from '../../components/SearchableSelect';
 import { DatePicker } from '../../components/ui/date-picker';
 import { StageProgressStepper } from '../../components/processing/StageProgressStepper';
-import { formInputClass } from '../../components/form/formStyles';
 
 /** Matches the SearchableSelect trigger exactly, so every control on a row lines up. */
 const control =
@@ -410,29 +409,29 @@ export default function SendFormPage() {
               {/* Batch */}
               <div className="min-w-0">
                 <label htmlFor="sf-batch" className={label}>Batch <span className="font-normal normal-case text-muted-foreground/60">(auto = oldest first)</span></label>
-                <select
-                  id="sf-batch"
+                <SearchableSelect
+                  className="[&>div]:h-full"
+                  options={[
+                    { id: '', label: 'Auto — oldest batch first', secondaryLabel: 'FIFO' },
+                    ...sendableBatches.map(b => {
+                      const isStageOne = !effectiveStage || effectiveStage.sequence <= 1;
+                      const avail = isStageOne
+                        ? batchRawAvailableOf(b)
+                        : batchAvailableAtSource(b, InventoryCalculationService.requiredSourceForTarget(effectiveStageId, sortedStages));
+                      const fromStage = !isStageOne && effectiveStage
+                        ? sortedStages.find(s => s.id === InventoryCalculationService.requiredSourceForTarget(effectiveStageId, sortedStages))
+                        : null;
+                      return {
+                        id: b.id,
+                        label: b.batchNo,
+                        secondaryLabel: `Available: ${formatNumber(avail)} PCS${effectiveStage ? ` → ${effectiveStage.name}` : ''}${fromStage ? ` from ${fromStage.name}` : ''}`,
+                      };
+                    }),
+                  ]}
                   value={batchId}
-                  onChange={e => { setBatchId(e.target.value); setStageId(''); setError(null); }}
-                  className={formInputClass}
-                  disabled={!materialId}
-                >
-                  <option value="">Auto — oldest batch first</option>
-                  {sendableBatches.map(b => {
-                    const isStageOne = !effectiveStage || effectiveStage.sequence <= 1;
-                    const avail = isStageOne
-                      ? batchRawAvailableOf(b)
-                      : batchAvailableAtSource(b, InventoryCalculationService.requiredSourceForTarget(effectiveStageId, sortedStages));
-                    const fromStage = !isStageOne && effectiveStage
-                      ? sortedStages.find(s => s.id === InventoryCalculationService.requiredSourceForTarget(effectiveStageId, sortedStages))
-                      : null;
-                    return (
-                      <option key={b.id} value={b.id}>
-                        {b.batchNo} (Available: {formatNumber(avail)} PCS{effectiveStage ? ` → ${effectiveStage.name}` : ''}{fromStage ? ` from ${fromStage.name}` : ''})
-                      </option>
-                    );
-                  })}
-                </select>
+                  onChange={(val) => { setBatchId(val); setStageId(''); setError(null); }}
+                  placeholder="Select batch…"
+                />
               </div>
 
               {/* Stage */}
@@ -441,25 +440,24 @@ export default function SendFormPage() {
                   Processing stage
                   {isSingleStage && fixedStage && <span className="ml-1.5 font-normal normal-case text-muted-foreground/60">(locked — {selectedMaterial?.name} processes here only)</span>}
                 </label>
-                <select
-                  id="sf-stage"
+                <SearchableSelect
+                  options={(editId
+                    ? sortedStages.map(s => ({ id: s.id, label: s.name + (s.isFinalStage ? ' (Final)' : '') }))
+                    : stageOptions.map(opt => {
+                        const stage = sortedStages.find(s => s.id === opt.stageId);
+                        return {
+                          id: opt.stageId,
+                          label: stage?.name || 'Stage',
+                          secondaryLabel: opt.fromStageName
+                            ? `${formatNumber(opt.availablePcs)} PCS from ${opt.fromStageName}`
+                            : `${formatNumber(opt.availablePcs)} PCS raw`,
+                        };
+                      })
+                  )}
                   value={editId ? stageId : (effectiveStageId || '')}
-                  onChange={e => { setStageId(e.target.value); setBatchId(''); setError(null); }}
-                  className={formInputClass}
-                  disabled={!materialId || (isSingleStage && !!fixedStage && !editId)}
-                >
-                  {!materialId && <option value="">Select material first</option>}
-                  {editId
-                    ? sortedStages.map(s => <option key={s.id} value={s.id}>{s.name}{s.isFinalStage ? ' (Final)' : ''}</option>)
-                    : stageOptions.map(opt => (
-                        <option key={opt.stageId} value={opt.stageId}>
-                          {sortedStages.find(s => s.id === opt.stageId)?.name || 'Stage'}
-                          {opt.fromStageName
-                            ? ` — ${formatNumber(opt.availablePcs)} PCS from ${opt.fromStageName}`
-                            : ` — ${formatNumber(opt.availablePcs)} PCS raw`}
-                        </option>
-                    ))}
-                </select>
+                  onChange={(val) => { setStageId(val); setBatchId(''); setError(null); }}
+                  placeholder="Select stage…"
+                />
                 {effectiveStageIllegal && (
                   <p role="alert" className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-destructive">
                     <AlertTriangle className="h-3.5 w-3.5 shrink-0" />

@@ -17,7 +17,6 @@ import { useERPStore } from '../../store/useERPStore';
 import { QuickAddProcessor } from '../../components/QuickAddModals';
 import { SearchableSelect } from '../../components/SearchableSelect';
 import { DatePicker } from '../../components/ui/date-picker';
-import { formInputClass } from '../../components/form/formStyles';
 
 const control =
   'w-full min-w-0 rounded-xl border border-border bg-card px-3 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none';
@@ -174,25 +173,23 @@ export default function ReceiveFormPage() {
               {/* Pending dispatch */}
               <div className="min-w-0">
                 <label htmlFor="rf-dispatch" className={label}>Pending dispatch <span className="text-destructive">*</span></label>
-                <select
-                  id="rf-dispatch"
-                  required
+                <SearchableSelect
+                  options={(!processorId
+                    ? []
+                    : openSends.map(s => {
+                        const m = materials.find(mat => mat.id === s.materialId);
+                        const st = processingStages.find(x => x.id === s.stageId);
+                        return {
+                          id: s.id,
+                          label: s.dispatchNo,
+                          secondaryLabel: `${new Date(s.date).toLocaleDateString()} · ${m?.name} (${st?.name || 'Initial Processor'}) · ${formatNumber(s.pcsSent - s.pcsReceived)} pending`,
+                        };
+                      })
+                  )}
                   value={sendId}
-                  onChange={e => { setSendId(e.target.value); setError(null); }}
-                  className={formInputClass}
-                  disabled={!processorId}
-                >
-                  <option value="">{processorId ? 'Select pending dispatch…' : 'Pick a processor first'}</option>
-                  {openSends.map(s => {
-                    const m = materials.find(mat => mat.id === s.materialId);
-                    const st = processingStages.find(x => x.id === s.stageId);
-                    return (
-                      <option key={s.id} value={s.id}>
-                        {new Date(s.date).toLocaleDateString()} — {s.dispatchNo} · {m?.name} ({st?.name || 'Initial Processor'}) · {formatNumber(s.pcsSent - s.pcsReceived)} pending
-                      </option>
-                    );
-                  })}
-                </select>
+                  onChange={(val) => { setSendId(val); setError(null); }}
+                  placeholder={processorId ? 'Select pending dispatch…' : 'Pick a processor first'}
+                />
               </div>
 
               {selectedSend && maxPcs > 0 && (

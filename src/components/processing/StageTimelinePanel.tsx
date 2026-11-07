@@ -1,6 +1,6 @@
 import { ArrowDown, PackageCheck } from 'lucide-react';
 import { useMemo } from 'react';
-import { formInputClass } from '../../components/form/formStyles';
+import { SearchableSelect } from '../SearchableSelect';
 import { InventoryCalculationService } from '../../lib/business/InventoryCalculationService';
 import { getSortedStages, visibleStagesForMaterial } from '../../lib/processing/stageProgress';
 import { formatCurrency, formatDate, formatNumber } from '../../lib/utils';
@@ -76,21 +76,22 @@ export function StageTimelinePanel({
     <div className="space-y-3">
       {/* Batch picker — at the TOP, labeled */}
       <div className="rounded-xl border border-border bg-card p-4 space-y-2">
-        <label htmlFor="timeline-batch" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
           Trace a batch through the chain
-        </label>
-        <select
-          id="timeline-batch"
-          value={selectedBatchId}
-          onChange={e => onSelectBatch(e.target.value)}
-          className={formInputClass}
-        >
-          <option value="">Select a batch…</option>
-          {(batches || []).map(b => {
+        </span>
+        <SearchableSelect
+          options={(batches || []).map(b => {
             const mat = materials.find(m => m.id === b.materialId);
-            return <option key={b.id} value={b.id}>{b.batchNo} — {mat?.name || 'Material'} ({formatNumber(b.initialPcs)} PCS)</option>;
+            return {
+              id: b.id,
+              label: b.batchNo,
+              secondaryLabel: `${mat?.name || 'Material'} · ${formatNumber(b.initialPcs)} PCS`,
+            };
           })}
-        </select>
+          value={selectedBatchId || ''}
+          onChange={(val) => onSelectBatch(val)}
+          placeholder="Select a batch…"
+        />
       </div>
 
       {!batch ? (

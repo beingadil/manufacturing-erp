@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp, Edit, Plus, Trash2, TriangleAlert } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { formInputClass } from '../../components/form/formStyles';
+import { SearchableSelect } from '../SearchableSelect';
 import { ProcessingService } from '../../services/ProcessingService';
 import { useERPStore } from '../../store/useERPStore';
 import type { ProcessingStage } from '../../types/erp';
@@ -148,10 +148,15 @@ export function StageManagerPanel() {
             </div>
             <div>
               <label className="block text-sm font-medium text-foreground/80 mb-1">Rate Method</label>
-              <select value={rateMethod} onChange={e => setRateMethod(e.target.value as any)} className={formInputClass}>
-                <option value="per_piece">Per Piece</option>
-                <option value="per_kg">Per KG</option>
-              </select>
+              <SearchableSelect
+                options={[
+                  { id: 'per_piece', label: 'Per Piece' },
+                  { id: 'per_kg', label: 'Per KG' },
+                ]}
+                value={rateMethod}
+                onChange={(val) => setRateMethod(val as 'per_piece' | 'per_kg')}
+                placeholder="Rate method…"
+              />
             </div>
           </div>
           <div>
