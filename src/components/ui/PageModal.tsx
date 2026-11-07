@@ -1,14 +1,18 @@
 import { X } from 'lucide-react';
-import { useCallback, useEffect, useRef } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
 interface PageModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
-  children: React.ReactNode;
+  children: ReactNode;
   /** Max width class, defaults to max-w-lg */
   maxWidth?: string;
+  /** Custom header content rendered above the scroll area (replaces the default title bar). */
+  header?: ReactNode;
+  /** Footer bar rendered below the scroll area (sticks to the bottom). */
+  footer?: ReactNode;
 }
 
 /**
@@ -19,7 +23,7 @@ interface PageModalProps {
  * - overscroll-behavior: contain on the content area
  * - Click outside to close
  */
-export function PageModal({ isOpen, onClose, title, children, maxWidth = 'max-w-lg' }: PageModalProps) {
+export function PageModal({ isOpen, onClose, title, children, maxWidth = 'max-w-lg', header, footer }: PageModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -103,7 +107,6 @@ export function PageModal({ isOpen, onClose, title, children, maxWidth = 'max-w-
       aria-modal="true"
       aria-label={title}
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur p-4"
-      style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 60 }}
       onClick={(e) => {
         if (e.target === overlayRef.current) onClose();
       }}
@@ -111,22 +114,25 @@ export function PageModal({ isOpen, onClose, title, children, maxWidth = 'max-w-
       <div
         ref={contentRef}
         tabIndex={-1}
-        className={`bg-card rounded-2xl shadow-xl w-full ${maxWidth} max-h-[90vh] flex flex-col overflow-hidden outline-none`}
+        className={`bg-card rounded-2xl shadow-xl w-full ${maxWidth} flex flex-col overflow-hidden outline-none`}
         style={{ overscrollBehavior: 'contain' }}
       >
-        <div className="px-6 py-4 border-b border-border flex justify-between items-center shrink-0">
-          <h3 className="text-lg font-bold text-foreground">{title}</h3>
-          <button
-            onClick={onClose}
-            aria-label="Close dialog"
-            className="p-1 rounded-lg hover:bg-muted transition-colors"
-          >
-            <X className="h-5 w-5 text-muted-foreground/80" />
-          </button>
-        </div>
-        <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto" style={{ overscrollBehavior: 'contain' }}>
+        {header ?? (
+          <div className="px-6 py-4 border-b border-border flex justify-between items-center shrink-0">
+            <h3 className="text-lg font-bold text-foreground">{title}</h3>
+            <button
+              onClick={onClose}
+              aria-label="Close dialog"
+              className="p-1 rounded-lg hover:bg-muted transition-colors"
+            >
+              <X className="h-5 w-5 text-muted-foreground/80" />
+            </button>
+          </div>
+        )}
+        <div className="p-6 space-y-4 flex-1 min-h-0 max-h-[80vh] overflow-y-auto" style={{ overscrollBehavior: 'contain' }}>
           {children}
         </div>
+        {footer}
       </div>
     </div>,
     document.body

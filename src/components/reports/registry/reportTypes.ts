@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 
-export type ReportCategoryId = 'purchase' | 'sales' | 'processing' | 'inventory' | 'financial';
+export type ReportCategoryId = 'purchase' | 'sales' | 'processing' | 'manufacturing' | 'inventory' | 'financial';
 
 export interface ReportDefinition {
   id: string;

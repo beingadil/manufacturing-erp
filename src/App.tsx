@@ -24,14 +24,21 @@ import { CashReceiptVoucher } from './pages/finance/CashReceiptVoucher';
 import { JournalVoucher } from './pages/finance/JournalVoucher';
 import { JobWork } from './pages/JobWork';
 import { Ledgers } from './pages/Ledgers';
+import BillFormPage from './pages/processing/BillFormPage';
+import SendFormPage from './pages/processing/SendFormPage';
+import ReceiveFormPage from './pages/processing/ReceiveFormPage';
 import { Login } from './pages/Login';
+import { Manufacturing } from './pages/Manufacturing';
 import { MaterialDetail } from './pages/MaterialDetail';
 import { MonitorScreen } from './pages/MonitorScreen';
 import { Processors } from './pages/Processors';
+import { PurchaseDetail } from './pages/PurchaseDetail';
+import PurchaseFormPage from './pages/PurchaseFormPage';
 import { Purchases } from './pages/Purchases';
 import { RawMaterials } from './pages/RawMaterials';
 import { Reports } from './pages/Reports';
 import { Sales } from './pages/Sales';
+import SalesFormPage from './pages/SalesFormPage';
 import { Settings } from './pages/Settings';
 import { Suppliers } from './pages/Suppliers';
 import { useSettingsStore } from './store/useSettingsStore';
@@ -130,12 +137,22 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="job-work" element={<Navigate to="/processing" replace />} />
           <Route path="purchases" element={<RouteGuard requireModule="Purchases" requireAction="View"><Purchases /></RouteGuard>} />
+          <Route path="purchases/new" element={<RouteGuard requireModule="Purchases" requireAction="View"><PurchaseFormPage /></RouteGuard>} />
+          <Route path="purchases/edit/:id" element={<RouteGuard requireModule="Purchases" requireAction="View"><PurchaseFormPage /></RouteGuard>} />
           <Route path="processing" element={<RouteGuard requireModule="Processing" requireAction="View"><JobWork /></RouteGuard>} />
+          <Route path="processing/send/:id?" element={<RouteGuard requireModule="Processing" requireAction="View"><SendFormPage /></RouteGuard>} />
+          <Route path="processing/receive/:id?" element={<RouteGuard requireModule="Processing" requireAction="View"><ReceiveFormPage /></RouteGuard>} />
+          <Route path="processing/generate-bill/:id?" element={<RouteGuard requireModule="Processing" requireAction="View"><BillFormPage /></RouteGuard>} />
+          <Route path="manufacturing" element={<RouteGuard requireModule="Manufacturing" requireAction="View"><Manufacturing /></RouteGuard>} />
           <Route path="sales" element={<RouteGuard requireModule="Sales" requireAction="View"><Sales /></RouteGuard>} />
+          <Route path="sales/new" element={<RouteGuard requireModule="Sales" requireAction="View"><SalesFormPage /></RouteGuard>} />
+          <Route path="sales/edit/:id" element={<RouteGuard requireModule="Sales" requireAction="View"><SalesFormPage /></RouteGuard>} />
           <Route path="categories" element={<RouteGuard requireModule="Master Data" requireAction="View"><Categories /></RouteGuard>} />
           <Route path="materials" element={<RouteGuard requireModule="Master Data" requireAction="View"><RawMaterials /></RouteGuard>} />
           <Route path="materials/:id" element={<RouteGuard requireModule="Master Data" requireAction="View"><MaterialDetail /></RouteGuard>} />
+          <Route path="materials/:id/purchases/:batchId" element={<RouteGuard requireModule="Master Data" requireAction="View"><PurchaseDetail /></RouteGuard>} />
           <Route path="products" element={<RouteGuard requireModule="Master Data" requireAction="View"><FinishedGoods /></RouteGuard>} />
+          
           <Route path="ledgers" element={<RouteGuard requireModule="Ledgers" requireAction="View"><Ledgers /></RouteGuard>} />
           <Route path="processors" element={<RouteGuard requireModule="Master Data" requireAction="View"><Processors /></RouteGuard>} />
           <Route path="suppliers" element={<RouteGuard requireModule="Master Data" requireAction="View"><Suppliers /></RouteGuard>} />

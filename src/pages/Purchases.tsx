@@ -1,13 +1,8 @@
-import { CalendarDays, Edit, Eye, PackagePlus, Plus, Printer, ReceiptText, Trash2, Wallet } from 'lucide-react';
-import React, { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from 'react-router-dom';
+import { Edit, Eye, Plus, Printer, Trash2, } from 'lucide-react';
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
-import { QuickAddMaterial, QuickAddSupplier } from "../components/QuickAddModals";
-import { SearchableSelect } from "../components/SearchableSelect";
-import { DatePicker } from "../components/ui/date-picker";
-import { KpiCard } from "../components/ui/KpiCard";
-import { PageModal } from "../components/ui/PageModal";
 import { VoucherHistoryTab } from "../components/VoucherHistoryTab";
 import { generatePurchaseInvoicePDF } from "../lib/documentGenerators";
 import { formatCurrency } from "../lib/utils";
@@ -18,151 +13,18 @@ import { useERPStore } from "../store/useERPStore";
 export function Purchases() {
   const { purchases, materials, suppliers, vouchers } = useERPStore();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editPurchaseId, setEditPurchaseId] = useState<string | undefined>();
+  const navigate = useNavigate();
   const [deleteModal, setDeleteModal] = useState<{isOpen: boolean, id: string, no: string}>({isOpen: false, id: '', no: ''});
-  const [isAddSupplierOpen, setIsAddSupplierOpen] = useState(false);
-
-  const handleEditClick = (item: any) => {
-    setEditPurchaseId(item.id);
-    setSupplierId(item.supplierId);
-    setMaterialId(item.materialId);
-    setWeight(item.weight.toString());
-    setWeightUnit(item.weightUnit);
-    setWeightPerPiece(item.weightPerPiece.toString());
-    setRatePerUnit(item.ratePerUnit.toString());
-    setDate(item.date);
-    // Restore the entry mode the purchase was recorded under.
-    const mat = materials.find(m => m.id === item.materialId);
-    const wasReadyMade = item.directPcs != null || mat?.processingPath === 'ready_made';
-    setEntryMode(wasReadyMade ? 'pcs' : 'weight');
-    if (item.directPcs != null) setDirectPcs(String(item.directPcs));
-    setIsModalOpen(true);
-  };
-
-  const [isAddMaterialOpen, setIsAddMaterialOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'data' | 'vouchers'>(() => (searchParams.get('tab') === 'vouchers' ? 'vouchers' : 'data'));
 
-  // Deep link: /purchases?new=1 (Dashboard Quick Entry) opens the create form.
-  // The tab-sync effect below strips ?new from the URL on its mount pass.
-  useEffect(() => {
-    if (searchParams.get('new') !== '1') return;
-    setEditPurchaseId(undefined);
-    setSupplierId('');
-    setMaterialId('');
-    setWeight('');
-    setWeightPerPiece('');
-    setRatePerUnit('');
-    setIsModalOpen(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Sync tab to URL (?tab=data|vouchers) so refresh/back preserves the view.
-  useEffect(() => {
-    const params = new URLSearchParams(searchParams);
-    params.set('tab', activeTab);
-    params.delete('new'); // consumed by the deep-link effect above
-    setSearchParams(params, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
     params.set('tab', activeTab);
     setSearchParams(params, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
-  
-  const [supplierId, setSupplierId] = useState("");
-  const [materialId, setMaterialId] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [weight, setWeight] = useState("");
-  const [weightUnit, setWeightUnit] = useState<"KGs" | "Tons">("KGs");
-  const [ratePerUnit, setRatePerUnit] = useState("");
-  const [weightPerPiece, setWeightPerPiece] = useState("");
-  // Entry mode: 'weight' = KGs ÷ weightPerPiece (default), 'pcs' = direct pcs ×
-  // rate per piece (ready-made items like lids/handles). Follows the selected
-  // material's processing path; the user can override per purchase.
-  const [entryMode, setEntryMode] = useState<'weight' | 'pcs'>('weight');
-  const [directPcs, setDirectPcs] = useState("");
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const selectedMaterial = materials.find(m => m.id === materialId);
-  const materialPath = selectedMaterial?.processingPath ?? 'full_chain';
-  const effectiveMode = materialPath === 'ready_made' ? 'pcs' : entryMode;
-
-  // Switching material updates the default entry mode (path-aware), keeping
-  // any explicit override the user made for materials with a configurable path.
-  const handleMaterialChange = (id: string) => {
-    setMaterialId(id);
-    setDirectPcs("");
-    const mat = materials.find(m => m.id === id);
-    setEntryMode(mat?.processingPath === 'ready_made' ? 'pcs' : 'weight');
-  };
-
-  const calculatedPcsPreview = useMemo(() => {
-    if (!weight || isNaN(parseFloat(weight)) || !weightPerPiece || isNaN(parseFloat(weightPerPiece))) return 0;
-    const w = parseFloat(weight);
-    const wpp = parseFloat(weightPerPiece);
-    if (wpp <= 0) return 0;
-    const weightInKg = weightUnit === "KGs" ? w : w * 1000;
-    return Math.floor(weightInKg / wpp);
-  }, [weight, weightUnit, weightPerPiece]);
-
-  const pcsPreview = effectiveMode === 'pcs'
-    ? (directPcs && !isNaN(parseFloat(directPcs)) ? Math.round(parseFloat(directPcs)) : 0)
-    : calculatedPcsPreview;
-
-  const totalAmountPreview = useMemo(() => {
-    if (effectiveMode === 'pcs') {
-      const pcs = parseFloat(directPcs);
-      const rate = parseFloat(ratePerUnit);
-      if (!directPcs || isNaN(pcs) || !ratePerUnit || isNaN(rate)) return 0;
-      return Math.round(pcs) * rate;
-    }
-    if (!weight || isNaN(parseFloat(weight)) || !ratePerUnit || isNaN(parseFloat(ratePerUnit))) return 0;
-    return parseFloat(weight) * parseFloat(ratePerUnit);
-  }, [effectiveMode, directPcs, weight, ratePerUnit]);
-
-  const handleCreate = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!supplierId || !materialId || !date || !ratePerUnit) return;
-    const isPcsEntry = effectiveMode === 'pcs';
-    if (isPcsEntry && (!directPcs || parseFloat(directPcs) <= 0)) return;
-    if (!isPcsEntry && (!weight || !weightPerPiece)) return;
-    
-    ErrorManagement.safeExecuteSync(() => {
-      const payload = isPcsEntry
-        ? {
-            supplierId,
-            materialId,
-            date,
-            weight: 0,
-            weightUnit: 'KGs' as const,
-            ratePerUnit: parseFloat(ratePerUnit),
-            weightPerPiece: 0,
-            directPcs: Math.round(parseFloat(directPcs)),
-          }
-        : {
-            supplierId,
-            materialId,
-            date,
-            weight: parseFloat(weight),
-            weightUnit: weightUnit as 'KGs' | 'Tons',
-            ratePerUnit: parseFloat(ratePerUnit),
-            weightPerPiece: parseFloat(weightPerPiece)
-          };
-
-      if (editPurchaseId) {
-        PurchaseService.update(editPurchaseId, payload);
-      } else {
-        PurchaseService.create(payload as any);
-      }
-      setIsModalOpen(false);
-      setWeight("");
-      setRatePerUnit("");
-      setWeightPerPiece("");
-      setDirectPcs("");
-      setEntryMode('weight');
-    }, 'Purchase Save');
+  const handleEditClick = (item: any) => {
+    navigate(`/purchases/edit/${item.id}`);
   };
 
   const enrichedPurchases = useMemo(() => purchases.map(p => {
@@ -174,7 +36,9 @@ export function Purchases() {
       supplierName: s?.name || 'Unknown',
       materialName: m?.name || 'Unknown',
       formattedDate: new Date(p.date).toLocaleDateString(),
-      voucherNo: voucher?.voucherNo || null
+      voucherNo: voucher?.voucherNo || null,
+        weightDisplay: `${p.weight} ${p.weightUnit || ''}`.trim(),
+        amountDisplay: formatCurrency(p.amount || 0)
     };
   }), [purchases, suppliers, materials, vouchers]);
 
@@ -244,11 +108,11 @@ export function Purchases() {
           <p className="text-sm text-muted-foreground mt-1">Record raw material purchases and piece calculations.</p>
         </div>
         <button
-          onClick={() => { setEditPurchaseId(undefined); setSupplierId(''); setMaterialId(''); setWeight(''); setWeightPerPiece(''); setRatePerUnit(''); setIsModalOpen(true); }}
+          onClick={() => navigate('/purchases/new')}
           className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors"
         >
           <Plus className="h-4 w-4" />
-          Add Purchase
+          New Purchase
         </button>
       </div>
 
@@ -271,143 +135,42 @@ export function Purchases() {
       {activeTab === 'data' ? (
         <>
           {/* Live totals strip — mirrors exactly what the table below shows */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <KpiCard size="sm" icon={ReceiptText} label="Total Purchases" value={String(purchaseStats.count)} description={<span>Records in the register</span>} />
-            <KpiCard size="sm" icon={PackagePlus} iconClassName="text-success" label="PCS Added" value={purchaseStats.pcs.toLocaleString()} description={<span>Raw pieces received</span>} />
-            <KpiCard size="sm" icon={Wallet} iconClassName="text-destructive" label="Total Spend" value={formatCurrency(purchaseStats.value)} description={<span>All recorded purchases</span>} />
-            <KpiCard size="sm" icon={CalendarDays} iconClassName="text-blue-500" label="This Month" value={formatCurrency(purchaseStats.monthValue)} description={<span>Spend in {new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>} />
-          </div>
+          <section className="flex flex-wrap items-center gap-x-10 gap-y-3 rounded-2xl border border-border bg-card px-6 py-4 shadow-sm">
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Purchases</div>
+              <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{purchaseStats.count}</div>
+              <div className="text-xs text-muted-foreground">Records in the register</div>
+            </div>
+            <div className="border-l border-border/60 pl-10">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">PCS Added</div>
+              <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{purchaseStats.pcs.toLocaleString()}</div>
+              <div className="text-xs text-muted-foreground">Raw pieces received</div>
+            </div>
+            <div className="border-l border-border/60 pl-10">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Total Spend</div>
+              <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-destructive">{formatCurrency(purchaseStats.value)}</div>
+              <div className="text-xs text-muted-foreground">All recorded purchases</div>
+            </div>
+            <div className="border-l border-border/60 pl-10">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">This Month</div>
+              <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-blue-500">{formatCurrency(purchaseStats.monthValue)}</div>
+              <div className="text-xs text-muted-foreground">Spend in {new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</div>
+            </div>
+          </section>
           <DataTable 
             data={enrichedPurchases} 
             columns={columns} 
-            searchKeys={["purchaseNo", "supplierName", "materialName"]} 
-            searchPlaceholder="Search purchases by PO, supplier or material..."
+            searchKeys={["purchaseNo", "supplierName", "materialName", "formattedDate", "weight", "weightDisplay", "calculatedPcs", "amount", "amountDisplay"]}
+            searchPlaceholder="Search purchases by PO, supplier, material, date, weight, pcs or amount..."
             persistKey="purchases-table"
             defaultSortKey="date"
+            defaultSortDirection="asc"
+            density="compact"
           />
         </>
       ) : (
         <VoucherHistoryTab sourceModule="Purchase" />
       )}
-
-      <PageModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editPurchaseId ? 'Edit Purchase' : 'Add Purchase'} maxWidth="max-w-3xl">
-        <form onSubmit={handleCreate} className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label htmlFor="purchase-supplier" className="text-sm font-semibold">Supplier *</label>
-              <SearchableSelect 
-                options={suppliers.map(s => ({ id: s.id, label: s.name, searchValue: s.phone }))}
-                value={supplierId}
-                onChange={setSupplierId}
-                placeholder="Select Supplier..."
-                onAdd={() => setIsAddSupplierOpen(true)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="purchase-material" className="text-sm font-semibold">Material *</label>
-              <SearchableSelect 
-                options={materials.map(m => ({
-                  id: m.id,
-                  label: m.name,
-                  secondaryLabel: m.processingPath === 'ready_made'
-                    ? 'Ready-made'
-                    : m.processingPath === 'single_stage'
-                      ? 'Single processor'
-                      : m.processingPath === 'custom_stages'
-                        ? 'Selected processors'
-                        : undefined,
-                }))}
-                value={materialId}
-                onChange={handleMaterialChange}
-                placeholder="Select Material..."
-                onAdd={() => setIsAddMaterialOpen(true)}
-                required
-              />
-            </div>
-          </div>
-
-          {/* The material's processing path, shown so the form matches it.
-              Ready-made materials lock to direct-pcs entry (no weight math);
-              every other path is entered by weight, which is what both the
-              engine and the purchase validator require. */}
-          {materialId && materialPath !== 'ready_made' && (
-            <div className="rounded-xl border border-border bg-muted/30 px-4 py-3">
-              <div className="text-sm font-semibold text-foreground">Processing Path</div>
-              <div className="text-xs text-muted-foreground">
-                {materialPath === 'single_stage'
-                  ? 'This material finishes at its one designated processor.'
-                  : 'This material goes through every processor in sequence.'}
-              </div>
-            </div>
-          )}
-          {materialId && materialPath === 'ready_made' && (
-            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-foreground">
-              <span className="font-semibold">Ready-made item</span> — purchased already finished. Pieces go straight to sellable finished stock; no processing needed.
-            </div>
-          )}
-
-          {effectiveMode === 'pcs' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label htmlFor="purchase-pcs" className="text-sm font-semibold">Quantity (PCS) *</label>
-                <input id="purchase-pcs" name="purchase-pcs" type="number" min="1" step="1" required value={directPcs} onChange={e => setDirectPcs(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 h-12" placeholder="Number of pieces bought" />
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="purchase-rate" className="text-sm font-semibold">Rate per Piece (PKR) *</label>
-                <input id="purchase-rate" name="purchase-rate" type="number" step="0.01" min="0" required value={ratePerUnit} onChange={e => setRatePerUnit(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 h-12" placeholder="Price per piece" />
-              </div>
-            </div>
-          ) : (
-          <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <label htmlFor="purchase-date" className="text-sm font-semibold">Date *</label>
-              <DatePicker id="purchase-date" value={date} onChange={setDate} />
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="purchase-weight" className="text-sm font-semibold">Weight *</label>
-              <input id="purchase-weight" name="purchase-weight" type="number" step="0.01" min="0.01" required value={weight} onChange={e => setWeight(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 h-12" placeholder="Total weight" />
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="purchase-unit" className="text-sm font-semibold">Unit *</label>
-              <select id="purchase-unit" name="purchase-unit" required value={weightUnit} onChange={e => setWeightUnit(e.target.value as any)} className="w-full rounded-xl border border-border px-4 py-3 h-12 bg-card">
-                <option value="KGs">KGs</option>
-                <option value="Tons">Tons</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label htmlFor="purchase-rate" className="text-sm font-semibold">Rate per Unit ({weightUnit}) *</label>
-              <input id="purchase-rate" name="purchase-rate" type="number" step="0.01" min="0" required value={ratePerUnit} onChange={e => setRatePerUnit(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 h-12" placeholder={`Price per ${weightUnit}`} />
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="purchase-wpp" className="text-sm font-semibold">Weight Per Piece (KGs) *</label>
-              <input id="purchase-wpp" name="purchase-wpp" type="number" step="any" min="0.000001" required value={weightPerPiece} onChange={e => setWeightPerPiece(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 h-12" placeholder="Weight of one piece (e.g. 0.572)" />
-            </div>
-          </div>
-          </>
-          )}
-
-              <div className="p-4 rounded-xl bg-muted/40 border border-border flex flex-col gap-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">{effectiveMode === 'pcs' ? 'Quantity:' : 'Calculated PCS:'}</span>
-                  <span className="text-sm font-bold text-foreground">{pcsPreview} PCS</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Total Amount:</span>
-                  <span className="text-sm font-bold text-foreground">{formatCurrency(totalAmountPreview)}</span>
-                </div>
-              </div>
-              
-              <div className="pt-4 flex gap-3">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 rounded-xl border border-border bg-card px-4 py-3 font-semibold text-foreground/80 hover:bg-muted/40 transition-colors">Cancel</button>
-                <button type="submit" className="flex-1 rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-md">Save Purchase</button>
-              </div>
-            </form>
-            </PageModal>
 
       <DeleteConfirmationModal
         isOpen={deleteModal.isOpen}
@@ -418,16 +181,6 @@ export function Purchases() {
         description="Are you sure you want to permanently delete this purchase? All linked accounting entries, vouchers, batches, and stock movements will be reversed automatically."
       />
 
-      <QuickAddSupplier 
-        isOpen={isAddSupplierOpen} 
-        onClose={() => setIsAddSupplierOpen(false)} 
-        onSuccess={(id) => setSupplierId(id)} 
-      />
-      <QuickAddMaterial 
-        isOpen={isAddMaterialOpen} 
-        onClose={() => setIsAddMaterialOpen(false)} 
-        onSuccess={(id) => setMaterialId(id)} 
-      />
     </div>
   );
 }

@@ -46,6 +46,11 @@ export const reportIcons: Record<string, LucideIcon> = {
   'processing-efficiency': Gauge,
   'processing-loss': TrendingDown,
   'processor-performance': Users,
+  // manufacturing
+  'manufacturing-fg-stock': PackageCheck,
+  'manufacturing-consumption': Layers,
+  'manufacturing-cost-breakdown': Coins,
+  'manufacturing-profitability': PiggyBank,
   // inventory
   'current-stock': Boxes,
   'stock-movement': ArrowLeftRight,
@@ -103,6 +108,10 @@ export const reportDescriptions: Record<string, string> = {
   'processing-efficiency': 'Received vs sent efficiency and turnaround per processor.',
   'processing-loss': 'Explicitly recorded loss and wastage per processor and stage.',
   'processor-performance': 'Volume, value, and job count per processor.',
+  'manufacturing-fg-stock': 'Finished-goods lots on hand, valued at their produced cost.',
+  'manufacturing-consumption': 'Raw material batches consumed by completed manufacturing orders.',
+  'manufacturing-cost-breakdown': 'Material and production cost build-up per completed order.',
+  'manufacturing-profitability': 'Revenue vs FIFO lot cost and margin per manufactured product.',
   'current-stock': 'Current quantities and values across your inventory.',
   'stock-movement': 'Stock movements by batch with direction (IN/OUT/ADJUST).',
   'material-stock': 'Raw material stock levels vs minimum levels.',
@@ -131,6 +140,7 @@ export const reportDescriptions: Record<string, string> = {
 export const pointInTimeReports = new Set<string>([
   'current-stock', 'material-stock', 'finished-stock', 'low-stock', 'out-of-stock',
   'inventory-valuation', 'inventory-aging', 'inventory-turnover', 'pending-pcs',
+  'manufacturing-fg-stock',
   'balance-sheet',
 ]);
 
@@ -149,4 +159,8 @@ export const reportTags: Record<string, string[]> = {
   'receivable-aging': ['aging', 'buckets', 'ar'],
   'payable-aging': ['aging', 'buckets', 'ap'],
   'profit-by-product': ['margin', 'profitability'],
+  'manufacturing-fg-stock': ['finished goods', 'fg', 'lots', 'production'],
+  'manufacturing-consumption': ['bom', 'raw material', 'issued', 'consumed'],
+  'manufacturing-cost-breakdown': ['cost sheet', 'conversion', 'production cost'],
+  'manufacturing-profitability': ['margin', 'gross profit', 'cogs', 'lot cost'],
 };

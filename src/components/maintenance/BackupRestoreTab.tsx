@@ -87,7 +87,10 @@ export function BackupRestoreTab() {
           ? `Restored v${m.appVersion ?? '?'} · ${m.stores?.length ?? 0} store(s) · ${formatDate(m.createdAt ?? '')}`
           : 'Restored from a legacy SQLite backup file.';
         toast.success('Restore complete. Reloading…', { description: info });
-        setTimeout(() => window.location.reload(), 1500);
+        // Note: clearStorageMirrors() above also suspends all persist writes,
+        // so no stale in-memory state can be persisted over the restored
+        // database in the window before the reload.
+        setTimeout(() => window.location.reload(), 400);
       } else {
         toast.error('Restore failed', { description: result.error || 'Unknown error' });
         setBusy(null);

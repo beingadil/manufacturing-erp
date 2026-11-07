@@ -1,14 +1,8 @@
-import { Banknote, CalendarDays, Edit, Eye, Plus, Printer, ReceiptText, ShoppingBag, Trash2 } from 'lucide-react';
-import React, { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from 'react-router-dom';
-import { toast } from 'sonner';
+import { Edit, Eye, Plus, Printer, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
-import { QuickAddCustomer, QuickAddProduct } from "../components/QuickAddModals";
-import { SearchableSelect } from "../components/SearchableSelect";
-import { DatePicker } from "../components/ui/date-picker";
-import { KpiCard } from "../components/ui/KpiCard";
-import { PageModal } from "../components/ui/PageModal";
 import { VoucherHistoryTab } from "../components/VoucherHistoryTab";
 import { generateInvoicePDF } from "../lib/documentGenerators";
 import { formatCurrency } from "../lib/utils";
@@ -17,108 +11,20 @@ import { SalesService } from '../services/SalesService';
 import { useERPStore } from "../store/useERPStore";
 
 export function Sales() {
-  const { sales, products, materials, customers, vouchers } = useERPStore();
+  const { sales, products, customers, vouchers } = useERPStore();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editSaleId, setEditSaleId] = useState<string | undefined>();
-  const [deleteModal, setDeleteModal] = useState<{isOpen: boolean, id: string, no: string}>({isOpen: false, id: '', no: ''});
   const [activeTab, setActiveTab] = useState<'data' | 'vouchers'>(() => (searchParams.get('tab') === 'vouchers' ? 'vouchers' : 'data'));
-
-  // Deep link: /sales?new=1 (Dashboard Quick Entry) opens the create form.
-  // The tab-sync effect below strips ?new from the URL on its mount pass.
-  useEffect(() => {
-    if (searchParams.get('new') !== '1') return;
-    setEditSaleId(undefined);
-    setCustomerId('');
-    setProductId('');
-    setPcsSold('');
-    setPricePerPiece('');
-    setIsModalOpen(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const navigate = useNavigate();
 
   // Sync tab to URL (?tab=data|vouchers) so refresh/back preserves the view.
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
     params.set('tab', activeTab);
-    params.delete('new'); // consumed by the deep-link effect above
     setSearchParams(params, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
-  
-  const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
-  const [isAddProductOpen, setIsAddProductOpen] = useState(false);
 
-  const [productId, setProductId] = useState("");
-  const [customerId, setCustomerId] = useState("");
-  const [pcsSold, setPcsSold] = useState("");
-  const [pricePerPiece, setPricePerPiece] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-
-  const selectedProduct = products.find(p => p.id === productId);
-  const linkedMaterial = selectedProduct ? materials.find(m => m.id === selectedProduct.materialId) : null;
-  // When editing, this sale's own pcs are already deducted from stock — add
-  // them back so the guard doesn't block legitimate edits (price/date fixes).
-  const editingSalePcs = editSaleId ? (sales.find(s => s.id === editSaleId)?.pcsSold || 0) : 0;
-  const availableStock = (linkedMaterial ? linkedMaterial.processedStockPcs : 0) + editingSalePcs;
-
-  
-  const handleEditClick = (item: any) => {
-    setEditSaleId(item.id);
-    setCustomerId(item.customerId);
-    setProductId(item.productId);
-    setPcsSold(item.pcsSold.toString());
-    setPricePerPiece(item.pricePerPiece.toString());
-    setDate(item.date);
-    setIsModalOpen(true);
-  };
-
-  const handleProductChange = (pId: string) => {
-    setProductId(pId);
-    const p = products.find(prod => prod.id === pId);
-    if (p) setPricePerPiece(p.sellingPrice.toString());
-  };
-
-  const handleCreate = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!productId || !customerId || !pcsSold || !pricePerPiece || !date) return;
-    
-    const pcs = parseInt(pcsSold);
-    if (pcs > availableStock) {
-      toast.error('Insufficient stock', {
-        description: linkedMaterial
-          ? `${linkedMaterial.name} has only ${availableStock} finished PCS available — you tried to sell ${pcs}.`
-          : 'The selected product has no linked material/stock.',
-      });
-      return;
-    }
-
-    const price = parseFloat(pricePerPiece);
-
-    ErrorManagement.safeExecuteSync(() => {
-      if (editSaleId) {
-        SalesService.update(editSaleId, {
-          productId,
-          customerId,
-          pcsSold: pcs,
-          pricePerPiece: price,
-          date
-        });
-      } else {
-        SalesService.create({
-          productId,
-          customerId,
-          pcsSold: pcs,
-          pricePerPiece: price,
-          date
-        });
-      }
-      setIsModalOpen(false);
-      setPcsSold("");
-      setProductId("");
-      setCustomerId("");
-    }, 'Sales Save');
-  };
+  const [deleteModal, setDeleteModal] = useState<{isOpen: boolean, id: string, no: string}>({isOpen: false, id: '', no: ''});
 
   const enrichedSales = useMemo(() => sales.map(s => {
     const c = customers.find(cust => cust.id === s.customerId);
@@ -129,7 +35,8 @@ export function Sales() {
       customerName: c?.name || 'Unknown',
       productName: p?.name || 'Unknown',
       formattedDate: new Date(s.date).toLocaleDateString(),
-      voucherNo: voucher?.voucherNo || null
+      voucherNo: voucher?.voucherNo || null,
+        amountDisplay: formatCurrency(s.totalAmount || 0)
     };
   }), [sales, customers, products, vouchers]);
 
@@ -156,7 +63,7 @@ export function Sales() {
         <RowActionButton label={`View ${item.invoiceNo}`}>
           <Eye />
         </RowActionButton>
-        <RowActionButton onClick={() => handleEditClick(item)} label={`Edit ${item.invoiceNo}`} tone="primary">
+        <RowActionButton onClick={() => navigate(`/sales/edit/${item.id}`)} label={`Edit ${item.invoiceNo}`} tone="primary">
           <Edit />
         </RowActionButton>
         <RowActionButton onClick={() => setDeleteModal({isOpen: true, id: item.id, no: item.invoiceNo})} label={`Delete ${item.invoiceNo}`} tone="destructive">
@@ -193,7 +100,7 @@ export function Sales() {
           <h2 className="text-2xl font-bold tracking-tight text-foreground">Sales</h2>
           <p className="text-sm text-muted-foreground mt-1">Record sales of finished products.</p>
         </div>
-        <button onClick={() => { setEditSaleId(undefined); setCustomerId(''); setProductId(''); setPcsSold(''); setPricePerPiece(''); setIsModalOpen(true); }} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+        <button onClick={() => navigate('/sales/new')} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
           <Plus className="h-4 w-4" /> New Sale
         </button>
       </div>
@@ -217,80 +124,42 @@ export function Sales() {
       {activeTab === 'data' ? (
         <>
           {/* Live totals strip — mirrors exactly what the table below shows */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <KpiCard size="sm" icon={ReceiptText} label="Total Sales" value={String(salesStats.count)} description={<span>Records in the register</span>} />
-            <KpiCard size="sm" icon={ShoppingBag} iconClassName="text-success" label="PCS Sold" value={salesStats.pcs.toLocaleString()} description={<span>Finished pieces billed</span>} />
-            <KpiCard size="sm" icon={Banknote} iconClassName="text-blue-500" label="Total Revenue" value={formatCurrency(salesStats.revenue)} description={<span>All recorded sales</span>} />
-            <KpiCard size="sm" icon={CalendarDays} iconClassName="text-violet-500" label="This Month" value={formatCurrency(salesStats.monthRevenue)} description={<span>Revenue in {new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>} />
-          </div>
+          <section className="flex flex-wrap items-center gap-x-10 gap-y-3 rounded-2xl border border-border bg-card px-6 py-4 shadow-sm">
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Sales</div>
+              <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{salesStats.count}</div>
+              <div className="text-xs text-muted-foreground">Records in the register</div>
+            </div>
+            <div className="border-l border-border/60 pl-10">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">PCS Sold</div>
+              <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{salesStats.pcs.toLocaleString()}</div>
+              <div className="text-xs text-muted-foreground">Finished pieces billed</div>
+            </div>
+            <div className="border-l border-border/60 pl-10">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Revenue</div>
+              <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-success">{formatCurrency(salesStats.revenue)}</div>
+              <div className="text-xs text-muted-foreground">All recorded sales</div>
+            </div>
+            <div className="border-l border-border/60 pl-10">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">This Month</div>
+              <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-violet-500">{formatCurrency(salesStats.monthRevenue)}</div>
+              <div className="text-xs text-muted-foreground">Revenue in {new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</div>
+            </div>
+          </section>
           <DataTable
             data={enrichedSales}
             columns={columns}
-            searchKeys={["invoiceNo", "customerName", "productName"]}
+            searchKeys={["invoiceNo", "customerName", "productName", "formattedDate", "pcsSold", "pricePerPiece", "totalAmount", "amountDisplay"]}
             searchPlaceholder="Search sales by invoice, customer or product..."
             persistKey="sales-table"
             defaultSortKey="date"
+            defaultSortDirection="asc"
+            density="compact"
           />
         </>
       ) : (
         <VoucherHistoryTab sourceModule="Sales" />
       )}
-
-      <PageModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditSaleId(undefined) }} title={editSaleId ? 'Edit Sale' : 'Add Sale'} maxWidth="max-w-3xl">
-        <form onSubmit={handleCreate} className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="sale-customer" className="block text-sm font-medium text-foreground/80 mb-1">Customer</label>
-              <SearchableSelect 
-                options={customers.map(c => ({ id: c.id, label: c.name, searchValue: c.phone }))}
-                value={customerId}
-                onChange={setCustomerId}
-                placeholder="Select Customer..."
-                onAdd={() => setIsAddCustomerOpen(true)}
-                required
-              />
-            </div>
-            <div>
-              <label htmlFor="sale-product" className="block text-sm font-medium text-foreground/80 mb-1">Product</label>
-              <SearchableSelect 
-                options={products.map(p => {
-                  const m = materials.find(mat => mat.id === p.materialId);
-                  return { id: p.id, label: p.name, secondaryLabel: `Available: ${m?.processedStockPcs || 0} PCS` }
-                })}
-                value={productId}
-                onChange={handleProductChange}
-                placeholder="Select Product..."
-                onAdd={() => setIsAddProductOpen(true)}
-                required
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label htmlFor="sale-pcs" className="block text-sm font-medium text-foreground/80 mb-1">PCS to Sell *</label>
-              <input id="sale-pcs" name="sale-pcs" type="number" required placeholder="Quantity" value={pcsSold} onChange={e => setPcsSold(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 h-12" />
-              {linkedMaterial && (
-                <p className={`mt-1 text-xs ${pcsSold && parseInt(pcsSold) > availableStock ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
-                  Available: {availableStock} PCS of {linkedMaterial.name}
-                </p>
-              )}
-            </div>
-            <div>
-              <label htmlFor="sale-price" className="block text-sm font-medium text-foreground/80 mb-1">Price Per Piece (PKR) *</label>
-              <input id="sale-price" name="sale-price" type="number" step="0.01" required placeholder="Rate" value={pricePerPiece} onChange={e => setPricePerPiece(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 h-12" />
-            </div>
-            <div>
-              <label htmlFor="sale-date" className="block text-sm font-medium text-foreground/80 mb-1">Date *</label>
-              <DatePicker id="sale-date" value={date} onChange={setDate} />
-            </div>
-          </div>
-          <div className="pt-2 flex gap-3">
-            <button type="button" onClick={() => { setIsModalOpen(false); setEditSaleId(undefined); }} className="flex-1 rounded-xl border border-border bg-card px-4 py-3 font-semibold text-foreground/80 hover:bg-muted/40 transition-colors">Cancel</button>
-            <button type="submit" className="flex-1 rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-md">{editSaleId ? "Update Sale" : "Confirm Sale"}</button>
-          </div>
-        </form>
-      </PageModal>
 
       <DeleteConfirmationModal
         isOpen={deleteModal.isOpen}
@@ -299,17 +168,6 @@ export function Sales() {
         title="Delete Sale"
         recordNo={deleteModal.no}
         description="Are you sure you want to permanently delete this sale? All linked accounting entries, vouchers, and stock movements will be reversed automatically."
-      />
-
-      <QuickAddCustomer 
-        isOpen={isAddCustomerOpen} 
-        onClose={() => setIsAddCustomerOpen(false)} 
-        onSuccess={(id) => setCustomerId(id)} 
-      />
-      <QuickAddProduct 
-        isOpen={isAddProductOpen} 
-        onClose={() => setIsAddProductOpen(false)} 
-        onSuccess={(id) => handleProductChange(id)} 
       />
     </div>
   );

@@ -68,7 +68,7 @@ export class SeedDataService {
         supplierId: supplier,
         materialId: material,
         weight: Math.round(weight * 100) / 100,
-        weightUnit: 'KGs',
+        weightUnit: 'KG',
         ratePerUnit: Math.round(rate * 100) / 100,
         weightPerPiece: Math.round(wpp * 100) / 100,
         remarks: `Purchase batch ${i + 1} - ${supplier.split(' ')[0]}`,

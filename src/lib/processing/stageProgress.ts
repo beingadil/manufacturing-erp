@@ -1,4 +1,4 @@
-import type { Batch, ProcessingStage } from '../../types/erp';
+import type { Batch, ProcessingStage, RawMaterial } from '../../types/erp';
 import {
   batchAvailableAtSource,
   batchAvailableTotal,
@@ -42,6 +42,26 @@ export interface BatchStageProgress {
 
 export function getSortedStages(stages: ProcessingStage[]): ProcessingStage[] {
   return [...stages].sort((a, b) => a.sequence - b.sequence);
+}
+
+/** The stages a material is actually configured to pass through, in chain order. */
+export function visibleStagesForMaterial(
+  stages: ProcessingStage[],
+  material?: Pick<RawMaterial, 'processingPath' | 'fixedStageId' | 'allowedStageIds'> | null | undefined
+): ProcessingStage[] {
+  const sorted = getSortedStages(stages);
+  if (!material) return sorted;
+  const path = material.processingPath ?? 'full_chain';
+  if (path === 'ready_made') return [];
+  if (path === 'single_stage') {
+    const fixed = material.fixedStageId ? sorted.find(s => s.id === material.fixedStageId) : undefined;
+    return fixed ? [fixed] : sorted;
+  }
+  if (path === 'custom_stages') {
+    const allowed = new Set(material.allowedStageIds || []);
+    return allowed.size > 0 ? sorted.filter(s => allowed.has(s.id)) : sorted;
+  }
+  return sorted;
 }
 
 /** Derive one batch's progress from its own disjoint buckets. */

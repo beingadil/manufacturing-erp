@@ -22,6 +22,10 @@ import { RawMaterialStock } from '../inventory/RawMaterialStock';
 import { StockAdjustmentReport } from '../inventory/StockAdjustmentReport';
 import { StockLedger } from '../inventory/StockLedger';
 import { StockMovement } from '../inventory/StockMovement';
+import { ComponentConsumption } from '../manufacturing/ComponentConsumption';
+import { ManufacturingFgStock } from '../manufacturing/ManufacturingFgStock';
+import { ProductCostBreakdown } from '../manufacturing/ProductCostBreakdown';
+import { ProductProfitability } from '../manufacturing/ProductProfitability';
 import { PendingPCSReport } from '../processing/PendingPCSReport';
 import { ProcessingChargesReport } from '../processing/ProcessingChargesReport';
 import { ProcessingDispatchReport } from '../processing/ProcessingDispatchReport';
@@ -56,6 +60,7 @@ import type { ReportCategoryId, ReportDefinition } from './reportTypes';
 
 const categoryLabels: Record<ReportCategoryId, string> = {
   purchase: 'Purchase Reports', sales: 'Sales Reports', processing: 'Processing Reports',
+  manufacturing: 'Manufacturing Reports',
   inventory: 'Inventory Reports', financial: 'Financial Reports',
 };
 
@@ -63,6 +68,7 @@ const entries: Array<[string, ReportCategoryId, string, ReportDefinition['compon
   ['purchase-register','purchase','Purchase Register',PurchaseRegister],['purchase-summary','purchase','Purchase Summary',PurchaseSummary],['purchase-order','purchase','Purchase Order Report',PurchaseOrderReport],['supplier-purchase','purchase','Purchase by Supplier',SupplierPurchaseReport],['material-purchase','purchase','Purchase by Raw Material',MaterialPurchaseReport],['purchase-category','purchase','Purchase by Category',PurchaseByCategory],['purchase-cost','purchase','Purchase Cost Analysis',PurchaseCostAnalysis],['purchase-trend','purchase','Purchase Trend Report',PurchaseTrend],['purchase-comparison','purchase','Purchase Comparison Report',PurchaseComparisonReport],['supplier-outstanding','purchase','Supplier Outstanding Report',SupplierOutstandingReport],['supplier-ledger','purchase','Supplier Ledger Summary',SupplierLedgerSummary],
   ['sales-register','sales','Sales Register',SalesRegister],['sales-summary','sales','Sales Summary',SalesSummary],['product-sales','sales','Sales by Product',ProductSalesReport],['sales-trend','sales','Sales Trend',SalesTrend],['product-sales-analysis','sales','Product Sales Analysis',ProductSalesAnalysis],['customer-outstanding','sales','Customer Outstanding',CustomerOutstanding],['customer-ledger','sales','Customer Ledger Summary',CustomerLedgerSummary],['sales-comparison','sales','Sales Comparison',SalesComparison],['profit-by-product','sales','Profit by Product',ProfitByProduct],
   ['processing-dispatch','processing','Dispatch Register',ProcessingDispatchReport],['processing-receive','processing','Receive Register',ProcessingReceiveReport],['pending-pcs','processing','Pending PCS Report',PendingPCSReport],['processor-billing','processing','Processing Billing',ProcessorBillingReport],['processor-ledger','processing','Processor Ledger',ProcessorLedgerReport],['processing-charges','processing','Processing Charges',ProcessingChargesReport],['processing-efficiency','processing','Processing Efficiency',ProcessingEfficiency],['processing-loss','processing','Processing Loss/Wastage',ProcessingLossReport],['processor-performance','processing','Processor Performance',ProcessorPerformance],
+  ['manufacturing-fg-stock','manufacturing','Finished Goods Stock',ManufacturingFgStock],['manufacturing-consumption','manufacturing','Component Consumption',ComponentConsumption],['manufacturing-cost-breakdown','manufacturing','Product Cost Breakdown',ProductCostBreakdown],['manufacturing-profitability','manufacturing','Product Profitability',ProductProfitability],
   ['current-stock','inventory','Current Stock',CurrentStockReport],['stock-movement','inventory','Stock Movement',StockMovement],['material-stock','inventory','Raw Material Stock',RawMaterialStock],['finished-stock','inventory','Finished Goods Stock',FinishedGoodsStock],['low-stock','inventory','Low Stock',LowStock],['out-of-stock','inventory','Out of Stock',OutOfStock],['inventory-valuation','inventory','Inventory Valuation',InventoryValuation],['lot-history','inventory','Lot / Batch History',LotHistory],['inventory-aging','inventory','Inventory Aging',InventoryAging],['inventory-turnover','inventory','Inventory Turnover',InventoryTurnover],['stock-adjustment','inventory','Stock Adjustment Report',StockAdjustmentReport],['stock-ledger','inventory','Stock Ledger',StockLedger],
   ['general-ledger','financial','General Ledger',GeneralLedgerReport],['cashbook','financial','Cashbook',CashbookReport],['bank-book','financial','Bank Book',BankBookReport],['trial-balance','financial','Trial Balance',TrialBalanceReport],['profit-loss','financial','Profit & Loss',ProfitLossReport],['balance-sheet','financial','Balance Sheet',BalanceSheetReport],['account-summary','financial','Account Summary',AccountSummaryReport],['receivable-aging','financial','Accounts Receivable Aging',ReceivableAgingReport],['payable-aging','financial','Accounts Payable Aging',PayableAgingReport],['expense-analysis','financial','Expense Analysis',ExpenseAnalysis],['revenue-analysis','financial','Revenue Analysis',RevenueAnalysis],
 ];

@@ -57,6 +57,8 @@ const DEFAULT_PERMISSIONS = [
   { module: 'Purchases', action: 'View' }, { module: 'Purchases', action: 'Create' }, { module: 'Purchases', action: 'Edit' }, { module: 'Purchases', action: 'Delete' },
   // Processing
   { module: 'Processing', action: 'View' }, { module: 'Processing', action: 'Create' }, { module: 'Processing', action: 'Edit' }, { module: 'Processing', action: 'Delete' },
+  // Manufacturing
+  { module: 'Manufacturing', action: 'View' }, { module: 'Manufacturing', action: 'Create' }, { module: 'Manufacturing', action: 'Edit' }, { module: 'Manufacturing', action: 'Delete' },
   // Sales
   { module: 'Sales', action: 'View' }, { module: 'Sales', action: 'Create' }, { module: 'Sales', action: 'Edit' }, { module: 'Sales', action: 'Delete' },
   // Inventory
@@ -185,10 +187,59 @@ export const useAccessStore = create<AccessState>()(
 
       seedDefaults: () => {
         const state = get();
-        if (state.roles.length > 0) return; // Already seeded
+
+        // Module permissions can be introduced after an install was first
+        // seeded. Add any missing definitions without touching existing grants.
+        const missingDefinitions = DEFAULT_PERMISSIONS.filter(
+          def => !state.permissions.some(p => p.module === def.module && p.action === def.action),
+        );
+        const newPermissions: Permission[] = missingDefinitions.map(def => ({
+          id: uuidv4(),
+          module: def.module,
+          action: def.action,
+        }));
+
+        const manufacturingForDefaultRoles = (
+          roles: Role[],
+          permissions: Permission[],
+          rolePermissions: RolePermission[],
+        ): RolePermission[] => {
+          const manufacturing = permissions.filter(p => p.module === 'Manufacturing');
+          const defaultRoleIds = roles
+            .filter(r => r.is_system && ['Admin', 'Accountant', 'Staff'].includes(r.name))
+            .map(r => r.id);
+          const additions: RolePermission[] = [];
+          for (const roleId of defaultRoleIds) {
+            for (const permission of manufacturing) {
+              const granted = rolePermissions.some(
+                rp => rp.role_id === roleId && rp.permission_id === permission.id,
+              );
+              if (!granted) {
+                additions.push({ id: uuidv4(), role_id: roleId, permission_id: permission.id });
+              }
+            }
+          }
+          return additions;
+        };
+
+        if (state.roles.length > 0) {
+          // Existing install: only add what is missing. All three default roles
+          // receive full Manufacturing access by product decision.
+          const additions = manufacturingForDefaultRoles(
+            state.roles,
+            [...state.permissions, ...newPermissions],
+            state.rolePermissions,
+          );
+          if (newPermissions.length === 0 && additions.length === 0) return;
+          set(current => ({
+            permissions: [...current.permissions, ...newPermissions],
+            rolePermissions: [...current.rolePermissions, ...additions],
+          }));
+          return;
+        }
 
         // 1. Seed Permissions
-        const perms = DEFAULT_PERMISSIONS.map(p => ({
+        const perms: Permission[] = DEFAULT_PERMISSIONS.map(p => ({
           id: uuidv4(),
           module: p.module,
           action: p.action,
@@ -199,8 +250,13 @@ export const useAccessStore = create<AccessState>()(
         const accountantRole: Role = { id: uuidv4(), name: 'Accountant', is_system: true, type: 'Default', created_at: new Date().toISOString() };
         const staffRole: Role = { id: uuidv4(), name: 'Staff', is_system: true, type: 'Default', created_at: new Date().toISOString() };
 
-        // 3. Seed Role Permissions (Admin gets all)
-        const adminPerms = perms.map(p => ({ id: uuidv4(), role_id: adminRole.id, permission_id: p.id }));
+        // 3. Seed Role Permissions (Admin gets all; Accountant and Staff get the
+        //    full Manufacturing module so production can run without the admin).
+        const adminPerms: RolePermission[] = perms.map(p => ({ id: uuidv4(), role_id: adminRole.id, permission_id: p.id }));
+        const manufacturingPerms = perms.filter(p => p.module === 'Manufacturing');
+        const operatorPerms: RolePermission[] = [accountantRole, staffRole].flatMap(role =>
+          manufacturingPerms.map(p => ({ id: uuidv4(), role_id: role.id, permission_id: p.id })),
+        );
 
         // 4. Create Admin User
         const adminUser: UserRow = {
@@ -223,7 +279,7 @@ export const useAccessStore = create<AccessState>()(
         set({
           permissions: perms,
           roles: [adminRole, accountantRole, staffRole],
-          rolePermissions: adminPerms,
+          rolePermissions: [...adminPerms, ...operatorPerms],
           users: [adminUser],
           passwords: [{ user_id: adminUser.id, password_hash: defaultHash }]
         });

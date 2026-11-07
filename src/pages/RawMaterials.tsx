@@ -1,28 +1,47 @@
-import { Layers, PackageSearch, Pencil, Plus, Trash2, Wallet } from "lucide-react";
-import React, { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { PackageSearch, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from 'sonner';
 import { InlineEditInput } from '../components/common/InlineEditInput';
 import { SafeDeleteDialog } from '../components/common/SafeDeleteDialog';
-import { Column, DataTable, RowActionButton } from "../components/DataTable";
-import { SearchableSelect } from "../components/SearchableSelect";
-import { KpiCard } from '../components/ui/KpiCard';
-import { PageModal } from "../components/ui/PageModal";
+import { FormModal } from '../components/form/FormModal';
+import { MaterialForm } from '../components/forms/MaterialForm';
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
 import { cn, formatCurrency, formatNumber } from "../lib/utils";
 import { MaterialService } from '../services/MaterialService';
 import { useERPStore } from "../store/useERPStore";
-import type { ProcessingPath } from '../types/erp';
+
+/**
+ * Raw Materials — the plant's movement ledger.
+ *
+ * Deliberately NOT the shared DataTable: this page is a register, so every row
+ * is a two-deck record (identity + movement) that reflows instead of scrolling
+ * sideways. That keeps the page wide with the sidebar expanded, removes the
+ * horizontal scrollbar, and lets each material show where its pieces actually
+ * are (raw / at processor / finished).
+ *
+ * Typography follows the rest of the ERP: Montserrat (font-sans) everywhere,
+ * `text-2xl font-bold tracking-tight` for the page and stat figures, `text-sm`
+ * for body and rows, `text-xs` for meta, `text-[11px] uppercase tracking-wider`
+ * for stat labels — the same vocabulary as Categories, Products and the shared
+ * DataTable. No monospace digits and no letter-spaced micro-type: this page is
+ * part of the software, not a landing page.
+ */
+
+type SortKey = 'name' | 'value' | 'stock';
 
 export function RawMaterials() {
   const { materials, categories, purchases, processingSends, processingReceipts, batches } = useERPStore();
 
+  const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<any | null>(null);
-  const [deleteDialog, setDeleteDialog] = useState<{ 
-    isOpen: boolean; 
-    id: string; 
-    name: string; 
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('name');
+  const [deleteDialog, setDeleteDialog] = useState<{
+    isOpen: boolean;
+    id: string;
+    name: string;
     impactDetails: string[];
     isReferenced: boolean;
   }>({ isOpen: false, id: '', name: '', impactDetails: [], isReferenced: false });
@@ -31,7 +50,6 @@ export function RawMaterials() {
     const impactDetails: string[] = [];
     let isReferenced = false;
 
-    // Check references
     const purchaseCount = purchases?.filter((p: any) => p.materialId === material.id).length || 0;
     const sendCount = processingSends?.filter((p: any) => p.materialId === material.id).length || 0;
     const receiptCount = processingReceipts?.filter((p: any) => p.materialId === material.id).length || 0;
@@ -89,217 +107,371 @@ export function RawMaterials() {
     }
   };
 
-  const [name, setName] = useState("");
-  const [categoryId, setCategoryId] = useState("");
-  const [description, setDescription] = useState("");
-  const [status, setStatus] = useState<'Active' | 'Inactive'>("Active");
-  const { processingStages } = useERPStore();
-  const sortedStagesForForm = useMemo(() =>
-    [...(processingStages || [])].sort((a, b) => a.sequence - b.sequence),
-    [processingStages]
-  );
-  const [processingPath, setProcessingPath] = useState<ProcessingPath>('full_chain');
-  const [fixedStageId, setFixedStageId] = useState('');
-  const [allowedStageIds, setAllowedStageIds] = useState<string[]>([]);
-
-  // Category prefill: a category with a defaultProcessingPath seeds the selector.
-  const handleCategoryChange = (id: string) => {
-    setCategoryId(id);
-    const catDefault = categories.find(c => c.id === id)?.defaultProcessingPath;
-    if (catDefault) setProcessingPath(catDefault);
-  };
-
   const openEditModal = (material: any) => {
     setEditingMaterial(material);
-    setName(material.name);
-    setCategoryId(material.categoryId);
-    setDescription(material.description || '');
-    setStatus(material.status === 'Inactive' ? 'Inactive' : 'Active');
-    setProcessingPath(material.processingPath ?? 'full_chain');
-    setFixedStageId(material.fixedStageId || '');
-    setAllowedStageIds(material.allowedStageIds || []);
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingMaterial(null);
-    setName("");
-    setCategoryId("");
-    setDescription("");
-    setStatus("Active");
-    setProcessingPath('full_chain');
-    setFixedStageId('');
-    setAllowedStageIds([]);
-  };
-
-  const handleCreate = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim() || !categoryId) return;
-    if (processingPath === 'single_stage' && !fixedStageId) return;
-    if (processingPath === 'custom_stages' && allowedStageIds.length === 0) return;
-
-    try {
-      MaterialService.create({
-        name,
-        categoryId,
-        description,
-        status,
-        processingPath,
-        fixedStageId: processingPath === 'single_stage' ? fixedStageId : undefined,
-        allowedStageIds: processingPath === 'custom_stages' ? allowedStageIds : undefined
-      });
-      toast.success('Material created successfully');
-      closeModal();
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to create material');
-    }
-  };
-
-  const handleEdit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingMaterial || !name.trim() || !categoryId) return;
-    if (processingPath === 'single_stage' && !fixedStageId) return;
-    if (processingPath === 'custom_stages' && allowedStageIds.length === 0) return;
-
-    try {
-      MaterialService.update(editingMaterial.id, {
-        name,
-        categoryId,
-        description,
-        status,
-        processingPath,
-        fixedStageId: processingPath === 'single_stage' ? fixedStageId : undefined,
-        allowedStageIds: processingPath === 'custom_stages' ? allowedStageIds : undefined
-      });
-      toast.success('Material updated successfully');
-      closeModal();
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to update material');
-    }
   };
 
   const getCategoryName = (id: string) => {
     const cat = categories.find(c => c.id === id);
-    return cat ? cat.name : "Unknown Category";
+    return cat ? cat.name : "Unknown category";
   };
 
   const enrichedMaterials = useMemo(() => materials.map(m => {
     const stages = InventoryCalculationService.getMaterialStageValues(m.id, batches);
-    // Raw stock value at ACTUAL purchase cost: Σ remainingPcs × batch purchase rate
-    const value = stages.raw.value;
-    // Average purchase rate for display (weighted across the raw batches on hand)
-    const costPerPiece = stages.raw.pcs > 0 ? stages.raw.value / stages.raw.pcs : 0;
+    const value = stages.raw.value + stages.atProcessor.value + stages.finished.value;
+    const onHandPcs = stages.raw.pcs + stages.atProcessor.pcs + stages.finished.pcs;
+    const costPerPiece = onHandPcs > 0 ? value / onHandPcs : 0;
     return {
       ...m,
       categoryName: getCategoryName(m.categoryId),
       costPerPiece,
-      value
+      value,
+      // Stage split drives the composition bar — the page shows WHERE the
+      // pieces are, not just how many exist.
+      rawPcs: stages.raw.pcs,
+      atProcessorPcs: stages.atProcessor.pcs,
+      finishedPcs: stages.finished.pcs,
+      onHandPcs,
     };
   }), [materials, categories, batches]);
 
-  const columns: Column<typeof enrichedMaterials[0]>[] = [
-    { 
-      key: "name", 
-      label: "Material Name", 
-      sortable: true,
-      render: (item) => (
-        <Link to={`/materials/${item.id}`} className="flex items-center gap-3 group-hover:text-muted-foreground transition-colors">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground group-hover:bg-muted-foreground/20 transition-colors">
-            <PackageSearch className="h-4 w-4" />
-          </div>
-          <div>
-            <div className="font-semibold text-foreground" onClick={(e) => e.stopPropagation()}>
-              <InlineEditInput
-                value={item.name}
-                onCommit={(v) => handleEditInline(item.id, 'name', v)}
-                className="bg-transparent border-none p-0 h-auto font-semibold focus:ring-1 focus:ring-primary rounded"
-                ariaLabel={`Rename material ${item.name}`}
-              />
-            </div>
-            {item.description && <div className="text-xs text-muted-foreground">{item.description}</div>}
-          </div>
-        </Link>
-      )
-    },
-    { 
-      key: "categoryName", 
-      label: "Category", 
-      sortable: true,
-      render: (item) => (
-        <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
-          {item.categoryName}
-        </span>
-      )
-    },
-    { key: "stockPcs", label: "Raw Stock (PCS)", align: "right", sortable: true, render: (item) => <span className="font-bold text-foreground">{item.stockPcs}</span> },
-    { key: "processedStockPcs", label: "Processed Stock (PCS)", align: "right", sortable: true, render: (item) => <span className="font-bold text-success">{item.processedStockPcs}</span> },
-    {
-      key: "value",
-      label: "Total Value (PKR)",
-      align: "right",
-      sortable: true,
-      render: (item) => (
-        <div className="text-right">
-          <div className="font-bold text-foreground">{formatCurrency(item.value)}</div>
-          {item.costPerPiece > 0 ? (
-            <div className="text-xs text-muted-foreground">Avg purchase rate @ {formatCurrency(item.costPerPiece)} / PCS</div>
-          ) : (
-            <div className="text-xs text-muted-foreground">No cost data (no purchases yet)</div>
-          )}
-        </div>
-      )
-    },
-    { 
-      key: "status", 
-      label: "Status", 
-      align: "center", 
-      sortable: true,
-      render: (item) => (
-        <span className={cn(
-          "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium",
-          item.status === 'Active' ? "bg-success/10 text-success ring-1 ring-success/20" : "bg-muted text-muted-foreground ring-1 ring-muted-foreground/20"
-        )}>
-          {item.status}
-        </span>
-      )
-    }
-    ,
-    {
-      key: "actions",
-      label: "Actions",
-      align: "right",
-      render: (item) => (
-        <div className="flex items-center justify-end gap-1">
-          <RowActionButton
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); openEditModal(item); }}
-            label={`Edit ${item.name}`}
-            tone="primary"
-          >
-            <Pencil />
-          </RowActionButton>
-          <RowActionButton
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteClick(item); }}
-            label={`Delete ${item.name}`}
-            tone="destructive"
-          >
-            <Trash2 />
-          </RowActionButton>
-        </div>
-      )
-    },
-    {
-      key: "sync",
-      label: "Sync",
-      align: "right",
-      render: (item: any) => (
-        item.isOptimistic ? <span className="flex items-center text-xs text-blue-500 justify-end"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin mr-1"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21v-5h5"/></svg> Syncing</span> : <span className="flex items-center text-xs text-green-500 justify-end"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg> Synced</span>
-      )
-    }
-  ];
+  const visibleMaterials = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const filtered = q
+      ? enrichedMaterials.filter(m =>
+          [m.name, m.code, m.categoryName, m.description]
+            .filter(Boolean)
+            .some(field => String(field).toLowerCase().includes(q)))
+      : enrichedMaterials;
+
+    const sorted = [...filtered];
+    if (sortKey === 'value') sorted.sort((a, b) => (b.value || 0) - (a.value || 0));
+    else if (sortKey === 'stock') sorted.sort((a, b) => (b.onHandPcs || 0) - (a.onHandPcs || 0));
+    else sorted.sort((a, b) => a.name.localeCompare(b.name));
+    return sorted;
+  }, [enrichedMaterials, searchQuery, sortKey]);
+
+  const totalStock = enrichedMaterials.reduce((s, m) => s + (m.stockPcs || 0), 0);
+  const totalProcessed = enrichedMaterials.reduce((s, m) => s + (m.processedStockPcs || 0), 0);
+  const totalValue = enrichedMaterials.reduce((s, m) => s + (m.value || 0), 0);
+  const activeCount = enrichedMaterials.filter(m => m.status === 'Active').length;
+
+  const stagePcs = enrichedMaterials.reduce(
+    (acc, m) => ({
+      raw: acc.raw + (m.rawPcs || 0),
+      atProcessor: acc.atProcessor + (m.atProcessorPcs || 0),
+      finished: acc.finished + (m.finishedPcs || 0),
+    }),
+    { raw: 0, atProcessor: 0, finished: 0 },
+  );
+  const stageTotal = stagePcs.raw + stagePcs.atProcessor + stagePcs.finished;
+  /** Segment width as a percentage — 0 when nothing is booked, so no bar shows. */
+  const bandShare = (pcs: number) => (stageTotal > 0 ? `${(pcs / stageTotal) * 100}%` : '0%');
+  const rowShare = (pcs: number, total: number) => (total > 0 ? `${(pcs / total) * 100}%` : '0%');
+
+  const statLabel = 'text-[11px] font-medium uppercase tracking-wider text-muted-foreground';
+  const statValue = 'mt-1 text-2xl font-bold tracking-tight tabular-nums';
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
+    <div className="w-full min-w-0 space-y-6 pb-20">
+      {/* Page header — same anatomy as every other master-data module */}
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-md">
+            <PackageSearch className="h-5 w-5" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">Raw Materials</h1>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Stock is counted from purchase batches and processor receipts, never typed in by hand.
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+        >
+          <Plus className="h-4 w-4" />
+          Add material
+        </button>
+      </div>
+
+      {/* Stock summary — the shared stat-band pattern */}
+      <section aria-label="Stock summary" className="rounded-2xl border border-border bg-card px-6 py-4 shadow-sm">
+        <div className="flex flex-wrap items-center gap-x-10 gap-y-3">
+          <div>
+            <div className={statLabel}>Materials</div>
+            <div className={cn(statValue, 'text-foreground')}>{formatNumber(enrichedMaterials.length)}</div>
+            <div className="text-xs text-muted-foreground">
+              {formatNumber(activeCount)} active · {formatNumber(enrichedMaterials.length - activeCount)} inactive
+            </div>
+          </div>
+          <div className="sm:border-l sm:border-border/60 sm:pl-10">
+            <div className={statLabel}>Raw stock</div>
+            <div className={cn(statValue, 'text-foreground')}>{formatNumber(totalStock)}</div>
+            <div className="text-xs text-muted-foreground">PCS on the floor</div>
+          </div>
+          <div className="sm:border-l sm:border-border/60 sm:pl-10">
+            <div className={statLabel}>At processors</div>
+            <div className={cn(statValue, 'text-foreground')}>{formatNumber(totalProcessed)}</div>
+            <div className="text-xs text-muted-foreground">PCS in processing &amp; finished</div>
+          </div>
+          <div className="sm:border-l sm:border-border/60 sm:pl-10">
+            <div className={statLabel}>Inventory value</div>
+            <div className={cn(statValue, 'text-success')}>{formatCurrency(totalValue)}</div>
+            <div className="text-xs text-muted-foreground">At purchase cost, incl. WIP</div>
+          </div>
+        </div>
+
+        {/* Where the pieces physically are — real stage data, not decoration */}
+        <div className="mt-4 border-t border-border/60 pt-3">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+              Raw <span className="tabular-nums text-foreground">{formatNumber(stagePcs.raw)}</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden="true" />
+              At processor <span className="tabular-nums text-foreground">{formatNumber(stagePcs.atProcessor)}</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-sky-500" aria-hidden="true" />
+              Finished <span className="tabular-nums text-foreground">{formatNumber(stagePcs.finished)}</span>
+            </span>
+          </div>
+          <div
+            className="mt-2 flex h-1.5 w-full overflow-hidden rounded-full bg-muted"
+            role="img"
+            aria-label={stageTotal > 0
+              ? `${stagePcs.raw} PCS raw, ${stagePcs.atProcessor} PCS at processor, ${stagePcs.finished} PCS finished`
+              : 'No stock on hand yet'}
+          >
+            {stageTotal > 0 && (
+              <>
+                <div className="bg-emerald-500/90" style={{ width: bandShare(stagePcs.raw) }} />
+                <div className="bg-amber-500/90" style={{ width: bandShare(stagePcs.atProcessor) }} />
+                <div className="bg-sky-500/90" style={{ width: bandShare(stagePcs.finished) }} />
+              </>
+            )}
+          </div>
+          {stageTotal === 0 && (
+            <p className="mt-2 text-xs text-muted-foreground">No stock booked yet — record a purchase to start the trail.</p>
+          )}
+        </div>
+      </section>
+
+      {/* Register — bespoke rows, never width-capped, never side-scrolling */}
+      <section className="min-w-0">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-foreground">Material register</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Rename a material inline, open its batch trail, or change how it moves through processors.
+            </p>
+          </div>
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {formatNumber(enrichedMaterials.length)} records
+          </span>
+        </div>
+
+        <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+          {/* Register toolbar */}
+          <div className="flex flex-col gap-3 border-b border-border/50 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative w-full sm:max-w-sm">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/80" aria-hidden="true" />
+              <input
+                type="text"
+                aria-label="Search materials"
+                placeholder="Search name, No. or category…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="h-10 w-full rounded-lg border border-border bg-muted/40 pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground/70 transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3 sm:justify-end">
+              <label htmlFor="material-sort" className="sr-only">Sort materials</label>
+              <select
+                id="material-sort"
+                value={sortKey}
+                onChange={e => setSortKey(e.target.value as SortKey)}
+                className="h-10 rounded-lg border border-border bg-muted/40 px-3 text-sm text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="name">Name A–Z</option>
+                <option value="value">Highest value</option>
+                <option value="stock">Most stock</option>
+              </select>
+              <span className="hidden items-center rounded-full bg-muted/60 px-2.5 py-1 text-xs font-medium tabular-nums text-muted-foreground sm:inline-flex">
+                {formatNumber(visibleMaterials.length)} / {formatNumber(enrichedMaterials.length)}
+              </span>
+            </div>
+          </div>
+
+          {/* Column key (desktop only — the rows explain themselves when stacked) */}
+          <div className="hidden grid-cols-[minmax(0,1.5fr)_minmax(0,1.15fr)_minmax(0,0.7fr)_auto] gap-6 border-b border-border/50 bg-muted/30 px-6 py-3 text-xs font-medium text-muted-foreground lg:grid">
+            <span>Material</span>
+            <span>Movement</span>
+            <span className="text-right">Value</span>
+            <span className="text-right">Actions</span>
+          </div>
+
+          {visibleMaterials.length === 0 ? (
+            <div className="px-6 py-16 text-center">
+              <p className="text-sm font-medium text-foreground">
+                {enrichedMaterials.length === 0 ? 'No materials yet' : 'Nothing matches that search'}
+              </p>
+              <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
+                {enrichedMaterials.length === 0
+                  ? 'Add the first raw material to start the stock trail.'
+                  : 'Try a shorter term, or clear the search to see every material.'}
+              </p>
+              {enrichedMaterials.length === 0 ? (
+                <button
+                  onClick={() => setIsModalOpen(true)}
+                  className="mt-4 inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/40"
+                >
+                  <Plus className="h-4 w-4" /> Add material
+                </button>
+              ) : (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="mt-4 inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/40"
+                >
+                  Clear search
+                </button>
+              )}
+            </div>
+          ) : (
+            <ul className="divide-y divide-border/50">
+              {visibleMaterials.map(item => (
+                <li
+                  key={item.id}
+                  onClick={e => {
+                    // The row is the way into a material's batch trail. Only
+                    // real controls (rename field, category link, edit and
+                    // delete) keep their own click; everything else — the
+                    // numbers, the stage bar, the empty space — opens the
+                    // material's detail page.
+                    const target = e.target as HTMLElement;
+                    if (target.closest('a, button, input, select, textarea, [role="combobox"]')) return;
+                    navigate(`/materials/${item.id}`);
+                  }}
+                  className="group cursor-pointer transition-colors duration-150 hover:bg-muted/40"
+                >
+                  <div className="grid grid-cols-1 items-center gap-4 px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1.15fr)_minmax(0,0.7fr)_auto] lg:gap-6">
+                    {/* Identity — name (inline editable), No., category, usage as plain text */}
+                    <div className="flex min-w-0 items-start gap-2.5">
+                      <span
+                        className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', item.status === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground/40')}
+                        aria-hidden="true"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex min-w-0 items-baseline gap-2.5" onClick={e => e.stopPropagation()}>
+                          <InlineEditInput
+                            value={item.name}
+                            onCommit={(v) => handleEditInline(item.id, 'name', v)}
+                            className="min-w-0 rounded border-none bg-transparent p-0 text-sm font-semibold text-foreground focus:ring-1 focus:ring-primary"
+                            ariaLabel={`Rename material ${item.name}`}
+                          />
+                          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                            {item.code ? `No. ${item.code}` : 'No. —'}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                          <Link
+                            to={`/materials/${item.id}`}
+                            className="truncate underline-offset-4 transition-colors hover:text-foreground hover:underline"
+                          >
+                            {item.categoryName}
+                          </Link>
+                          <span className="h-1 w-1 rounded-full bg-border" aria-hidden="true" />
+                          <span>{item.usageType === 'component' ? 'part of a product' : 'sold on its own'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Movement — per-material stage split, then the total */}
+                    <div className="min-w-0">
+                      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                        <span>Raw <span className="tabular-nums text-foreground">{formatNumber(item.rawPcs || 0)}</span></span>
+                        <span>Processing <span className="tabular-nums text-foreground">{formatNumber(item.atProcessorPcs || 0)}</span></span>
+                        <span>Finished <span className="tabular-nums text-foreground">{formatNumber(item.finishedPcs || 0)}</span></span>
+                      </div>
+                      <div className="mt-1.5 flex h-1 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                        {(item.onHandPcs || 0) > 0 ? (
+                          <>
+                            <div className="bg-emerald-500/90" style={{ width: rowShare(item.rawPcs || 0, item.onHandPcs || 0) }} />
+                            <div className="bg-amber-500/90" style={{ width: rowShare(item.atProcessorPcs || 0, item.onHandPcs || 0) }} />
+                            <div className="bg-sky-500/90" style={{ width: rowShare(item.finishedPcs || 0, item.onHandPcs || 0) }} />
+                          </>
+                        ) : null}
+                      </div>
+                      <div className="mt-1.5 text-sm font-semibold tabular-nums text-foreground">
+                        {formatNumber(item.onHandPcs || 0)}
+                        <span className="ml-1.5 text-xs font-normal text-muted-foreground">PCS on hand</span>
+                      </div>
+                    </div>
+
+                    {/* Value */}
+                    <div className="text-left lg:text-right">
+                      <div className="text-sm font-semibold tabular-nums text-foreground">{formatCurrency(item.value)}</div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">
+                        {item.costPerPiece > 0 ? `${formatCurrency(item.costPerPiece)} / PCS` : 'no cost yet'}
+                      </div>
+                    </div>
+
+                    {/* Status + actions */}
+                    <div className="flex items-center justify-between gap-3 lg:justify-end">
+                      <span className={cn(
+                        'inline-flex items-center gap-1.5 text-xs font-medium',
+                        item.status === 'Active' ? 'text-emerald-600' : 'text-muted-foreground',
+                      )}>
+                        <span className={cn('h-1.5 w-1.5 rounded-full', item.status === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground/50')} aria-hidden="true" />
+                        {item.status}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => openEditModal(item)}
+                          aria-label={`Edit ${item.name}`}
+                          title={`Edit ${item.name}`}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground/80 transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteClick(item)}
+                          aria-label={`Delete ${item.name}`}
+                          title={`Delete ${item.name}`}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground/80 transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </section>
+
+      <FormModal
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        title={editingMaterial ? 'Edit Material' : 'Add Material'}
+        description="Raw material identity, how it's used, and how it moves through processors."
+        icon={editingMaterial ? <Pencil /> : <PackageSearch />}
+        accent="from-emerald-500 to-teal-600"
+        size="lg">
+        <MaterialForm material={editingMaterial} onSaved={closeModal} onCancel={closeModal} />
+      </FormModal>
+
       <SafeDeleteDialog
         isOpen={deleteDialog.isOpen}
         itemName={deleteDialog.name}
@@ -310,158 +482,6 @@ export function RawMaterials() {
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteDialog({ ...deleteDialog, isOpen: false })}
       />
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-md">
-            <PackageSearch className="h-5 w-5" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">Raw Materials</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">Manage raw material items in your inventory.</p>
-          </div>
-        </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          Add Material
-        </button>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <KpiCard
-          label="Total Materials"
-          value={formatNumber(enrichedMaterials.length)}
-          icon={<PackageSearch className="h-5 w-5" />}
-          iconClassName="text-emerald-500"
-          size="sm"
-        />
-        <KpiCard
-          label="Total Raw Stock"
-          value={formatNumber(enrichedMaterials.reduce((s, m) => s + (m.stockPcs || 0), 0))}
-          icon={<Layers className="h-5 w-5" />}
-          iconClassName="text-teal-500"
-          size="sm"
-          description="PCS in raw stock across all materials"
-        />
-        <KpiCard
-          label="Total Inventory Value"
-          value={formatCurrency(enrichedMaterials.reduce((s, m) => s + (m.value || 0), 0))}
-          icon={<Wallet className="h-5 w-5" />}
-          iconClassName="text-emerald-500"
-          accent="text-success"
-          size="sm"
-          description="Raw stock valued at actual purchase cost (per batch)"
-        />
-      </div>
-
-      <DataTable
-        data={enrichedMaterials}
-        columns={columns}
-        searchKeys={["name", "categoryName", "description"]}
-        searchPlaceholder="Search materials by name or category..."
-        persistKey="materials-table"
-        defaultSortKey="name"
-      />
-
-      <PageModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingMaterial ? 'Edit Material' : 'Add Material'}>
-        <form onSubmit={editingMaterial ? handleEdit : handleCreate} className="space-y-4">
-          <div className="space-y-2">
-            <label htmlFor="material-name" className="text-sm font-semibold text-foreground">Material Name *</label>
-            <input id="material-name" name="material-name" type="text" required value={name} onChange={e => setName(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors" placeholder="e.g. Circle 6½ Inch" />
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="material-category" className="text-sm font-semibold text-foreground">Category *</label>
-            <SearchableSelect
-              options={categories.map(c => ({ id: c.id, label: c.name }))}
-              value={categoryId}
-              onChange={handleCategoryChange}
-              placeholder="Select Category..."
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="material-path" className="text-sm font-semibold text-foreground">Processing Path *</label>
-            <select
-              id="material-path"
-              required
-              value={processingPath}
-              onChange={e => setProcessingPath(e.target.value as ProcessingPath)}
-              className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors bg-card"
-            >
-              <option value="full_chain">Through all processors ({sortedStagesForForm.length || 5} stages)</option>
-              <option value="single_stage">One processor only — becomes final product</option>
-              <option value="custom_stages">Selected processors only — pick stages below</option>
-              <option value="ready_made">Ready-made — no processing, straight to stock</option>
-            </select>
-            <p className="text-xs text-muted-foreground">
-              {processingPath === 'full_chain' && 'Material goes through every processor in sequence before becoming a final product.'}
-              {processingPath === 'single_stage' && 'Material is sent to exactly one processor below; what comes back is the final product.'}
-              {processingPath === 'custom_stages' && 'Tick the processors this material passes through (in chain order). What comes back from the LAST ticked processor is the final product.'}
-              {processingPath === 'ready_made' && 'Purchased already finished (e.g. lids, handles) — enters sellable stock directly, never dispatched.'}
-            </p>
-          </div>
-          {processingPath === 'custom_stages' && (
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-foreground">Selected Processors *</label>
-              <div className="rounded-xl border border-border bg-card p-3 space-y-2">
-                {sortedStagesForForm.map(s => (
-                  <label key={s.id} className="flex items-center gap-3 text-sm cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={allowedStageIds.includes(s.id)}
-                      onChange={(e) => setAllowedStageIds(prev =>
-                        e.target.checked ? [...prev, s.id] : prev.filter(id => id !== s.id)
-                      )}
-                      className="accent-primary"
-                    />
-                    <span className="text-foreground">{s.sequence}. {s.name}{s.isFinalStage ? ' (Final)' : ''}</span>
-                  </label>
-                ))}
-                {sortedStagesForForm.length === 0 && (
-                  <p className="text-xs text-muted-foreground">No processor stages configured yet.</p>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Sends always follow the chain order among the selected processors; the last selected one produces the final product.
-              </p>
-            </div>
-          )}
-          {processingPath === 'single_stage' && (
-            <div className="space-y-2">
-              <label htmlFor="material-fixed-stage" className="text-sm font-semibold text-foreground">The One Processor *</label>
-              <select
-                id="material-fixed-stage"
-                required
-                value={fixedStageId}
-                onChange={e => setFixedStageId(e.target.value)}
-                className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors bg-card"
-              >
-                <option value="">Select the processor stage...</option>
-                {sortedStagesForForm.map(s => (
-                  <option key={s.id} value={s.id}>{s.name}{s.isFinalStage ? ' (Final)' : ''}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div className="space-y-2">
-            <label htmlFor="material-description" className="text-sm font-semibold text-foreground">Description</label>
-            <textarea id="material-description" name="material-description" value={description} onChange={e => setDescription(e.target.value)} className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors" placeholder="Optional notes" rows={2} />
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="material-status" className="text-sm font-semibold text-foreground">Status</label>
-            <select id="material-status" name="material-status" required value={status} onChange={e => setStatus(e.target.value as 'Active' | 'Inactive')} className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors bg-card">
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
-          </div>
-          <div className="pt-4 flex gap-3">
-            <button type="button" onClick={closeModal} className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground/80 hover:bg-muted/40 transition-colors">Cancel</button>
-            <button type="submit" className="flex-1 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-md">{editingMaterial ? 'Save Changes' : 'Save Material'}</button>
-          </div>
-        </form>
-      </PageModal>
     </div>
   );
 }

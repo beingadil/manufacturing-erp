@@ -16,7 +16,7 @@ import type {
   Voucher,
 } from '../../types/erp';
 import { AccountingEngine } from '../accounting/AccountingEngine';
-import { getBankAccounts, getCashAccounts } from '../accounting/accountClassification';
+import { getBankAccounts, getCashAccounts, getChequeAccounts } from '../accounting/accountClassification';
 import { batchAvailableTotal, InventoryCalculationService } from '../business/InventoryCalculationService';
 
 /**
@@ -97,6 +97,7 @@ export interface DashboardSummary {
   cashInHand: number;
   bankTotal: number;
   bankAccounts: BankBalance[];
+  chequeInHand: number;
   periodCashReceipts: number;
   periodCashPayments: number;
   inventory: InventoryValuation;
@@ -262,6 +263,8 @@ export class DashboardSummaryService {
       .filter(b => b.balance !== 0 || bankAccounts.length === 1)
       .sort((a, b) => b.balance - a.balance);
     const bankTotal = bankList.reduce((s, b) => s + b.balance, 0);
+    const chequeInHand = getChequeAccounts(accounts, accountSubtypes)
+      .reduce((s, a) => s + Math.max(0, balances.get(a.id) || 0), 0);
 
     // ── Receivables / payables from linked party sub-ledger accounts ────────
     const customerIds = new Set(customers.map(c => c.id));
@@ -336,7 +339,7 @@ export class DashboardSummaryService {
     const periodProcessing = processorBills.filter(b => inPeriod(b.date)).reduce((sum, b) => sum + (b.totalAmount || 0), 0);
 
     // ── Net working capital: (cash + bank + receivables + inventory) − payables
-    const netWorkingCapital = cashInHand + bankTotal + receivablesTotal + inventory.total - payablesTotal;
+    const netWorkingCapital = cashInHand + bankTotal + chequeInHand + receivablesTotal + inventory.total - payablesTotal;
 
     return {
       asOfDate,
@@ -345,6 +348,7 @@ export class DashboardSummaryService {
       cashInHand,
       bankTotal,
       bankAccounts: bankList,
+      chequeInHand,
       periodCashReceipts,
       periodCashPayments,
       inventory,

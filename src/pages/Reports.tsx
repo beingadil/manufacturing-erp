@@ -1,5 +1,5 @@
 import { Calculator, Check, ChevronDown, ChevronRight, Clock, DollarSign, Factory, FileBarChart2,
-  PackageSearch, Search, ShoppingCart, Star, X
+  Hammer, PackageSearch, Search, ShoppingCart, Star, X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -62,6 +62,17 @@ const REPORT_CATEGORIES = [
       { id: 'processing-efficiency', label: 'Processing Efficiency' },
       { id: 'processing-loss', label: 'Processing Loss/Wastage' },
       { id: 'processor-performance', label: 'Processor Performance' }
+    ]
+  },
+  {
+    id: 'manufacturing',
+    label: 'Manufacturing Reports',
+    icon: Hammer,
+    reports: [
+      { id: 'manufacturing-fg-stock', label: 'Finished Goods Stock' },
+      { id: 'manufacturing-consumption', label: 'Component Consumption' },
+      { id: 'manufacturing-cost-breakdown', label: 'Product Cost Breakdown' },
+      { id: 'manufacturing-profitability', label: 'Product Profitability' }
     ]
   },
   {
@@ -246,7 +257,7 @@ export function Reports() {
                 </div>
                 <div className="hidden lg:block min-w-0">
                   <h1 className="text-xl font-bold tracking-tight text-foreground leading-tight">Report Center</h1>
-                  <p className="text-xs text-muted-foreground">{TOTAL_REPORTS} reports · 5 categories</p>
+                  <p className="text-xs text-muted-foreground">{TOTAL_REPORTS} reports · {REPORT_CATEGORIES.length} categories</p>
                 </div>
               </div>
 

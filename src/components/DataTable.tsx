@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import React, { memo, useEffect, useMemo, useState } from "react";
 import { cn } from "../lib/utils";
+import { formInputClass } from "./form/formStyles";
 
 export interface Column<T> {
   key: string;
@@ -18,6 +19,7 @@ export interface Column<T> {
   sortable?: boolean;
   render?: (item: T) => React.ReactNode;
   align?: 'left' | 'center' | 'right';
+  width?: string | number;
 }
 
 interface DataTableProps<T> {
@@ -31,11 +33,17 @@ interface DataTableProps<T> {
   /** Optional secondary hint rendered under the empty-state message. */
   emptyStateHint?: string;
   defaultSortKey?: string;
+  defaultSortDirection?: 'asc' | 'desc';
   itemsPerPageOptions?: number[];
+  defaultRowsPerPage?: number;
   /** Render without the card chrome (used when wrapped in an outer card). */
   embedded?: boolean;
   /** Optional footer row rendered after the data rows (e.g. column totals). */
   summaryRow?: React.ReactNode[];
+  /** Hide the rows-per-page selector (compact lists). */
+  showPageSize?: boolean;
+  /** Dense row density for long ledgers (px-4 py-2 cells, tighter empty state). */
+  density?: 'compact' | 'normal';
 }
 
 /**
@@ -57,8 +65,12 @@ function DataTableInner<T extends Record<string, any>>({
   emptyStateHint,
   defaultSortKey,
   itemsPerPageOptions = [10, 25, 50, 100],
+  defaultRowsPerPage = 25,
   embedded = false,
-  summaryRow
+  summaryRow,
+  showPageSize = true,
+  density = 'normal',
+  defaultSortDirection = 'desc'
 }: DataTableProps<T>) {
   // Try to load state from localStorage if persistKey is provided
   const loadState = (key: string, defaultValue: any) => {
@@ -73,10 +85,10 @@ function DataTableInner<T extends Record<string, any>>({
 
   const [searchTerm, setSearchTerm] = useState(() => loadState('search', ''));
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(() => 
-    loadState('sort', defaultSortKey ? { key: defaultSortKey, direction: 'desc' } : null)
+    loadState('sort', defaultSortKey ? { key: defaultSortKey, direction: defaultSortDirection ?? 'desc' } : null)
   );
   const [currentPage, setCurrentPage] = useState(() => loadState('page', 1));
-  const [itemsPerPage, setItemsPerPage] = useState(() => loadState('itemsPerPage', itemsPerPageOptions[0]));
+  const [itemsPerPage, setItemsPerPage] = useState(() => loadState('itemsPerPage', defaultRowsPerPage));
 
   // Save state when it changes
   useEffect(() => {
@@ -177,24 +189,26 @@ function DataTableInner<T extends Record<string, any>>({
           <span className="hidden sm:inline-flex items-center rounded-full bg-muted/60 px-2.5 py-1 text-xs font-medium text-muted-foreground">
             {sortedData.length} {sortedData.length === 1 ? 'item' : 'items'}
           </span>
+          {showPageSize && (
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Show</span>
             <select
               aria-label="Rows per page"
               value={itemsPerPage}
               onChange={(e) => setItemsPerPage(Number(e.target.value))}
-              className="h-10 px-3 bg-muted/40 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className={formInputClass}
             >
               {itemsPerPageOptions.map(opt => (
                 <option key={opt} value={opt}>{opt}</option>
               ))}
             </select>
           </div>
+          )}
         </div>
       </div>
       
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left whitespace-nowrap">
+      <div>
+        <table className="w-full text-sm text-left">
           <thead className="sticky top-0 z-10 text-xs text-muted-foreground bg-muted/70 backdrop-blur-sm border-b border-border/50">
             <tr>
               {columns.map((col) => (
@@ -205,7 +219,7 @@ function DataTableInner<T extends Record<string, any>>({
                       ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending')
                       : 'none'
                   }
-                  className={`px-6 py-4 font-medium ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : ''}`}
+                  className={`${density === 'compact' ? 'px-4 py-2' : 'px-6 py-4'} font-medium ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : ''} ${col.width ? `w-[${col.width}]` : ''}`}
                 >
                   {col.sortable ? (
                     <button
@@ -231,7 +245,7 @@ function DataTableInner<T extends Record<string, any>>({
                 {columns.map((col) => (
                   <td 
                     key={col.key} 
-                    className={`px-6 py-4 ${col.align === 'right' ? 'text-right tabular-nums' : col.align === 'center' ? 'text-center' : ''}`}
+                    className={`${density === 'compact' ? 'px-4 py-2' : 'px-6 py-4'} ${col.align === 'right' ? 'text-right tabular-nums' : col.align === 'center' ? 'text-center' : ''} ${col.width ? `w-[${col.width}]` : ''}`}
                   >
                     {col.render ? col.render(item) : item[col.key]}
                   </td>
@@ -241,7 +255,7 @@ function DataTableInner<T extends Record<string, any>>({
             {summaryRow && (
               <tr className="border-t-2 border-border bg-muted/40 font-semibold text-foreground">
                 {summaryRow.map((cell, i) => (
-                  <td key={i} className={`px-6 py-4 ${columns[i]?.align === 'right' ? 'text-right tabular-nums' : ''}`}>
+                  <td key={i} className={`${density === 'compact' ? 'px-4 py-2' : 'px-6 py-4'} ${columns[i]?.align === 'right' ? 'text-right tabular-nums' : ''}`}>
                     {cell}
                   </td>
                 ))}
@@ -249,7 +263,7 @@ function DataTableInner<T extends Record<string, any>>({
             )}
             {paginatedData.length === 0 && (
               <tr>
-                <td colSpan={columns.length} className="px-6 py-12 text-center text-muted-foreground">
+                <td colSpan={columns.length} className={density === 'compact' ? 'px-4 py-6 text-center text-muted-foreground' : 'px-6 py-12 text-center text-muted-foreground'}>
                   {emptyStateIcon}
                   <p className="text-sm font-medium text-foreground">{emptyStateMessage}</p>
                   {emptyStateHint && (
@@ -263,7 +277,7 @@ function DataTableInner<T extends Record<string, any>>({
       </div>
 
       {sortedData.length > 0 && (
-        <div className="px-6 py-4 border-t border-border/50 flex flex-col sm:flex-row items-center justify-between gap-4 bg-card">
+        <div className={`${density === 'compact' ? 'px-4 py-2' : 'px-6 py-4'} border-t border-border/50 flex flex-col sm:flex-row items-center justify-between gap-4 bg-card`}>
           <div className="text-sm text-muted-foreground">
             Showing <span className="font-medium text-foreground">{(safeCurrentPage - 1) * itemsPerPage + 1}</span> to <span className="font-medium text-foreground">{Math.min(safeCurrentPage * itemsPerPage, sortedData.length)}</span> of <span className="font-medium text-foreground">{sortedData.length}</span> results
           </div>
@@ -335,7 +349,7 @@ export function RowActionButton({
       aria-label={label}
       title={label}
       className={cn(
-        "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-150 [&>svg]:h-4 [&>svg]:w-4",
+        "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors duration-150 [&>svg]:h-3.5 [&>svg]:w-3.5",
         tone === "neutral" && "text-muted-foreground/80 hover:bg-muted hover:text-foreground",
         tone === "primary" && "text-muted-foreground/80 hover:bg-primary/10 hover:text-primary",
         tone === "destructive" && "text-muted-foreground/80 hover:bg-destructive/10 hover:text-destructive",

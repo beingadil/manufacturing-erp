@@ -16,15 +16,15 @@ export class UnitConversionService {
   /**
    * Converts weight based on provided unit to KGs.
    */
-  static convertToKg(weight: number, unit: 'KGs' | 'Tons'): number {
-    return unit === 'KGs' ? weight : this.tonsToKg(weight);
+  static convertToKg(weight: number, unit: 'KG' | 'PCS'): number {
+    return unit === 'KG' ? weight : weight;
   }
 
   /**
    * Centralized PCS Calculation logic.
    * e.g., 500 KG with 0.570 KG/Piece => 877 PCS.
    */
-  static calculatePcsFromWeight(weight: number, unit: 'KGs' | 'Tons', weightPerPiece: number): number {
+  static calculatePcsFromWeight(weight: number, unit: 'KG' | 'PCS', weightPerPiece: number): number {
     if (!weightPerPiece || weightPerPiece <= 0) return 0;
     const weightInKg = this.convertToKg(weight, unit);
     return Math.floor(weightInKg / weightPerPiece);

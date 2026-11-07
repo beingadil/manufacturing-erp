@@ -2,7 +2,6 @@ import { ArrowRight, PackageCheck, PackageOpen, User } from 'lucide-react';
 import { useMemo } from 'react';
 import { formatNumber } from '../../lib/utils';
 import type { Batch, ProcessingSend, ProcessingStage, Processor, RawMaterial } from '../../types/erp';
-import { StageProgressStepper } from './StageProgressStepper';
 
 interface WipBoardProps {
   stages: ProcessingStage[];
@@ -27,7 +26,7 @@ interface ColumnCard {
 }
 
 /**
- * WIP Board — the natural multi-stage view. One column per processing stage
+ * WIP Board â€” the natural multi-stage view. One column per processing stage
  * (raw stock, each stage, finished goods); cards are the batches/dispatches
  * physically sitting there with their send/receive/loss/pending numbers.
  */
@@ -43,17 +42,19 @@ export function WipBoard({
   const materialName = (id?: string) => materials.find(m => m.id === id)?.name || 'Unknown';
   const processorName = (id?: string) => processors.find(p => p.id === id)?.name || 'Unknown';
 
-  // Raw stock cards — batches with raw pcs on hand.
+  // Raw stock cards â€” batches with raw pcs on hand.
   const rawCards = batches
     .filter(b => (b.remainingPcs || 0) > 0)
     .map(b => ({ batch: b, col: 0 as const }));
 
-  // Finished cards — batches with finished pcs on hand.
+  // Finished cards â€” batches with finished pcs on hand that went through the
+  // pipeline. Ready-made batches are finished at purchase by definition and
+  // never dispatched, so they stay out of the processors view entirely.
   const finishedCards = batches
-    .filter(b => (b.processedPcs || 0) > 0)
+    .filter(b => (b.processedPcs || 0) > 0 && b.processingPath !== 'ready_made')
     .map(b => ({ batch: b, col: 'finished' as const }));
 
-  // Stage cards — dispatches with WIP pending at that stage (sent but not fully received).
+  // Stage cards â€” dispatches with WIP pending at that stage (sent but not fully received).
   const stageCards = sends
     .filter(s => {
       const pending = s.pcsSent - s.pcsReceived - (s.lossQuantity || 0);
@@ -70,12 +71,12 @@ export function WipBoard({
       cards: rawCards.map(({ batch }) => ({
         key: `raw-${batch.id}`,
         title: batch.batchNo,
-        subtitle: `${materialName(batch.materialId)} · ${formatNumber(batch.remainingPcs || 0)} PCS`,
+        subtitle: `${materialName(batch.materialId)} Â· ${formatNumber(batch.remainingPcs || 0)} PCS`,
         col: 0,
       })),
     },
     ...sorted.map((stage, idx) => ({
-      label: stage.isFinalStage ? `★ ${stage.name}` : stage.name,
+      label: stage.isFinalStage ? `â˜… ${stage.name}` : stage.name,
       cards: stageCards
         .filter(c => c.col === idx + 1)
         .map(c => {
@@ -84,8 +85,8 @@ export function WipBoard({
           return {
             key: `send-${s.id}`,
             title: s.dispatchNo,
-            subtitle: `${materialName(s.materialId)} · ${formatNumber(pending)} PCS pending`,
-            detail: `Sent ${formatNumber(s.pcsSent)} · Recv ${formatNumber(s.pcsReceived)}${s.lossQuantity ? ` · Loss ${formatNumber(s.lossQuantity)}` : ''}`,
+            subtitle: `${materialName(s.materialId)} Â· ${formatNumber(pending)} PCS pending`,
+            detail: `Sent ${formatNumber(s.pcsSent)} Â· Recv ${formatNumber(s.pcsReceived)}${s.lossQuantity ? ` Â· Loss ${formatNumber(s.lossQuantity)}` : ''}`,
             worker: processorName(s.processorId),
             col: idx + 1,
             stageId: stage.id,
@@ -98,14 +99,17 @@ export function WipBoard({
       cards: finishedCards.map(({ batch }) => ({
         key: `fin-${batch.id}`,
         title: batch.batchNo,
-        subtitle: `${materialName(batch.materialId)} · ${formatNumber(batch.processedPcs || 0)} PCS`,
+        subtitle: `${materialName(batch.materialId)} Â· ${formatNumber(batch.processedPcs || 0)} PCS`,
         col: 'finished',
       })),
     },
   ];
 
   return (
-    <div className="overflow-x-auto pb-4">
+    /* Horizontal kanban scroller. Native bar is replaced by the app's thin
+       .scroll-thin styling (6px rounded track, theme border) with contain â€”
+       nothing spills over the shell, the board is the only thing that moves. */
+    <div className="scroll-thin overflow-x-auto pb-2 overscroll-x-contain">
       <div className="flex gap-3 min-w-max">
         {columns.map(col => (
           <div key={col.label} className="w-64 shrink-0 rounded-xl border border-border bg-muted/20 flex flex-col">
@@ -146,19 +150,4 @@ export function WipBoard({
     </div>
   );
 }
-
-/** Compact progress stepper usage helper — kept separate so boards stay focused. */
-export function BatchStepperInline({ batch, stages }: { batch: Batch; stages: ProcessingStage[] }) {
-  const sorted = [...stages].sort((a, b) => a.sequence - b.sequence);
-  const currentIdx = batch.currentStageId ? sorted.findIndex(s => s.id === batch.currentStageId) : -1;
-  const completed = currentIdx > 0 ? sorted.slice(0, currentIdx).map(s => s.id) : [];
-  return (
-    <StageProgressStepper
-      stages={stages}
-      completedStageIds={completed}
-      currentStageId={batch.currentStageId}
-      nextStageId={currentIdx >= 0 ? sorted[currentIdx + 1]?.id : sorted[0]?.id}
-      compact
-    />
-  );
-}
+

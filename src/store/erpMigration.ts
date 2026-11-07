@@ -165,11 +165,20 @@ export function migrateERPState(state: any): any {
   //    only receipts from the configured final stage / legacy produce finished;
   //    recorded losses shrink WIP. The same economic pcs are never counted in
   //    two stages simultaneously.
+  // 4b. Batch numbers: legacy BATCH-{purchaseNo} numbers become the supplier
+  //     scheme ({SUPPLIER-FIRST}-{purchaseNo}, e.g. AHMED-PO-2026-0003) when
+  //     batchNoMode is 'supplier'. Precisely idempotent — only a number that
+  //     exactly equals its purchase's legacy form is renamed, so a batch the
+  //     user (or an older migration) already renamed is left alone, and
+  //     switching the mode in Settings simply stops renaming going forward.
   const batches = Array.isArray(state.batches) ? state.batches : [];
   const sends = Array.isArray(state.processingSends) ? state.processingSends : [];
   const receipts = Array.isArray(state.processingReceipts) ? state.processingReceipts : [];
   const salesArr = Array.isArray(state.sales) ? state.sales : [];
   const products = Array.isArray(state.products) ? state.products : [];
+  const manufacturingOrders = Array.isArray(state.manufacturingOrders) ? state.manufacturingOrders : [];
+  const finishedGoodsLots = Array.isArray(state.finishedGoodsLots) ? state.finishedGoodsLots : [];
+  const processingLosses = Array.isArray(state.processingLosses) ? state.processingLosses : [];
 
   let migratedBatches = batches;
   if (batches.length > 0) {
@@ -184,17 +193,27 @@ export function migrateERPState(state: any): any {
       // Pass the material's path config so single_stage/ready_made trails replay
       // under their own rules (batch path snapshots take precedence inside).
       const mat = materialsArr.find((m: any) => m.id === mid);
-      trail = InventoryCalculationService.recomputeFinishedPcsForMaterial(
-        String(mid),
-        trail,
-        receipts,
-        sends,
-        salesArr,
-        products,
-        undefined,
-        processingStages,
-        mat ? { processingPath: mat.processingPath, fixedStageId: mat.fixedStageId, allowedStageIds: mat.allowedStageIds } : undefined
-      );
+      try {
+        trail = InventoryCalculationService.recomputeFinishedPcsForMaterial(
+          String(mid),
+          trail,
+          receipts,
+          sends,
+          salesArr,
+          products,
+          undefined,
+          processingStages,
+          mat ? { processingPath: mat.processingPath, fixedStageId: mat.fixedStageId, allowedStageIds: mat.allowedStageIds } : undefined,
+          manufacturingOrders
+        );
+      } catch (e: any) {
+        // One material whose history cannot be safely replayed (stage-chain
+        // gap, a corrupt batch record, a malformed date) must NEVER take the
+        // whole ERP state down with it. Keep the material's stored trail
+        // unchanged — the rest of the replay is unaffected, and the fail-closed
+        // rehydration gate in main.tsx can still load everything else.
+        console.warn(`[erpMigration] Batch trail replay failed for material ${mid} — keeping stored batches unchanged: ${e && e.message ? e.message : e}`);
+      }
     }
     // Scrub the legacy scalar availability fields — the per-source map
     // (stageAvailableBySource) replaced them and stale values must never
@@ -207,6 +226,30 @@ export function migrateERPState(state: any): any {
     });
   }
 
+  // 5a-iii. Stamp the processing charges that predate the v4 capitalization
+  //        policy. The trail keeps them in `processingCost`; the historical
+  //        ledger expensed them instead. The one-time reclassification needs
+  //        that legacy share separately from v4 receipt accruals, so freeze it
+  //        once and never let later v4 receipts leak into it.
+  const accruedByBatch = new Map<string, number>();
+  for (const r of receipts as any[]) {
+    if (!(r.accruedVoucherId || (r.accruedProcessingCost || 0) > 0)) continue;
+    const send = (sends as any[]).find((s: any) => s.id === r.sendId);
+    const batchId = send?.batchId;
+    if (!batchId) continue;
+    const amount = Number(r.accruedProcessingCost ?? r.billAmount) || 0;
+    accruedByBatch.set(batchId, (accruedByBatch.get(batchId) || 0) + amount);
+  }
+  migratedBatches = migratedBatches.map((b: any) => {
+    if (b.legacyProcessingCost !== undefined) return b;
+    const processing = Number(b.processingCost) || 0;
+    const capitalised = accruedByBatch.get(b.id) || 0;
+    return {
+      ...b,
+      legacyProcessingCost: Math.max(0, Math.round((processing - capitalised + Number.EPSILON) * 100) / 100),
+    };
+  });
+
   // 5b. Re-derive material counters from the rebuilt batch trail — the trail
   //     is the single source of truth (pipeline semantics: atProcessorPcs
   //     spans at-processor + waiting buckets). Idempotent.
@@ -215,15 +258,128 @@ export function migrateERPState(state: any): any {
     migratedBatches
   );
 
+  // 5b-ii. A part is bought ready-made and never walks a processor chain.
+  //        Older builds let a category's defaultProcessingPath overwrite the
+  //        usage choice (the path selector is hidden for parts, so the
+  //        override was invisible), leaving parts saved as `full_chain` that
+  //        then appeared as a full chain in purchase entry and dispatch.
+  //        Normalizing here repairs those rows on load; idempotent, and
+  //        sellable materials are left exactly as they are.
+  const normalizedMaterials = migratedMaterials.map((m: any) =>
+    m.usageType === 'component'
+      ? { ...m, processingPath: 'ready_made', fixedStageId: undefined, allowedStageIds: undefined }
+      : m
+  );
+
+  // 5c. Batch number normalization (see 4b): legacy BATCH-{PO} → supplier
+  //     scheme. Uses the Settings store, hydrated BEFORE the ERP migration in
+  //     main.tsx, so the user's chosen mode wins.
+  if (batches.length > 0) {
+    const purchasesArr = Array.isArray(state.purchases) ? state.purchases : [];
+    const suppliersArr = Array.isArray(state.suppliers) ? state.suppliers : [];
+    migratedBatches = migratedBatches.map((b: any) => {
+      if (!b?.batchNo || !String(b.batchNo).startsWith('BATCH-')) return b;
+      const purchase = purchasesArr.find((p: any) => p.id === b.purchaseId);
+      if (!purchase?.purchaseNo || b.batchNo !== `BATCH-${purchase.purchaseNo}`) return b;
+      const supplier = suppliersArr.find((s: any) => s.id === b.supplierId);
+      return { ...b, batchNo: DocumentNumberingService.buildBatchNo(supplier?.name, purchase.purchaseNo) };
+    });
+  }
+
+  // 5d. Cheques in Hand: ensure the system cheque account + subtype exist for
+  //     installs that predate the seed addition. Cheap and idempotent.
+  let migratedSubtypes = Array.isArray(state.accountSubtypes) ? [...state.accountSubtypes] : [];
+  let chequesSubtype = migratedSubtypes.find(s => s.name === 'Cheques');
+  if (!chequesSubtype) {
+    chequesSubtype = { id: uuidv4(), name: 'Cheques', type: 'Assets', isSystem: true } as AccountSubtype;
+    migratedSubtypes.push(chequesSubtype);
+  }
+  let migratedAccountsInner = migratedAccounts;
+  if (!migratedAccountsInner.some(a => a.name === 'Cheques in Hand' && a.subtypeId === chequesSubtype!.id)) {
+    migratedAccountsInner = [
+      ...migratedAccountsInner,
+      { id: uuidv4(), code: '1015', name: 'Cheques in Hand', type: 'Assets' as const, subtypeId: chequesSubtype!.id, openingBalance: 0, openingBalanceType: 'Debit' as const, status: 'Active' as const, isSystem: true },
+    ];
+  }
+
+  // 5e. Manufacturing v4 (data contract 4): ensure the system accounts the
+  //     new postings depend on, and mark every product as manufactured. The
+  //     schema stamp is what switches the store's sale/receipt behaviour on —
+  //     un-migrated data (and legacy test fixtures) keep the old paths.
+  const priorSchemaVersion = Number(state.stateSchemaVersion) || 0;
+
+  let processingExpenseSubtype = migratedSubtypes.find(s => s.name === 'Processing Expense');
+  if (!processingExpenseSubtype) {
+    processingExpenseSubtype = {
+      id: uuidv4(),
+      name: 'Processing Expense',
+      type: 'Expenses',
+      isSystem: true,
+    } as AccountSubtype;
+    migratedSubtypes.push(processingExpenseSubtype);
+  }
+
+  let apSubtype = migratedSubtypes.find(s => s.name === 'Accounts Payable');
+  if (!apSubtype) {
+    apSubtype = {
+      id: uuidv4(),
+      name: 'Accounts Payable',
+      type: 'Liabilities',
+      isSystem: true,
+    } as AccountSubtype;
+    migratedSubtypes.push(apSubtype);
+  }
+
+  const ensureSystemAccount = (
+    name: string,
+    type: Account['type'],
+    subtypeId: string,
+    parentId?: string,
+  ): Account => {
+    const found = migratedAccountsInner.find(a => a.name === name && a.subtypeId === subtypeId);
+    if (found) return found;
+    const account: Account = {
+      id: uuidv4(),
+      code: DocumentNumberingService.generateAccountCode(type, typeCount(type)),
+      name,
+      type,
+      subtypeId,
+      openingBalance: 0,
+      openingBalanceType: type === 'Assets' || type === 'Expenses' ? 'Debit' : 'Credit',
+      status: 'Active',
+      isSystem: true,
+      parentId,
+    };
+    migratedAccountsInner.push(account);
+    return account;
+  };
+
+  ensureSystemAccount('Accrued Expenses', 'Liabilities', apSubtype.id, apControlId);
+  ensureSystemAccount('Processing Loss', 'Expenses', processingExpenseSubtype.id);
+
+  const migratedProducts = priorSchemaVersion < 4
+    ? products.map((p: any) => ({
+        ...p,
+        stockModel: p.stockModel ?? 'manufactured',
+        bomVersion: p.bomVersion ?? 1,
+      }))
+    : products;
+
   // 6. Drop legacy parallel trail
   const { ledgerEntries, ...rest } = state;
 
   return {
     ...rest,
-    accounts: migratedAccounts,
+    accounts: migratedAccountsInner,
+    accountSubtypes: migratedSubtypes,
     vouchers,
     batches: migratedBatches,
-    materials: migratedMaterials,
+    materials: normalizedMaterials,
+    products: migratedProducts,
+    manufacturingOrders,
+    finishedGoodsLots,
+    processingLosses,
+    stateSchemaVersion: Math.max(priorSchemaVersion, 4),
     processingStages,
     customers: migratedCustomers,
     suppliers: migratedSuppliers,

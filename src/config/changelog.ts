@@ -20,6 +20,133 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.49',
+    date: '2026-11-07',
+    title: 'Master Data Saves and Parts Keep Their Path',
+    sections: [
+      {
+        title: 'Save buttons work again',
+        items: [
+          'Category, product, customer and processor forms had a Save button that did nothing — the footer sat outside the form it was meant to submit. Save now writes the record.',
+          'Editing a simple product no longer opens an empty parts list; its material is filled in, so the form saves without changes.',
+          'The delete warning now shows the real number of sales that reference a product instead of the literal ${saleCount} placeholder.',
+        ],
+      },
+      {
+        title: 'Parts stay ready-made',
+        items: [
+          'Choosing "A part of another product" was being overridden by the category default, so the part was pushed back onto the full processor chain. Parts now save as ready-made, and purchase entry shows them as ready-made in PCS.',
+          'Parts that were already saved the wrong way are repaired when the app loads.',
+        ],
+      },
+      {
+        title: 'Raw Materials register',
+        items: [
+          'The register uses full-width rows that reflow on narrow windows instead of a table that clipped and scrolled sideways.',
+          'Click a row to open that material. The page now follows the app’s Montserrat type scale.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '1.0.48',
+    date: '2026-11-07',
+    title: 'Full-Page Sale Entry and a Cleaner Workspace',
+    sections: [
+      {
+        title: 'Sales get a full page',
+        items: [
+          'New Sale and Edit Sale open a full-page form with as many lines as the invoice needs.',
+          'The item breakdown and totals sit in a summary panel beside the form, so nothing is hidden behind a modal.',
+        ],
+      },
+      {
+        title: 'Cheques in Hand',
+        items: [
+          'A new Cheques in Hand account tracks cheques received but not yet cleared.',
+          'The dashboard shows the balance as its own card, and existing databases receive the account automatically on update.',
+        ],
+      },
+      {
+        title: 'Tables that fit',
+        items: [
+          'Sales, purchases, raw materials and the other registers are more compact, default to oldest first, and show 25 rows per page.',
+          'Search covers all fields, and the horizontal scroll bars are gone.',
+          'In a material’s batch list, each row opens that batch’s purchase detail.',
+        ],
+      },
+      {
+        title: 'Dashboard and forms',
+        items: [
+          'Dashboard charts have a new theme, and the Alerts section is gone.',
+          'Purchases, Sales, Categories and Raw Materials show their key figures as stat strips instead of large cards.',
+          'The product form drops the unused SKU field and uses one materials picker, with the product type derived from your selection.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '1.0.47',
+    date: '2026-11-05',
+    title: 'Purchase Edits Repair Stock Automatically',
+    sections: [
+      {
+        title: 'Re-headed purchases repair themselves',
+        items: [
+          'Editing the material on a saved purchase now moves the lot to the new material instead of leaving the quantity stuck on the old one.',
+          'If the lot never reached a processor, its pieces move into raw stock of the new material automatically — no extra steps.',
+          'If the lot already went through a processor, the edit shows a clear warning and asks you to confirm. Confirming removes the processor dispatches and receipts for that entry and returns the lot to raw stock, so it can go through the processors again.',
+          'Purchases that were re-headed before this fix are repaired automatically at startup — the material heads, the supplier on each batch, movement quantities and the ledger running balance are all brought in line with the purchase.',
+        ],
+      },
+      {
+        title: 'Supplier changes follow the purchase',
+        items: [
+          'Editing the supplier on a purchase now updates the batch too, so the Batches table on the material page always shows the same supplier as the purchase.',
+        ],
+      },
+      {
+        title: 'Numbers that scale',
+        items: [
+          'Large totals on the dashboard cards and summary strips now shrink their text to fit instead of overflowing.',
+          'The "in transit" figure on a material page shows that material’s own processing work, not the whole plant’s.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '1.0.44',
+    date: '2026-10-06',
+    title: 'Products Made From Your Own Parts',
+    sections: [
+      {
+        title: 'Assembled Products',
+        items: [
+          'A raw material can now be a part — something you build into a finished product — instead of only something you sell on its own.',
+          'A product is either one material or several. Pick "Several" and choose the parts it is made from; each part keeps its own quantity per finished piece.',
+          'Selling the product now takes every part off stock and records the cost, so material usage and stock stay true without a separate bill of materials module.',
+          'Editing or deleting an invoice puts the parts back exactly as they were, and cleans up the voucher and journal entries with it.',
+        ],
+      },
+      {
+        title: 'Before You Save',
+        items: [
+          'The sale form now lists exactly which parts the invoice will use, how many of each it needs and what each has left — no guessing from the stock column.',
+          'If a part is short, the sale is refused and tells you which one and by how many, instead of failing part-way through.',
+          'New: if the sale would go through but leave a part at or under your low-stock line, the form warns you up front, names the part and suggests raising a purchase order first.',
+        ],
+      },
+      {
+        title: 'Fixed',
+        items: [
+          'A product made from one material no longer offers parts that belong inside other products.',
+          'Product and sale forms are checked before they save, so a missing part or a duplicated one is reported instead of quietly written to the database.',
+          'Database upgrades run as versioned migrations, so an existing database is updated in place on open rather than depending on fresh table creation.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.0.43',
     date: '2026-10-05',
     title: 'Backup & Restore That Actually Restores',

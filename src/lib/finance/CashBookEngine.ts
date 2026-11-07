@@ -1,4 +1,5 @@
 import { Account, AccountSubtype, JournalEntry, Voucher } from '../../types/erp';
+import { compareLedgerEntries } from '../accounting/AccountingEngine';
 import { getCashBankAccounts } from '../accounting/accountClassification';
 
 export interface CashBookRow {
@@ -10,6 +11,8 @@ export interface CashBookRow {
   receipt: number;
   payment: number;
   balance: number;
+  /** Internal: used only for chronological ordering — never rendered. */
+  createdAt?: string;
 }
 
 export interface DailySummary {
@@ -55,16 +58,16 @@ export class CashBookEngine {
       }
     });
 
-    // Add all journal entries for these accounts before the asOfDate
+    // Add all journal entries for these accounts dated BEFORE the asOfDate.
+    // With no date, this is the all-time view: the opening is the accounts'
+    // own opening balances and the full stream is carried by the rows —
+    // adding every entry here would double-count them all.
     const relevantEntries = asOfDate
       ? journalEntries.filter(je => {
           const voucher = vouchers.find(v => v.id === je.voucherId);
           return cashAccountIds.includes(je.accountId) && voucher && voucher.status === 'Posted' && voucher.date < asOfDate;
         })
-      : journalEntries.filter(je => {
-          const voucher = vouchers.find(v => v.id === je.voucherId);
-          return cashAccountIds.includes(je.accountId) && voucher && voucher.status === 'Posted';
-        });
+      : [];
 
     relevantEntries.forEach(je => {
       balance += je.debit - je.credit;
@@ -133,10 +136,16 @@ export class CashBookEngine {
           receipt: isReceipt ? je.debit : 0,
           payment: !isReceipt ? je.credit : 0,
           balance: 0, // calculated below
+          createdAt: voucher.createdAt,
         };
       })
       .filter((row): row is NonNullable<typeof row> => row !== null)
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      // Chronological order shared with every other ledger view so the
+      // running balance walks forward through same-day entries.
+      .sort((a, b) => compareLedgerEntries(
+        { date: a.date, voucherNo: a.voucherNo, createdAt: a.createdAt, id: a.voucherId },
+        { date: b.date, voucherNo: b.voucherNo, createdAt: b.createdAt, id: b.voucherId }
+      ));
 
     // Calculate running balance
     let runningBalance = openingBalance;

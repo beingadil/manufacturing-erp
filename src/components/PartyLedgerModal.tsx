@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AccountingEngine } from '../lib/accounting/AccountingEngine';
 import { isDebitNormalAccount } from '../lib/accounting/accountClassification';
-import { cn, formatCurrency } from '../lib/utils';
+import { adaptiveAmountClass, cn, formatCurrency } from '../lib/utils';
 import { useERPStore } from '../store/useERPStore';
 import { DatePicker } from './ui/date-picker';
 import { ModalOverlay } from './ui/ModalOverlay';
@@ -97,11 +97,11 @@ export function PartyLedgerModal({ party, onClose }: PartyLedgerModalProps) {
             </div>
             <div className="bg-card border border-border/50 rounded-xl p-4 shadow-sm">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Debits</p>
-              <p className="text-xl font-bold text-success mt-1">{formatCurrency(totals.debit)}</p>
+              <p className={cn(adaptiveAmountClass(formatCurrency(totals.debit), 'md'), 'font-bold tabular-nums text-success mt-1')}>{formatCurrency(totals.debit)}</p>
             </div>
             <div className="bg-card border border-border/50 rounded-xl p-4 shadow-sm">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Credits</p>
-              <p className="text-xl font-bold text-destructive mt-1">{formatCurrency(totals.credit)}</p>
+              <p className={cn(adaptiveAmountClass(formatCurrency(totals.credit), 'md'), 'font-bold tabular-nums text-destructive mt-1')}>{formatCurrency(totals.credit)}</p>
             </div>
             <div className="bg-primary text-primary-foreground rounded-xl p-4 shadow-sm">
               <p className="text-xs font-medium uppercase tracking-wider opacity-70 flex items-center gap-1">

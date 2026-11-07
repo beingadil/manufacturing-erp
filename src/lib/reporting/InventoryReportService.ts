@@ -1,11 +1,14 @@
 import { differenceInDays } from 'date-fns';
 import { useERPStore } from '../../store/useERPStore';
 import { InventoryCalculationService } from '../business/InventoryCalculationService';
+import { isManufacturingEnabled, lotAverageCost, lotStockForProduct } from '../business/ManufacturingService';
 import { ReportEngine } from './ReportEngine';
 
 export class InventoryReportService {
   static getCurrentStock(searchQuery: string) {
-    const { materials, products, categories, processingReceipts, sales } = useERPStore.getState();
+    const state = useERPStore.getState();
+    const { materials, products, categories, finishedGoodsLots } = state;
+    const v4 = isManufacturingEnabled(state);
 
     const rawMaterials = materials.map((m: any) => {
       const category = categories.find((c: any) => c.id === m.categoryId);
@@ -20,7 +23,9 @@ export class InventoryReportService {
     });
 
     const finishedGoods = products.map((p: any) => {
-      const stock = InventoryCalculationService.calculateFinishedProductStock(p.materialId, processingReceipts, sales);
+      const stock = v4
+        ? lotStockForProduct(finishedGoodsLots || [], p.id)
+        : (materials.find(m => m.id === p.materialId)?.processedStockPcs || 0);
       return {
         id: p.id,
         type: 'Finished Good',
@@ -58,19 +63,24 @@ export class InventoryReportService {
 
   static getFinishedGoodsStockData(search: any) {
     const state = useERPStore.getState();
-    const { products, inventoryMovements } = state;
+    const { products, categories, finishedGoodsLots, materials } = state;
+    const v4 = isManufacturingEnabled(state);
     return products.map(p => {
-    const moves = inventoryMovements.filter(mov => (mov as any).productId === p.id);
-    let qty = 0;
-    moves.forEach(mov => {
-        if (mov.transactionType.startsWith('IN')) qty += mov.quantity;
-        if (mov.transactionType.startsWith('OUT')) qty -= mov.quantity;
-    });
-    return {
+      // v4 stock lives in finished-goods lots. Legacy sales movements were
+      // written with `materialId` only (no productId), so replaying movements
+      // silently returned zero — use the authoritative stock model instead.
+      const currentStock = v4
+        ? lotStockForProduct(finishedGoodsLots || [], p.id)
+        : (materials.find(m => m.id === p.materialId)?.processedStockPcs || 0);
+      const avgCost = v4 ? lotAverageCost(finishedGoodsLots || [], p.id) : 0;
+      return {
         ...p,
-        currentStock: qty
-    };
-}).filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase()));
+        category: categories.find(c => c.id === p.categoryId)?.name || 'Product',
+        currentStock,
+        avgCost,
+        stockValue: currentStock * avgCost,
+      };
+    }).filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase()));
   }
 
 
@@ -99,30 +109,32 @@ return batches.filter(b => b.remainingPcs > 0).map(b => {
 
   static getInventoryTurnoverData(search: any) {
     const state = useERPStore.getState();
-    const { products, inventoryMovements } = state;
+    const { products, sales, materials, finishedGoodsLots } = state;
+    const v4 = isManufacturingEnabled(state);
     return products.map(p => {
-    let totalOut = 0;
-    let currentQty = 0;
+      // Units sold come from the sales table (the ledger of demand), not from
+      // movements — legacy sale movements did not carry a productId.
+      const totalOut = (sales || [])
+        .filter(sale => sale.productId === p.id)
+        .reduce((sum, sale) => sum + (sale.pcsSold || 0), 0);
+      const currentQty = v4
+        ? lotStockForProduct(finishedGoodsLots || [], p.id)
+        : (materials.find(m => m.id === p.materialId)?.processedStockPcs || 0);
 
-    inventoryMovements.filter(mov => (mov as any).productId === p.id).forEach(mov => {
-        if (mov.transactionType.startsWith('OUT')) totalOut += mov.quantity;
-        if (mov.transactionType.startsWith('IN')) currentQty += mov.quantity;
-        if (mov.transactionType.startsWith('OUT')) currentQty -= mov.quantity;
-    });
+      // Turnover Ratio = units sold / current inventory (current stock is the
+      // only inventory snapshot this ERP stores).
+      const avgInv = currentQty || 1;
+      const turnoverRate = totalOut / avgInv;
 
-    // Turnover Ratio = COGS (Total Out) / Avg Inventory (using Current for simplicity)
-    const avgInv = currentQty || 1; 
-    const turnoverRate = totalOut / avgInv;
-
-    return {
+      return {
         name: p.name,
         totalOut,
         currentQty,
         turnoverRate
-    };
-}).filter(p => p.totalOut > 0)
-  .filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase()))
-  .sort((a,b) => b.turnoverRate - a.turnoverRate);
+      };
+    }).filter(p => p.totalOut > 0)
+      .filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase()))
+      .sort((a,b) => b.turnoverRate - a.turnoverRate);
   }
 
 

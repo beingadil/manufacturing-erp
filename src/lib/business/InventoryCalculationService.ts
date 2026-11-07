@@ -1,5 +1,6 @@
-import { Batch, ProcessingReceipt, ProcessingSend, ProcessingStage, Product, RawMaterial, Sale } from '../../types/erp';
+import { Batch, ManufacturingOrder, ProcessingReceipt, ProcessingSend, ProcessingStage, Product, RawMaterial, Sale } from '../../types/erp';
 import { AppError } from '../errorHandler';
+import { roundQty } from './ProductAssemblyService';
 
 export interface BatchStageValue {
   value: number;
@@ -94,9 +95,9 @@ export class InventoryCalculationService {
     return totalPcs > 0 ? totalValue / totalPcs : 0;
   }
 
-  /** Actual purchase cost per piece of one batch (amount ÷ initial pcs). */
+  /** Actual cost per piece of one batch — (purchase amount + accumulated processing charges) ÷ initial pcs. */
   static getBatchCostPerPiece(batch: Batch): number {
-    return batch && batch.initialPcs > 0 ? batch.amount / batch.initialPcs : 0;
+    return batch && batch.initialPcs > 0 ? (batch.amount + (batch.processingCost || 0)) / batch.initialPcs : 0;
   }
 
   /**
@@ -299,13 +300,19 @@ export class InventoryCalculationService {
    * the pcs leave the processor (atProcessorPcs drops) and wait for the NEXT
    * stage under their producing stage's key. Oldest batch first, preferring
    * the dispatch's own batch so the trail returns where it left.
+   *
+   * When `billAmount` is given (v4 capitalization), the charge is allocated
+   * across the contributing batches proportionally — the same arithmetic
+   * attributeReceiptFIFO uses — so the batch trail and the ledger can never
+   * disagree about how much processing a piece carries.
    */
   static moveProcessorToAvailable(
     materialId: string,
     producedByStageId: string,
     pcs: number,
     batches: Batch[],
-    preferredBatchId?: string
+    preferredBatchId?: string,
+    billAmount?: number
   ): { batches: Batch[]; usedBatchIds: string[] } {
     const candidates = batches
       .filter(b => b.materialId === materialId && b.status === 'Active' && (b.atProcessorPcs || 0) > 0)
@@ -337,7 +344,13 @@ export class InventoryCalculationService {
         if (take <= 0) return b;
         const map = { ...(b.stageAvailableBySource || {}) };
         map[producedByStageId] = (map[producedByStageId] || 0) + take;
-        return { ...b, stageAvailableBySource: map, atProcessorPcs: Math.max(0, (b.atProcessorPcs || 0) - take) };
+        const allocatedCost = billAmount ? (take / pcs) * billAmount : 0;
+        return {
+          ...b,
+          stageAvailableBySource: map,
+          atProcessorPcs: Math.max(0, (b.atProcessorPcs || 0) - take),
+          ...(allocatedCost > 0 ? { processingCost: (b.processingCost || 0) + allocatedCost } : {}),
+        };
       }),
       usedBatchIds,
     };
@@ -351,7 +364,8 @@ export class InventoryCalculationService {
     materialId: string,
     pcsReceived: number,
     batches: Batch[],
-    preferredBatchId?: string
+    preferredBatchId?: string,
+    billAmount?: number
   ): Batch[] {
     let remaining = pcsReceived;
     const candidates = batches
@@ -371,7 +385,9 @@ export class InventoryCalculationService {
     return batches.map(b => {
       const take = takeByBatch.get(b.id) || 0;
       if (take <= 0) return b;
-      return { ...b, atProcessorPcs: Math.max(0, (b.atProcessorPcs || 0) - take), processedPcs: (b.processedPcs || 0) + take };
+      // Allocate processing charges proportionally to the pcs each batch contributed.
+      const allocatedCost = billAmount ? (take / pcsReceived) * billAmount : 0;
+      return { ...b, atProcessorPcs: Math.max(0, (b.atProcessorPcs || 0) - take), processedPcs: (b.processedPcs || 0) + take, processingCost: (b.processingCost || 0) + allocatedCost };
     });
   }
 
@@ -421,7 +437,7 @@ export class InventoryCalculationService {
     pcsLost: number,
     batches: Batch[],
     preferredBatchId?: string
-  ): { batches: Batch[]; fromProcessor: number; fromAvailable: number } {
+  ): { batches: Batch[]; fromProcessor: number; fromAvailable: number; cost: number; costFromProcessor: number; costFromAvailable: number } {
     const ordered = (src: Batch[], get: (b: Batch) => number) => {
       const candidates = src.filter(b => b.materialId === materialId && b.status === 'Active' && get(b) > 0)
         .sort((a, b) => a.date.localeCompare(b.date));
@@ -431,15 +447,17 @@ export class InventoryCalculationService {
     };
     const takeFrom = (src: Batch[], get: (b: Batch) => number, qty: number) => {
       let remaining = qty;
+      let cost = 0;
       const takeByBatch = new Map<string, number>();
       for (const b of ordered(src, get)) {
         if (remaining <= 0) break;
         const take = Math.min(get(b), remaining);
         if (take <= 0) continue;
         takeByBatch.set(b.id, take);
+        cost += take * this.getBatchCostPerPiece(b);
         remaining -= take;
       }
-      return { takeByBatch, consumed: qty - remaining, remaining };
+      return { takeByBatch, consumed: qty - remaining, remaining, cost };
     };
 
     // Pass 1: pcs still at the processor.
@@ -451,6 +469,7 @@ export class InventoryCalculationService {
 
     // Pass 2: pcs waiting in this stage's availability bucket.
     let fromAvailable = 0;
+    let costFromAvailable = 0;
     if (p1.remaining > 0 && stageId) {
       const p2 = takeFrom(work, b => batchAvailableAtSource(b, stageId), p1.remaining);
       if (p2.consumed > 0) {
@@ -463,6 +482,7 @@ export class InventoryCalculationService {
           return { ...b, stageAvailableBySource: map };
         });
         fromAvailable += p2.consumed;
+        costFromAvailable += p2.cost;
       }
       // Pass 3: any remaining availability (legacy entries without a stage key).
       if (p2.remaining > 0) {
@@ -485,11 +505,19 @@ export class InventoryCalculationService {
             return { ...b, stageAvailableBySource: map };
           });
           fromAvailable += p3.consumed;
+          costFromAvailable += p3.cost;
         }
       }
     }
 
-    return { batches: work, fromProcessor: p1.consumed, fromAvailable };
+    return {
+      batches: work,
+      fromProcessor: p1.consumed,
+      fromAvailable,
+      cost: Math.round((p1.cost + costFromAvailable + Number.EPSILON) * 100) / 100,
+      costFromProcessor: Math.round((p1.cost + Number.EPSILON) * 100) / 100,
+      costFromAvailable: Math.round((costFromAvailable + Number.EPSILON) * 100) / 100,
+    };
   }
 
   /** Legacy alias — raw availability of a batch. */
@@ -691,25 +719,43 @@ export class InventoryCalculationService {
     products: Product[],
     excludeSaleId?: string,
     stages: ProcessingStage[] = [],
-    material?: Pick<RawMaterial, 'processingPath' | 'fixedStageId' | 'allowedStageIds'>
+    material?: Pick<RawMaterial, 'processingPath' | 'fixedStageId' | 'allowedStageIds'>,
+    manufacturingOrders: ManufacturingOrder[] = []
   ): Batch[] {
     // Batch-carried path snapshot wins: the trail must replay under the path
     // the pcs were BOUGHT under, even if the material's path was edited later.
     const pathSource = (batches.find(b => b.materialId === materialId && b.processingPath)) || material;
     const pathMaterial = pathSource ? { processingPath: pathSource.processingPath, fixedStageId: pathSource.fixedStageId, allowedStageIds: pathSource.allowedStageIds } : undefined;
+    const pathOfBatch = (b: Batch): string => b.processingPath ?? pathMaterial?.processingPath ?? 'full_chain';
     // 1. Reset this material's batches to the purchase baseline (all raw).
-    let trail: Batch[] = batches.map(b =>
-      b.materialId === materialId
-        ? {
-            ...b,
-            remainingPcs: b.initialPcs > 0 ? b.initialPcs : b.remainingPcs,
-            atProcessorPcs: 0,
-            processedPcs: 0,
-            stageAvailableBySource: {},
-            currentStageId: undefined,
-          }
-        : b
-    );
+    //    Ready-made batches are FINISHED at purchase by definition — they are
+    //    reset straight into the finished bucket, so ready-made pcs never
+    //    masquerade as raw stock (and sales FIFO can consume them) after a
+    //    restart or replay. This also self-heals pre-existing ready-made
+    //    batches that were written as raw-bucket batches.
+    let trail: Batch[] = batches.map(b => {
+      if (b.materialId !== materialId) return b;
+      if (pathOfBatch(b) === 'ready_made') {
+        return {
+          ...b,
+          remainingPcs: 0,
+          atProcessorPcs: 0,
+          processedPcs: b.initialPcs > 0 ? b.initialPcs : (b.processedPcs || 0),
+          processingCost: 0,
+          stageAvailableBySource: {},
+          currentStageId: undefined,
+        };
+      }
+      return {
+        ...b,
+        remainingPcs: b.initialPcs > 0 ? b.initialPcs : b.remainingPcs,
+        atProcessorPcs: 0,
+        processedPcs: 0,
+        processingCost: 0,
+        stageAvailableBySource: {},
+        currentStageId: undefined,
+      };
+    });
 
     // 2. Dispatches: stage-1/legacy draw RAW; intermediate draws are WIP→WIP
     //    (bucket-to-bucket) and never touch raw.
@@ -795,23 +841,118 @@ export class InventoryCalculationService {
         const { r, send } = ev;
         const stageId = r.stageId ?? send?.stageId;
         if (this.receiptProducesFinished(stageId, stages, pathMaterial)) {
-          trail = this.attributeReceiptFIFO(materialId, r.pcsReceived, trail, send?.batchId || undefined);
+          trail = this.attributeReceiptFIFO(materialId, r.pcsReceived, trail, send?.batchId || undefined, r.billAmount);
         } else {
-          trail = this.moveProcessorToAvailable(materialId, stageId || 'legacy', r.pcsReceived, trail, send?.batchId || undefined).batches;
+          // A v4 receipt capitalised its charge in the ledger — the trail must
+          // carry exactly the same amount onto the batches it drew from.
+          const capitalised = r.accruedVoucherId || (r.accruedProcessingCost || 0) > 0;
+          trail = this.moveProcessorToAvailable(
+            materialId,
+            stageId || 'legacy',
+            r.pcsReceived,
+            trail,
+            send?.batchId || undefined,
+            capitalised ? r.billAmount : undefined,
+          ).batches;
         }
       }
     }
 
-    // 5. Sales consume finished pcs FIFO — all sales except the one being
-    //    edited/deleted (so the change re-applies cleanly).
+    // 5. Legacy material sales consume finished pcs FIFO — all sales except the
+    //    one being edited/deleted (so the change re-applies cleanly). v4
+    //    manufactured sales are fulfilled from FG lots, never from material
+    //    batches, so they are skipped entirely.
     const productIds = new Set(products.filter(p => p.materialId === materialId).map(p => p.id));
     const orderedSales = sales
-      .filter(s => s.id !== excludeSaleId && productIds.has(s.productId) && (s.pcsSold || 0) > 0)
+      .filter(s =>
+        s.id !== excludeSaleId
+        && s.stockModelAtSale !== 'manufactured'
+        && productIds.has(s.productId)
+        && (s.pcsSold || 0) > 0
+      )
       .sort((a, b) => a.date.localeCompare(b.date));
     for (const sale of orderedSales) {
       trail = this.consumeFinishedFIFO(materialId, sale.pcsSold, trail);
     }
 
+    // 6. Completed manufacturing orders draw their recorded components LAST.
+    //    The replay always starts from the purchase baseline, so re-applying
+    //    the immutable consumption list is deterministic and idempotent.
+    if (manufacturingOrders.length > 0) {
+      trail = this.applyManufacturingConsumptions(trail, materialId, manufacturingOrders);
+    }
+
+    return trail;
+  }
+
+  /**
+   * Apply recorded MO component draws to a replayed trail. A completed order's
+   * consumption list is immutable, so the same draw is replayed on every boot
+   * and every edit. If history overruns the rebuilt trail (a purchase was
+   * shrunk outside the app), the remainder is taken FIFO from the same
+   * material so the physical quantity is still accounted for.
+   */
+  static applyManufacturingConsumptions(
+    batches: Batch[],
+    materialId: string,
+    orders: ManufacturingOrder[]
+  ): Batch[] {
+    const completed = orders
+      .filter(o => o.status === 'Completed' && Array.isArray(o.consumptions) && o.consumptions.length > 0)
+      .sort((a, b) =>
+        (a.completedAt || a.date || '').localeCompare(b.completedAt || b.date || '')
+        || a.id.localeCompare(b.id)
+      );
+
+    const isEmpty = (b: Batch) =>
+      (b.remainingPcs || 0) <= 1e-9
+      && (b.processedPcs || 0) <= 1e-9
+      && (b.atProcessorPcs || 0) <= 1e-9
+      && Object.values(b.stageAvailableBySource || {}).every(v => (v || 0) <= 1e-9);
+
+    let trail = batches;
+    for (const order of completed) {
+      for (const draw of order.consumptions || []) {
+        if (draw.materialId !== materialId || !(draw.pcs > 0)) continue;
+        let remaining = roundQty(draw.pcs);
+        let found = false;
+        trail = trail.map(b => {
+          if (b.id !== draw.batchId || b.materialId !== materialId) return b;
+          found = true;
+          const copy = { ...b };
+          const rawTake = Math.min(Math.max(0, copy.remainingPcs || 0), remaining);
+          copy.remainingPcs = roundQty((copy.remainingPcs || 0) - rawTake);
+          remaining = roundQty(remaining - rawTake);
+          if (remaining > 1e-9) {
+            const finishedTake = Math.min(Math.max(0, copy.processedPcs || 0), remaining);
+            copy.processedPcs = roundQty((copy.processedPcs || 0) - finishedTake);
+            remaining = roundQty(remaining - finishedTake);
+          }
+          if (isEmpty(copy)) copy.status = 'Depleted';
+          return copy;
+        });
+
+        if (!found || remaining > 1e-9) {
+          // History overruns the rebuilt trail — take the remainder FIFO from
+          // the same material's physical stock.
+          let need = remaining;
+          trail = trail.map(b => {
+            if (b.materialId !== materialId || b.status !== 'Active' || need <= 1e-9) return b;
+            const copy = { ...b };
+            const rawTake = Math.min(Math.max(0, copy.remainingPcs || 0), need);
+            copy.remainingPcs = roundQty((copy.remainingPcs || 0) - rawTake);
+            need = roundQty(need - rawTake);
+            if (need > 1e-9) {
+              const finishedTake = Math.min(Math.max(0, copy.processedPcs || 0), need);
+              copy.processedPcs = roundQty((copy.processedPcs || 0) - finishedTake);
+              need = roundQty(need - finishedTake);
+            }
+            if (isEmpty(copy)) copy.status = 'Depleted';
+            return copy;
+          });
+        }
+      }
+    }
     return trail;
   }
 
@@ -824,6 +965,13 @@ export class InventoryCalculationService {
    * stage — disjoint buckets, so the sum never double-counts);
    * processedStockPcs = finished and on hand.
    */
+  /** Sale stock = raw on hand + finished (processed) pieces. */
+  static calculateSaleStock(materialId: string, batches: Batch[]): number {
+    return batches
+      .filter(b => b.materialId === materialId && b.status === 'Active')
+      .reduce((sum, b) => sum + batchRawAvailableOf(b) + (b.processedPcs || 0), 0);
+  }
+
   static syncMaterialCounters(materials: RawMaterial[], batches: Batch[]): RawMaterial[] {
     return materials.map(m => {
       const own = batches.filter(b => b.materialId === m.id && b.status === 'Active');
@@ -892,20 +1040,25 @@ export class InventoryCalculationService {
    * Per-stage WIP: Σ sent − Σ received − Σ loss for that stage — a pure
    * derivation over the movement history. Disjointness guarantees the same
    * economic pcs are never held in two stages simultaneously.
+   *
+   * Pass `materialId` to scope the figure to one material (e.g. the material
+   * detail page); omit it for the plant-wide figure (dashboard / Job Work).
    */
   static getStageWIP(
     stageId: string | undefined,
     processingSends: ProcessingSend[],
-    processingReceipts: ProcessingReceipt[]
+    processingReceipts: ProcessingReceipt[],
+    materialId?: string
   ): number {
+    const inScope = (x: { materialId?: string }) => materialId === undefined || x.materialId === materialId;
     const sent = processingSends
-      .filter(s => s.stageId === stageId && s.status !== 'Adjusted')
+      .filter(s => s.stageId === stageId && s.status !== 'Adjusted' && inScope(s))
       .reduce((sum, s) => sum + (s.pcsSent || 0), 0);
     const received = processingReceipts
-      .filter(r => r.stageId === stageId)
+      .filter(r => r.stageId === stageId && inScope(r))
       .reduce((sum, r) => sum + (r.pcsReceived || 0), 0);
     const lost = processingSends
-      .filter(s => s.stageId === stageId)
+      .filter(s => s.stageId === stageId && inScope(s))
       .reduce((sum, s) => sum + (s.lossQuantity || 0), 0);
     return Math.max(0, sent - received - lost);
   }

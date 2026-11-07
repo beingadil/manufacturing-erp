@@ -4,6 +4,7 @@ import { formatCurrency, formatNumber } from '../../lib/utils';
 import type { Batch, ProcessingReceipt, ProcessingSend, ProcessingStage, Processor, ProcessorBill, RawMaterial, Voucher } from '../../types/erp';
 import { PageModal } from '../ui/PageModal';
 import { StageProgressStepper } from './StageProgressStepper';
+import { visibleStagesForMaterial } from '../../lib/processing/stageProgress';
 
 interface DispatchDetailModalProps {
   /** The dispatch (send) to show. */
@@ -36,6 +37,15 @@ export function DispatchDetailModal({
   vouchers,
 }: DispatchDetailModalProps) {
   const sorted = useMemo(() => [...stages].sort((a, b) => a.sequence - b.sequence), [stages]);
+
+  // Only the stages this material is configured to run — hook must run
+  // unconditionally, so it is keyed off the (possibly absent) send's material.
+  const viewStages = useMemo(() => {
+    const material = send ? materials.find(m => m.id === send.materialId) : undefined;
+    return visibleStagesForMaterial(sorted, material);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sorted, materials, send?.materialId]);
+
   if (!send) return null;
 
   const material = materials.find(m => m.id === send.materialId);
@@ -47,8 +57,8 @@ export function DispatchDetailModal({
   const linkedBill = bills.find(b => b.receiptIds.some(rid => sendReceipts.some(r => r.id === rid)));
   const voucher = linkedBill ? vouchers.find(v => v.sourceId === linkedBill.id && v.sourceModule === 'Processing') : undefined;
   const pending = send.pcsSent - send.pcsReceived - (send.lossQuantity || 0);
-  const currentIdx = send.stageId ? sorted.findIndex(s => s.id === send.stageId) : -1;
-  const completed = currentIdx > 0 ? sorted.slice(0, currentIdx).map(s => s.id) : [];
+  const currentIdx = send.stageId ? viewStages.findIndex(s => s.id === send.stageId) : -1;
+  const completed = currentIdx > 0 ? viewStages.slice(0, currentIdx).map(s => s.id) : [];
 
   return (
     <PageModal isOpen={!!send} onClose={onClose} title="Dispatch Detail" maxWidth="max-w-3xl">
@@ -78,10 +88,10 @@ export function DispatchDetailModal({
           Worker: {processor?.name || 'Unknown'} · Stage: {stage?.name || 'Initial Processor'}
         </div>
         <StageProgressStepper
-          stages={sorted}
+          stages={viewStages}
           completedStageIds={completed}
           currentStageId={send.stageId}
-          nextStageId={currentIdx >= 0 ? sorted[currentIdx + 1]?.id : sorted[0]?.id}
+          nextStageId={currentIdx >= 0 ? viewStages[currentIdx + 1]?.id : viewStages[0]?.id}
         />
       </div>
 
