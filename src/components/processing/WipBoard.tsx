@@ -107,7 +107,10 @@ export function WipBoard({
   ];
 
   return (
-    <div className="overflow-x-auto pb-4">
+    /* Horizontal kanban scroller. Native bar is replaced by the app's thin
+       .scroll-thin styling (6px rounded track, theme border) with contain —
+       nothing spills over the shell, the board is the only thing that moves. */
+    <div className="scroll-thin overflow-x-auto pb-2 overscroll-x-contain">
       <div className="flex gap-3 min-w-max">
         {columns.map(col => (
           <div key={col.label} className="w-64 shrink-0 rounded-xl border border-border bg-muted/20 flex flex-col">

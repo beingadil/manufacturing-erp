@@ -13,7 +13,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { InventoryCalculationService, batchAvailableAtSource, batchRawAvailableOf } from '../../lib/business/InventoryCalculationService';
-import { batchCanSendToStage, getMaterialBatchProgress, getSortedStages } from '../../lib/processing/stageProgress';
+import { batchCanSendToStage, getMaterialBatchProgress, getSortedStages, visibleStagesForMaterial } from '../../lib/processing/stageProgress';
 import { adaptiveAmountClass, cn, formatCurrency, formatNumber } from '../../lib/utils';
 import { ProcessingService } from '../../services/ProcessingService';
 import { useERPStore } from '../../store/useERPStore';
@@ -119,9 +119,16 @@ export default function SendFormPage() {
     return { nextStage, isRaw: best.stageId === firstStage?.id };
   }, [materialId, batches, sortedStages, isCustomStages, allowedOrderedStages, firstAllowedStage]);
 
+  // The stages this material is actually configured to pass through — the
+  // batch trail renders only those, not every stage in the chain.
+  const stepperStages = useMemo(
+    () => visibleStagesForMaterial(sortedStages, selectedMaterial),
+    [sortedStages, selectedMaterial],
+  );
+
   const batchProgress = useMemo(
-    () => (materialId ? getMaterialBatchProgress(materialId, batches || [], sortedStages) : []),
-    [materialId, batches, sortedStages]
+    () => (materialId ? getMaterialBatchProgress(materialId, batches || [], stepperStages) : []),
+    [materialId, batches, stepperStages]
   );
 
   const effectiveStageId = useMemo(() => {
@@ -309,7 +316,7 @@ export default function SendFormPage() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)]">
+    <div className="min-h-[calc(100vh-4rem)] pb-16">
       {/* ── Page header ── */}
       <header className="sticky top-16 z-20 -mx-4 border-b border-border/60 bg-background/85 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <div className="mx-auto flex max-w-7xl items-center gap-3">
@@ -514,7 +521,7 @@ export default function SendFormPage() {
                             </div>
                           </div>
                           <StageProgressStepper
-                            stages={sortedStages}
+                            stages={stepperStages}
                             completedStageIds={prog.completedStages.map(s => s.id)}
                             currentStageId={prog.currentStage?.id}
                             nextStageId={prog.nextStage?.id}
