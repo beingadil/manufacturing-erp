@@ -7,7 +7,7 @@
 #
 # Builds a Markdown changelog from `git log` since the previous release
 # tag, grouped by conventional-commit prefixes (feat / fix / perf /
-# refactor / docs / ci / chore), with a full commit list at the bottom.
+# refactor / docs / test / ci / chore), with a full commit list at the bottom.
 
 # build_release_body <prev_tag> <new_version> <release_date> <out_file>
 #   prev_tag     — previous release tag (e.g. v1.0.4); empty = full history
@@ -19,7 +19,7 @@ build_release_body() {
   local log_range="" line subject
   [ -n "$prev_tag" ] && log_range="$prev_tag..HEAD"
 
-  local feat="" fix="" perf="" refactor="" docs="" ci="" chore="" other="" commits=""
+  local feat="" fix="" perf="" refactor="" docs="" test="" ci="" chore="" other="" commits=""
 
   while IFS= read -r line; do
     [ -z "$line" ] && continue
@@ -36,6 +36,7 @@ build_release_body() {
       perf:*|perf\(*) perf+="- $subject"$'\n' ;;
       refactor:*|refactor\(*) refactor+="- $subject"$'\n' ;;
       docs:*|docs\(*) docs+="- $subject"$'\n' ;;
+      test:*|test\(*) test+="- $subject"$'\n' ;;
       ci:*|ci\(*) ci+="- $subject"$'\n' ;;
       chore:*|chore\(*) chore+="- $subject"$'\n' ;;
       *) other+="- $line"$'\n' ;;
@@ -58,6 +59,7 @@ build_release_body() {
     if [ -n "$perf" ]; then echo "## ⚡ Performance"; echo ""; printf '%s' "$perf"; echo ""; fi
     if [ -n "$refactor" ]; then echo "## ♻️ Refactoring"; echo ""; printf '%s' "$refactor"; echo ""; fi
     if [ -n "$docs" ]; then echo "## 📚 Documentation"; echo ""; printf '%s' "$docs"; echo ""; fi
+    if [ -n "$test" ]; then echo "## 🧪 Tests"; echo ""; printf '%s' "$test"; echo ""; fi
     if [ -n "$ci" ]; then echo "## 🔧 CI & Build"; echo ""; printf '%s' "$ci"; echo ""; fi
     if [ -n "$chore" ]; then echo "## 🧹 Chores & Internal"; echo ""; printf '%s' "$chore"; echo ""; fi
     if [ -n "$other" ]; then echo "## 📦 Other"; echo ""; printf '%s' "$other"; echo ""; fi

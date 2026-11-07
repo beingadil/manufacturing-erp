@@ -5,6 +5,32 @@ warning users about an "unknown publisher" on every install/update.
 
 ---
 
+## Current status: shipping unsigned (accepted, not an oversight)
+
+Releases are currently published **unsigned**. Every installer therefore shows
+the "Windows protected your PC / Unknown publisher" prompt. This is a
+deliberate decision for now, not a broken build: signing requires a paid
+certificate and nothing else in the release pipeline depends on it.
+
+What works today without any signing:
+
+- The install itself is fine — only the initial warning is in the way.
+- Automatic updates still work (`latest.yml` + the blockmap are published and
+  verified on every release).
+- `scripts/verify-signature.cjs` reports `NotSigned` by design and the release
+  workflow treats that as informational, so unsigned releases do not go red.
+
+Instructions to give users:
+
+> Choose **More info → Run anyway**. The warning appears because the app is not
+> yet code-signed, not because the download is corrupt.
+
+To turn this off later, pick one of the two options below — the workflow is
+already wired for both (`CSC_LINK`/`CSC_KEY_PASSWORD` for a PFX,
+`AZURE_SIGNING_*` for Azure Trusted Signing). No code changes are needed.
+
+---
+
 ## ⚠️ The most important thing to know
 
 **A self-signed certificate does NOT stop SmartScreen warnings.**

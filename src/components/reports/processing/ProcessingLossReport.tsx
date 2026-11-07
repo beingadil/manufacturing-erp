@@ -1,7 +1,7 @@
-import { AlertCircle, Factory, } from 'lucide-react';
+import { AlertCircle, Factory, Coins } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ProcessingReportService } from "../../../lib/reporting/ProcessingReportService";
-import { formatNumber, formatPercent } from '../../../lib/utils';
+import { formatCurrency, formatNumber, formatPercent } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
 
 export function ProcessingLossReport() {
@@ -11,6 +11,7 @@ export function ProcessingLossReport() {
   const data = useMemo(() => ProcessingReportService.getProcessingLossReportData(dateRange, search), [dateRange, search]);
 
   const totalLoss = data.reduce((sum, item) => sum + item.lossPcs, 0);
+  const totalLossCost = data.reduce((sum, item) => sum + (item.lossCost || 0), 0);
 
   return (
     <GenericReportTemplate
@@ -20,7 +21,8 @@ export function ProcessingLossReport() {
       onSearch={setSearch}
       kpis={[
         { title: "Processors", value: data.length, icon: Factory },
-        { title: "Total Loss (PCS)", value: formatNumber(totalLoss), icon: AlertCircle }
+        { title: "Total Loss (PCS)", value: formatNumber(totalLoss), icon: AlertCircle },
+        { title: "Loss Written Off (PKR)", value: formatCurrency(totalLossCost), icon: Coins }
       ]}
       columns={[
         { key: "processorName", label: "Processor Name" },
@@ -29,6 +31,7 @@ export function ProcessingLossReport() {
         { key: "receivedPcs", label: "Received (PCS)", align: "right", render: (item) => formatNumber(item.receivedPcs) },
         { key: "lossPcs", label: "Loss (PCS)", align: "right", render: (item) => <span className="text-destructive font-medium">{formatNumber(item.lossPcs)}</span> },
         { key: "pendingPcs", label: "Pending (PCS)", align: "right", render: (item) => formatNumber(item.pendingPcs || 0) },
+        { key: "lossCost", label: "Cost Written Off", align: "right", render: (item) => formatCurrency(item.lossCost || 0) },
         { key: "lossPercentage", label: "Loss %", align: "right", render: (item) => formatPercent(item.lossPercentage / 100) }
       ]}
       exportDataMapping={(item) => ({
@@ -37,6 +40,7 @@ export function ProcessingLossReport() {
         receivedPcs: formatNumber(item.receivedPcs),
         lossPcs: formatNumber(item.lossPcs),
         pendingPcs: formatNumber(item.pendingPcs || 0),
+        lossCost: formatCurrency(item.lossCost || 0),
         lossPercentage: formatPercent(item.lossPercentage / 100)
       })}
     />

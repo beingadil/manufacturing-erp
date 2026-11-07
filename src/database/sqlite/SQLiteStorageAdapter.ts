@@ -103,6 +103,11 @@ const PERSIST_KEYS = [
  * Clearing forces the next boot to rehydrate purely from the restored rows.
  */
 export function clearStorageMirrors(): void {
+  // Restoring also means "stop persisting anything": a synced mirror is
+  // cleared here and an in-flight in-memory store must not re-create it (or
+  // worse, write the pre-restore blob back into the restored database) before
+  // the reload lands. Writes stay suspended until the page reloads.
+  storageSuspended = true;
   for (const key of PERSIST_KEYS) {
     localRemove(key);
   }
@@ -118,6 +123,32 @@ const UPSERT_SQL = `INSERT INTO key_value_store (key, value, updated_at)
 
 async function writeToSqlite(db: any, name: string, value: string): Promise<void> {
   await db.execute(UPSERT_SQL, [name, value]);
+}
+
+// ─── Write suspension ──────────────────────────────────────────────
+// While suspended, setItem()/removeItem() become no-ops. This exists for two
+// critical windows:
+//   1. Bootstrap rehydration — the logger and persist middleware otherwise
+//      UPSERT this session's logs over erp-system-logs BEFORE bootstrap reads
+//      the historical row, and the CoA/stage auto-seed can then overwrite
+//      erp-storage with defaults. Suspending guarantees no write lands before
+//      the persisted rows have been read and reconciled.
+//   2. Restore in flight — after the main process swaps the database file,
+//      the renderer still holds pre-restore state in memory; any zustand
+//      setState in the window before window.location.reload() would persist
+//      the STALE blob over the restored database, silently undoing the
+//      restore.
+// Reads are never suspended. When the page reloads (or resume is called),
+// the flag resets.
+let storageSuspended = false;
+export function suspendStorageWrites(): void {
+  storageSuspended = true;
+}
+export function resumeStorageWrites(): void {
+  storageSuspended = false;
+}
+export function isStorageWritesSuspended(): boolean {
+  return storageSuspended;
 }
 
 // Serialize writes per key so concurrent persist setItem calls always land in
@@ -201,6 +232,10 @@ export const SQLiteStorageAdapter = {
   },
 
   setItem: async (name: string, value: string): Promise<void> => {
+    if (storageSuspended) {
+      console.warn('[SQLiteStorageAdapter]', `setItem(${name}) skipped — writes are suspended`);
+      return;
+    }
     await enqueueWrite(name, async () => {
       // Phase 1: mark the mirror unsynced — SQLite does not have this value yet.
       localSet(name, value, true);
@@ -225,6 +260,10 @@ export const SQLiteStorageAdapter = {
   },
 
   removeItem: async (name: string): Promise<void> => {
+    if (storageSuspended) {
+      console.warn('[SQLiteStorageAdapter]', `removeItem(${name}) skipped — writes are suspended`);
+      return;
+    }
     await enqueueWrite(name, async () => {
       localRemove(name);
       try {

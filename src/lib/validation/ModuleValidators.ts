@@ -13,7 +13,7 @@ export interface PurchaseDTO {
   materialId: string;
   date: string;
   weight: number;
-  weightUnit: 'KGs' | 'Tons';
+  weightUnit: 'KG' | 'PCS';
   ratePerUnit: number;
   weightPerPiece: number;
   /** Ready-made purchases are counted in pieces directly — no weight math. */

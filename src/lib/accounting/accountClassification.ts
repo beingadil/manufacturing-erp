@@ -45,6 +45,10 @@ export function getCashAccounts(accounts: Account[], subtypes: AccountSubtype[])
   return accounts.filter(a => isCashAccount(a, subtypes));
 }
 
+export function getChequeAccounts(accounts: Account[], subtypes: AccountSubtype[]): Account[] {
+  return accounts.filter(a => getSubtypeName(a, subtypes) === 'Cheques');
+}
+
 export function getBankAccounts(accounts: Account[], subtypes: AccountSubtype[]): Account[] {
   return accounts.filter(a => isBankAccount(a, subtypes));
 }
@@ -100,4 +104,28 @@ export function getSystemCOGSAccount(
   const subtype = subtypes.find(s => s.name === 'Purchases');
   if (!subtype) return undefined;
   return accounts.find(a => a.subtypeId === subtype.id && a.isSystem);
+}
+
+/**
+ * The liability account used to accrue processing costs at receipt. The seed
+ * creates a dedicated 'Accrued Expenses' account inside the Accounts Payable
+ * subtype; older installs that predate it fall back to the AP control account.
+ */
+export function getAccruedExpensesAccount(
+  accounts: Account[],
+  subtypes: AccountSubtype[]
+): Account | undefined {
+  const named = accounts.find(a => a.name === 'Accrued Expenses' && a.status !== 'Inactive');
+  if (named) return named;
+  return getSystemAccountBySubtype(accounts, subtypes, 'Accounts Payable');
+}
+
+/** The system expense account that absorbs recorded processing losses. */
+export function getSystemProcessingLossAccount(
+  accounts: Account[],
+  subtypes: AccountSubtype[]
+): Account | undefined {
+  const named = accounts.find(a => a.name === 'Processing Loss' && a.status !== 'Inactive');
+  if (named) return named;
+  return getSystemAccountBySubtype(accounts, subtypes, 'Processing Expense');
 }

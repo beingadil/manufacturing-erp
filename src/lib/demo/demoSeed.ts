@@ -170,13 +170,13 @@ export function seedDemoData(): { seeded: boolean; reason?: string } {
   // Steel: 1,000 KGs × Rs 300 = Rs 300,000 → 4,000 PCS @ Rs 75/PCS
   store.addPurchase({
     supplierId: supplierA, materialId: steelId, date: dateAgo(12),
-    weight: 1000, weightUnit: 'KGs', ratePerUnit: 300, weightPerPiece: 0.25,
+    weight: 1000, weightUnit: 'KG', ratePerUnit: 300, weightPerPiece: 0.25,
     invoiceNo: 'SUP-INV-1001', remarks: 'Steel coil purchase',
   });
   // Aluminum: 500 KGs × Rs 400 = Rs 200,000 → 2,500 PCS @ Rs 80/PCS
   store.addPurchase({
     supplierId: supplierB, materialId: aluminumId, date: dateAgo(11),
-    weight: 500, weightUnit: 'KGs', ratePerUnit: 400, weightPerPiece: 0.2,
+    weight: 500, weightUnit: 'KG', ratePerUnit: 400, weightPerPiece: 0.2,
     invoiceNo: 'SUP-INV-1002', remarks: 'Aluminum sheet purchase',
   });
 

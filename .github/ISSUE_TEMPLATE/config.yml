@@ -1,9 +1,8 @@
-
+# Issue chooser. There is deliberately no Discussions contact link here: Discussions
+# is not enabled on this repository, so a link to /discussions would 404 for anyone
+# who needs help.
 blank_issues_enabled: true
 contact_links:
-  - name: Question or usage help
-    url: https://github.com/beingadil/manufacturing-erp/discussions
-    about: Ask how to use the app, or how something works. Open a bug report if something is actually broken.
   - name: Security vulnerability
     url: https://github.com/beingadil/manufacturing-erp/security/advisories/new
-    about: Report a security problem privately. Please do not open a public issue for these.
+    about: Report a security problem privately. Please do not open a public issue for these — see SECURITY.md.

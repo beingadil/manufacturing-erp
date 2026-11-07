@@ -1,12 +1,16 @@
-import { CircleDollarSign, Pencil, Plus, Trash2, UserCog, Wallet } from "lucide-react";
+import { MapPin, Pencil, Plus, Trash2, UserCog, } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { SafeDeleteDialog } from "../components/common/SafeDeleteDialog";
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
+import { FormField } from "../components/form/FormField";
+import { FormFooter } from "../components/form/FormFooter";
+import { FormGrid } from "../components/form/FormGrid";
+import { FormModal } from "../components/form/FormModal";
+import { FormSection } from "../components/form/FormSection";
+import { formInputClass } from "../components/form/formStyles";
 import { PartyLedgerModal } from "../components/PartyLedgerModal";
-import { KpiCard } from '../components/ui/KpiCard';
-import { PageModal } from "../components/ui/PageModal";
 import { cn, formatCurrency, formatNumber } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
 
@@ -217,7 +221,7 @@ export function Processors() {
           </div>
           <div>
             <h2 className="text-2xl font-bold tracking-tight text-foreground">Processors</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">Manage external processing units and their balances.</p>
+            <p className="text-sm text-muted-foreground mt-0.5">Manage processors and their payable balances.</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -227,32 +231,22 @@ export function Processors() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <KpiCard
-          label="Total Processors"
-          value={formatNumber(processors.length)}
-          icon={<UserCog className="h-5 w-5" />}
-          iconClassName="text-fuchsia-500"
-          size="sm"
-        />
-        <KpiCard
-          label="Total Payable"
-          value={formatCurrency(processors.reduce((s, p) => s + (p.balancePayable || 0), 0))}
-          icon={<Wallet className="h-5 w-5" />}
-          iconClassName="text-purple-500"
-          accent="text-destructive"
-          size="sm"
-          description="Outstanding balance across all processors"
-        />
-        <KpiCard
-          label="Processors with Balance"
-          value={formatNumber(processors.filter(p => (p.balancePayable || 0) > 0).length)}
-          icon={<CircleDollarSign className="h-5 w-5" />}
-          iconClassName="text-fuchsia-500"
-          size="sm"
-          description="Processors currently owed money"
-        />
-      </div>
+      <section className="flex flex-wrap items-center gap-x-10 gap-y-3 rounded-2xl border border-border bg-card px-6 py-4 shadow-sm">
+        <div>
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Processors</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{formatNumber(processors.length)}</div>
+        </div>
+        <div className="border-l border-border/60 pl-10">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Payable</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-destructive">{formatCurrency(processors.reduce((s, p) => s + (p.balancePayable || 0), 0))}</div>
+          <div className="text-xs text-muted-foreground">Outstanding balance</div>
+        </div>
+        <div className="border-l border-border/60 pl-10">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">With Balance</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{formatNumber(processors.filter(p => (p.balancePayable || 0) > 0).length)}</div>
+          <div className="text-xs text-muted-foreground">Processors owed money</div>
+        </div>
+      </section>
 
       <DataTable
         data={processors}
@@ -263,53 +257,120 @@ export function Processors() {
         defaultSortKey="name"
       />
 
-      <PageModal isOpen={isModalOpen} onClose={closeModal} title={editingProcessor ? 'Edit Processor' : 'Add Processor'}>
-  <form onSubmit={handleSubmit} className="space-y-4">
-    <div className="space-y-1">
-      <label htmlFor="processor-name" className="text-sm font-medium text-foreground">Processor Name</label>
-      <input id="processor-name" name="processor-name" type="text" required value={name} onChange={e => setName(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Processor Name *" />
-    </div>
-    <div>
-      <label htmlFor="processor-worker-stage" className="block text-sm font-medium text-foreground/80 mb-1">Worker Type</label>
-      <select
-        id="processor-worker-stage"
-        name="processor-worker-stage"
-        value={workerStageId}
-        onChange={e => setWorkerStageId(e.target.value)}
-        className="w-full rounded-xl border border-border bg-background p-3 text-sm"
-      >
-        <option value="">General Worker (any stage)</option>
-        {sortedStages.map(s => (
-          <option key={s.id} value={s.id}>{s.name}{s.isFinalStage ? ' (Final)' : ''}</option>
-        ))}
-      </select>
-      <p className="mt-1 text-xs text-muted-foreground">The processing job this worker performs. The Job Work module only offers workers matching the selected stage.</p>
-    </div>
-    <div className="space-y-1">
-      <label htmlFor="processor-contact" className="text-sm font-medium text-foreground">Contact Person</label>
-      <input id="processor-contact" name="processor-contact" type="text" value={contactPerson} onChange={e => setContactPerson(e.target.value)} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Contact Person" />
-    </div>
-    <div className="grid grid-cols-2 gap-3">
-      <div className="space-y-1">
-        <label htmlFor="processor-phone" className="text-sm font-medium text-foreground">Phone</label>
-        <input id="processor-phone" name="processor-phone" type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={e => setPhone(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Phone" />
-      </div>
-      <div className="space-y-1">
-        <label htmlFor="processor-email" className="text-sm font-medium text-foreground">Email</label>
-        <input id="processor-email" name="processor-email" type="email" autoComplete="email" spellCheck={false} value={email} onChange={e => setEmail(e.target.value)} className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Email" />
-      </div>
-    </div>
-    <div className="space-y-1">
-      <label htmlFor="processor-address" className="text-sm font-medium text-foreground">Address</label>
-      <textarea id="processor-address" name="processor-address" value={address} onChange={e => setAddress(e.target.value)} rows={2} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Address" />
-    </div>
-    <div className="space-y-1">
-      <label htmlFor="processor-notes" className="text-sm font-medium text-foreground">Notes</label>
-      <textarea id="processor-notes" name="processor-notes" value={notes} onChange={e => setNotes(e.target.value)} rows={2} autoComplete="off" className="w-full rounded-xl border border-border bg-background p-3 text-sm" placeholder="Notes" />
-    </div>
-    <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">{editingProcessor ? 'Save Changes' : 'Add Processor'}</button>
-  </form>
-</PageModal>
+      <FormModal
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        title={editingProcessor ? 'Edit Processor' : 'Add Processor'}
+        description="Someone you send material to for processing, with contact details and the stage they work at."
+        icon={editingProcessor ? <Pencil /> : <UserCog />}
+        size="md"
+        footer={
+          <FormFooter
+            onCancel={closeModal}
+            formId="processor-form"
+            submitLabel={editingProcessor ? 'Save Changes' : 'Add Processor'}
+          />
+        }>
+        <form id="processor-form" onSubmit={handleSubmit} className="space-y-5">
+          <FormSection icon={<UserCog />} eyebrow="Details" first>
+            <FormGrid cols={2}>
+              <FormField id="processor-name" label="Processor Name" required className="col-span-2">
+                <input
+                  id="processor-name"
+                  name="processor-name"
+                  type="text"
+                  required
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  autoComplete="off"
+                  className={formInputClass}
+                />
+              </FormField>
+              <FormField id="processor-contact" label="Contact Person">
+                <input
+                  id="processor-contact"
+                  name="processor-contact"
+                  type="text"
+                  value={contactPerson}
+                  onChange={e => setContactPerson(e.target.value)}
+                  autoComplete="off"
+                  className={formInputClass}
+                />
+              </FormField>
+              <FormField id="processor-phone" label="Phone">
+                <input
+                  id="processor-phone"
+                  name="processor-phone"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  className={formInputClass}
+                />
+              </FormField>
+              <FormField id="processor-email" label="Email">
+                <input
+                  id="processor-email"
+                  name="processor-email"
+                  type="email"
+                  autoComplete="email"
+                  spellCheck={false}
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  className={formInputClass}
+                />
+              </FormField>
+              <FormField
+                id="processor-worker-stage"
+                label="Processing Stage"
+                hint="The stage this processor works at. Job Work only lists processors that match the selected stage."
+              >
+                <select
+                  id="processor-worker-stage"
+                  name="processor-worker-stage"
+                  value={workerStageId}
+                  onChange={e => setWorkerStageId(e.target.value)}
+                  className={formInputClass}
+                >
+                  <option value="">Any stage</option>
+                  {sortedStages.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}{s.isFinalStage ? ' (Final)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+            </FormGrid>
+          </FormSection>
+          <FormSection icon={<MapPin />} eyebrow="Address & notes">
+            <FormGrid cols={2}>
+              <FormField id="processor-address" label="Address" className="col-span-2">
+                <textarea
+                  id="processor-address"
+                  name="processor-address"
+                  value={address}
+                  onChange={e => setAddress(e.target.value)}
+                  rows={2}
+                  autoComplete="off"
+                  className={formInputClass}
+                />
+              </FormField>
+              <FormField id="processor-notes" label="Notes" className="col-span-2">
+                <textarea
+                  id="processor-notes"
+                  name="processor-notes"
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  rows={2}
+                  autoComplete="off"
+                  className={formInputClass}
+                />
+              </FormField>
+            </FormGrid>
+          </FormSection>
+        </form>
+      </FormModal>
 
       {ledgerParty && <PartyLedgerModal party={ledgerParty} onClose={() => setLedgerParty(null)} />}
 

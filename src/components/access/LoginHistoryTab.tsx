@@ -4,6 +4,7 @@ import { Column, DataTable } from '@/components/DataTable';
 import { Badge } from '@/components/ui/badge';
 import { useAccessStore } from '@/store/useAccessStore';
 import { LoginHistory } from '@/types/access';
+import { formInputClass } from '../../components/form/formStyles';
 import { SearchInput } from '../ui/SearchInput';
 
 export function LoginHistoryTab() {
@@ -78,7 +79,7 @@ export function LoginHistoryTab() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="h-10 px-3 rounded-md border border-input bg-background text-sm"
+          className={formInputClass}
         >
           <option value="">All Statuses</option>
           <option value="Active">Active</option>

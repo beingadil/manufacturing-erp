@@ -3,7 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Column, DataTable } from "../components/DataTable";
 import { SearchableSelect } from "../components/SearchableSelect";
-import { AccountingEngine } from "../lib/accounting/AccountingEngine";
+import { AccountingEngine, compareLedgerEntries } from "../lib/accounting/AccountingEngine";
+import { generateLedgerStatementPDF } from '../lib/documentGenerators';
 import { cn, formatCurrency } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
 
@@ -84,7 +85,7 @@ export function Ledgers() {
         timestamp: new Date(r.date).getTime()
       });
     });
-    return rows.sort((a, b) => b.timestamp - a.timestamp);
+    return rows.sort((a, b) => a.timestamp - b.timestamp);
   };
 
   const processorRows = useMemo(() => getProcessorLedgerRows().map(r => ({ ...r, formattedDate: new Date(r.date).toLocaleDateString() })), [processorId, processingSends, processingReceipts, materials]);
@@ -104,7 +105,13 @@ export function Ledgers() {
       })
       // Cancelled vouchers never affect ledgers (spec §14)
       .filter(e => e.voucher?.status === 'Posted')
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      // Chronological order shared with every other ledger view (date →
+      // voucherNo sequence → createdAt → id) so same-day rows keep issuance
+      // order and the running balance is correct.
+      .sort((a, b) => compareLedgerEntries(
+        { date: a.date, voucherNo: a.voucher?.voucherNo, createdAt: a.voucher?.createdAt, id: a.voucher?.id ?? a.id },
+        { date: b.date, voucherNo: b.voucher?.voucherNo, createdAt: b.voucher?.createdAt, id: b.voucher?.id ?? b.id }
+      ));
       
     let runningBalance = activeAccount.openingBalanceType === 'Debit' ? activeAccount.openingBalance : -activeAccount.openingBalance;
     if (activeAccount.type === 'Liabilities' || activeAccount.type === 'Equity' || activeAccount.type === 'Revenue' || activeAccount.type === 'Other Income') {
@@ -163,6 +170,9 @@ export function Ledgers() {
         <div className="flex items-center gap-3">
           <button onClick={() => navigate("/accounting/journal-voucher")} className="inline-flex items-center gap-2 rounded-lg bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/90">
             New Journal Voucher
+          </button>
+          <button onClick={() => generateLedgerStatementPDF(activeAccount?.name || 'Account', activeAccount?.type || 'Account', filteredEntries.map(e => ({ date: e.formattedDate, referenceNo: e.voucher?.voucherNo || '-', description: e.narration || e.voucher?.narration || '-', debit: e.debit, credit: e.credit, balance: e.runningBalance })), currentFinancialBalance)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+            Export PDF
           </button>
         </div>
       </div>
@@ -277,6 +287,8 @@ export function Ledgers() {
             searchPlaceholder="Search goods records..."
             persistKey="ledgers-goods-table"
             defaultSortKey="date"
+            defaultSortDirection="asc"
+            showPageSize={false}
           />
         ) : (
           <DataTable
@@ -286,8 +298,16 @@ export function Ledgers() {
             searchPlaceholder="Search journal entries..."
             persistKey="ledgers-financial-table"
             defaultSortKey="date"
+            defaultSortDirection="asc"
+            showPageSize={false}
           />
         )}
+        <div className="border-t border-border/50 bg-muted/20 px-4 py-3 flex items-center justify-between text-sm">
+          <span className="font-medium text-muted-foreground">Closing Balance</span>
+          <span className="font-bold tabular-nums text-foreground">
+            {Math.abs(currentFinancialBalance).toLocaleString()} {currentFinancialBalance >= 0 ? (['Assets', 'Expenses'].includes(activeAccount?.type || '') ? 'Dr' : 'Cr') : (['Assets', 'Expenses'].includes(activeAccount?.type || '') ? 'Cr' : 'Dr')}
+          </span>
+        </div>
       </div>
     </div>
   );

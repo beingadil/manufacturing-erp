@@ -21,6 +21,7 @@ interface SeedState {
 const subtypes: { name: string; type: AccountType }[] = [
   { name: 'Cash', type: 'Assets' },
   { name: 'Bank', type: 'Assets' },
+  { name: 'Cheques', type: 'Assets' },
   { name: 'Accounts Receivable', type: 'Assets' },
   { name: 'Inventory', type: 'Assets' },
   { name: 'Fixed Assets', type: 'Assets' },
@@ -47,6 +48,7 @@ const accounts: { name: string; type: AccountType; subtype: string; isSystem?: b
   { name: 'Petty Cash', type: 'Assets', subtype: 'Cash', isSystem: true },
   { name: 'Bank - Primary', type: 'Assets', subtype: 'Bank', isSystem: true },
   { name: 'Bank - Secondary', type: 'Assets', subtype: 'Bank', isSystem: true },
+  { name: 'Cheques in Hand', type: 'Assets', subtype: 'Cheques', isSystem: true },
   { name: 'Accounts Receivable', type: 'Assets', subtype: 'Accounts Receivable', isSystem: true },
   { name: 'Raw Material Inventory', type: 'Assets', subtype: 'Inventory', isSystem: true },
   { name: 'Work in Progress Inventory', type: 'Assets', subtype: 'Inventory', isSystem: true },
@@ -82,6 +84,7 @@ const accounts: { name: string; type: AccountType; subtype: string; isSystem?: b
   { name: 'Manufacturing Overhead', type: 'Cost of Goods Sold', subtype: 'Purchases' },
   // Expenses
   { name: 'Processing Expense', type: 'Expenses', subtype: 'Processing Expense', isSystem: true },
+  { name: 'Processing Loss', type: 'Expenses', subtype: 'Processing Expense', isSystem: true },
   { name: 'Salaries Expense', type: 'Expenses', subtype: 'Administrative Expenses', isSystem: true },
   { name: 'Rent Expense', type: 'Expenses', subtype: 'Operating Expenses', isSystem: true },
   { name: 'Utilities Expense', type: 'Expenses', subtype: 'Operating Expenses', isSystem: true },

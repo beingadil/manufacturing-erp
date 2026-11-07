@@ -78,29 +78,30 @@ Electron main process + preload context bridge + React renderer, with **SQLite a
 source of truth**.
 
 ```
- +-------------------------------------------------------------+
- |  Renderer (sandboxed)                                        |
- |  React 18 - React Router 7 - Zustand 5 - Tailwind + Radix   |
- +-----------------+-----------------------+-------------------+
-                   |  window.electronDB    |  window.electronAI
- +-----------------v-----------------------v-------------------+
- |  Preload - contextBridge (electron/preload.cjs)              |
- +-----------------------------+-------------------------------+
-                               |  IPC
- +-----------------------------v-------------------------------+
- |  Main process (electron/main.cjs)                            |
- |  - database.cjs : better-sqlite3, schema + migrations        |
- |  - ai.cjs       : local assistant integration                |
- |  - legacy-install-detector.cjs : prior-version handover      |
- +-----------------------------+-------------------------------+
-                               |
-                    +----------v-----------+
-                    | %APPDATA%/           |
-                    |  manufacturing-erp/  |
-                    |   manufacturing-erp  |
-                    |     .sqlite  <- truth|
-                    |   backups/           |
-                    +----------------------+
++------------------------------------------+
+|  Renderer - sandboxed                     |
+|  React 18 / Router 7 / Zustand / Radix    |
++-----------------+------------------------+
+                 | electronDB
+                 | electronAI
++-----------------v------------------------+
+|  Preload - contextBridge                  |
+|  electron/preload.cjs                     |
++-----------------+------------------------+
+                 | IPC
++-----------------v------------------------+
+|  Main process                             |
+|  database.cjs - better-sqlite3            |
+|  ai.cjs - local assistant                 |
+|  legacy-install-detector.cjs              |
++-----------------+------------------------+
+                 |
+        +--------v---------+
+        | %APPDATA%/        |
+        | manufacturing-erp |
+        |  .sqlite <- truth |
+        |  backups/         |
+        +------------------+
 ```
 
 ### Persistence rules that matter
@@ -146,9 +147,9 @@ source of truth**.
 
 ```bash
 pnpm install       # install dependencies
-pnpm lint          # full lint pipeline - type check, Biome, Tailwind, dead code
+pnpm lint          # type check, Biome, Tailwind, dead code
 pnpm test          # Vitest unit suite
-pnpm electron:dev  # build the renderer, then launch the desktop app
+pnpm electron:dev  # build the renderer, then launch the app
 ```
 
 `pnpm electron:dev` runs `vite build` first and then starts Electron, because this is a
@@ -193,8 +194,10 @@ Two Electron integration scripts cover what a unit test cannot reach. They drive
 `electron/database.cjs`, so they run under the Electron runtime rather than plain `node`:
 
 ```bash
-npx electron scripts/test-export-import-roundtrip.cjs   # export -> wipe -> import -> verify
-npx electron scripts/test-backup-restore-flow.cjs       # backup -> restore -> mirror precedence
+# export -> wipe -> import -> verify
+npx electron scripts/test-export-import-roundtrip.cjs
+# backup -> restore -> mirror precedence
+npx electron scripts/test-backup-restore-flow.cjs
 ```
 
 ### Pre-push hook

@@ -106,7 +106,7 @@ export function QuickAddProcessor({ isOpen, onClose, onSuccess }: BaseModalProps
   const { addProcessor, processingStages } = useERPStore();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  // Worker type = processing stage this worker performs (empty = General/any).
+  // The processing stage this processor works at (empty = any stage).
   const [workerStageId, setWorkerStageId] = useState("");
   const sortedStages = [...(processingStages || [])].sort((a, b) => a.sequence - b.sequence);
 
@@ -142,15 +142,15 @@ export function QuickAddProcessor({ isOpen, onClose, onSuccess }: BaseModalProps
             <input value={phone} onChange={e => setPhone(e.target.value)} className="w-full rounded-xl border p-3 text-sm" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground/80 mb-1">Worker Type</label>
+            <label className="block text-sm font-medium text-foreground/80 mb-1">Processing Stage</label>
             <SearchableSelect
               options={[
-                { id: "", label: "General Worker (any stage)" },
-                ...sortedStages.map(s => ({ id: s.id, label: `${s.name}${s.isFinalStage ? " (Final Polish)" : ""}` })),
+                { id: "", label: "Any stage" },
+                ...sortedStages.map(s => ({ id: s.id, label: `${s.name}${s.isFinalStage ? " (Final)" : ""}` })),
               ]}
               value={workerStageId}
               onChange={setWorkerStageId}
-              placeholder="Select worker type..."
+              placeholder="Select a stage..."
             />
           </div>
           <button type="submit" className="w-full rounded-xl bg-primary p-3 text-primary-foreground font-semibold">Save Processor</button>

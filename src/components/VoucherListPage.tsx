@@ -6,6 +6,7 @@ import { AccountingEngine } from '../lib/accounting/AccountingEngine';
 import { cn, formatCurrency } from '../lib/utils';
 import { useERPStore } from '../store/useERPStore';
 import { Voucher } from '../types/erp';
+import { formInputClass } from './form/formStyles';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import { DatePicker } from './ui/date-picker';
 import { KpiCard } from './ui/KpiCard';
@@ -173,7 +174,7 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
         <select
           value={accountFilter}
           onChange={e => setAccountFilter(e.target.value)}
-          className="w-56 px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+          className={formInputClass}
           title="Filter by account"
         >
           <option value="all">All Accounts</option>

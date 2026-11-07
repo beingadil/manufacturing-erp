@@ -10,6 +10,8 @@ export interface Option {
   searchValue?: string; // extra string to match against
 }
 
+export type SearchableSelectSize = 'sm' | 'md';
+
 interface SearchableSelectProps {
   options: Option[];
   value: string;
@@ -17,7 +19,23 @@ interface SearchableSelectProps {
   placeholder?: string;
   onAdd?: () => void;
   required?: boolean;
+  /** Label rendered above the control (with required asterisk when required). */
+  label?: string;
+  /** Helper text rendered below the control. */
+  hint?: string;
+  /** Visual density: 'sm' (compact) or 'md' (comfortable, default). */
+  size?: SearchableSelectSize;
+  /** Additional className for the outer wrapper. */
+  className?: string;
 }
+
+/** Canonical input chrome shared with formInputs — every dropdown looks identical. */
+const selectBase =
+  "w-full rounded-xl border border-border bg-card px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary";
+
+/** Compact variant for tight grids. */
+const selectBaseSm =
+  "w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary";
 
 /** One per-component-instance id so multiple selects on a page don't collide. */
 let listboxSeq = 0;
@@ -32,6 +50,10 @@ export function SearchableSelect({
   placeholder = "Select an option...",
   onAdd,
   required,
+  label,
+  hint,
+  size = 'md',
+  className,
 }: SearchableSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -42,11 +64,18 @@ export function SearchableSelect({
   const listRef = useRef<HTMLDivElement>(null);
   const listboxId = useRef(nextListboxId());
 
+  const isSm = size === 'sm';
+  const selectedOption = options.find(o => o.id === value);
+  const triggerClass = cn(
+    isSm ? selectBaseSm : selectBase,
+    "flex-1 flex items-center justify-between rounded-xl border border-border bg-card cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+    !selectedOption && "text-muted-foreground",
+    isOpen && "ring-2 ring-primary border-transparent"
+  );
+
   // Close on outside click or Escape.
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
-      // The overlay panel is portal'd outside containerRef — include it in the
-      // "inside" set so clicking the panel/scrollbar doesn't close the dropdown.
       if (
         containerRef.current &&
         !containerRef.current.contains(e.target as Node) &&
@@ -75,12 +104,10 @@ export function SearchableSelect({
     });
   }, [options, query]);
 
-  // Reset the highlighted option whenever the result list changes.
   useEffect(() => {
     setActiveIndex(0);
   }, [query, options, isOpen]);
 
-  // Keep the highlighted option visible.
   useEffect(() => {
     if (!isOpen) return;
     listRef.current
@@ -88,9 +115,6 @@ export function SearchableSelect({
       ?.scrollIntoView({ block: "nearest" });
   }, [activeIndex, isOpen]);
 
-  const selectedOption = options.find(o => o.id === value);
-
-  // "Select Material..." -> "Search Material..."; never "search select material......"
   const searchPlaceholder = `Search ${placeholder
     .replace(/\.+$/, "")
     .replace(/^Select\s+/i, "")}...`;
@@ -132,7 +156,13 @@ export function SearchableSelect({
   };
 
   return (
-    <div className="relative" ref={containerRef}>
+    <div className={cn("relative", className)} ref={containerRef}>
+      {label && (
+        <label className="text-sm font-semibold text-foreground mb-1.5 block">
+          {label}
+          {required && <span className="text-destructive" aria-hidden="true"> *</span>}
+        </label>
+      )}
       <div className="flex gap-2">
         <div
           ref={triggerRef}
@@ -143,11 +173,7 @@ export function SearchableSelect({
           aria-label={placeholder}
           tabIndex={0}
           onKeyDown={handleKeyDown}
-          className={cn(
-            "flex-1 flex items-center justify-between rounded-xl border bg-card p-3 text-sm cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-            !selectedOption && "text-muted-foreground",
-            isOpen && "ring-2 ring-primary border-transparent"
-          )}
+          className={triggerClass}
           onClick={() => (isOpen ? setIsOpen(false) : openDropdown())}
         >
           <div className="flex-1 truncate">
@@ -175,9 +201,9 @@ export function SearchableSelect({
           <button
             type="button"
             onClick={onAdd}
-            className="flex shrink-0 items-center justify-center rounded-xl border border-border bg-card w-12 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+            className="flex shrink-0 items-center justify-center rounded-xl border border-border bg-card w-10 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
           >
-            <Plus className="h-5 w-5" />
+            <Plus className="h-4 w-4" />
           </button>
         )}
       </div>
@@ -196,6 +222,7 @@ export function SearchableSelect({
         anchorEl={triggerRef.current}
         open={isOpen}
         onClose={() => setIsOpen(false)}
+        // Overlay matches the trigger width; minWidth prevents collapse on short option lists.
         minWidth={288}
       >
         <div
@@ -277,6 +304,8 @@ export function SearchableSelect({
           </div>
         </div>
       </AnchoredOverlay>
+
+      {hint && <p className="mt-1.5 text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }

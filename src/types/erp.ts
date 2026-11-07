@@ -18,6 +18,9 @@ export interface MaterialCategory {
   status: 'Active' | 'Inactive';
 }
 
+/** How a material is used: sold on its own, or as a part of another product. */
+export type MaterialUsageType = 'sellable' | 'component';
+
 export interface RawMaterial {
   id: string;
   code?: string;
@@ -39,6 +42,23 @@ export interface RawMaterial {
   fixedStageId?: string;
   /** For custom_stages materials: the selected stages (stored in chain order). */
   allowedStageIds?: string[];
+  /**
+   * How this material is used.
+   *  - 'sellable'  — becomes a product in its own right (the chain makes it
+   *    saleable and the Product form links it 1:1).
+   *  - 'component' — a part consumed by a product made from several materials
+   *    (a steel dhakkan on a steel jug, a handle). It is never sold directly.
+   * Undefined is treated as 'sellable', so every pre-existing material keeps
+   * behaving exactly as it did before this field existed.
+   */
+  usageType?: MaterialUsageType;
+}
+
+/** One material a product is built from, and how many of ONE product it takes. */
+export interface ProductComponent {
+  materialId: string;
+  quantity: number;
+  sortOrder?: number;
 }
 
 export interface Batch {
@@ -49,7 +69,7 @@ export interface Batch {
   materialId: string;
   date: string;
   weight: number;
-  weightUnit: "KGs" | "Tons";
+  weightUnit: "KG" | "PCS";
   ratePerUnit: number;
   weightPerPiece: number;
   initialPcs: number;
@@ -58,8 +78,17 @@ export interface Batch {
   status: "Active" | "Depleted";
   /** Pcs of this batch physically at a processor (WIP) — valued at this batch's purchase cost. */
   atProcessorPcs?: number;
-  /** Pcs of this batch finished/processed and on hand (unsold) — valued at this batch's purchase cost. */
+  /** Pcs of this batch finished/processed and on hand (unsold) — valued at this batch's total cost (purchase + processing charges). */
   processedPcs?: number;
+  /** Accumulated processing charges allocated to this batch (processor bills for pcs that came back from processing). */
+  processingCost?: number;
+  /**
+   * Processing charges this batch carried BEFORE the v4 capitalization policy
+   * (they were expensed at bill time, not debited to inventory). Stamped once by
+   * the migration; the one-time reclassification capitalises only the portion
+   * still sitting in on-hand pcs.
+   */
+  legacyProcessingCost?: number;
   /** The processing stage this batch is currently at (informational; derived from movements). */
   currentStageId?: string;
   /**
@@ -115,12 +144,16 @@ export interface InventoryMovement {
   batchId?: string;
   date: string;
   referenceNo: string;
-  module: "Purchase" | "Dispatch" | "Receive" | "Sale" | "Adjustment" | "Loss";
+  module: "Purchase" | "Dispatch" | "Receive" | "Sale" | "Adjustment" | "Loss" | "Manufacture" | "Transfer";
   transactionType: "IN" | "OUT";
   userId?: string;
   quantity: number;
   runningBalance: number;
   remarks?: string;
+  /** Set on finished-goods movements (manufacturing output / FG sale). */
+  productId?: string;
+  /** The manufacturing order that produced or consumed this stock. */
+  manufacturingOrderId?: string;
 }
 
 export interface Processor {
@@ -179,7 +212,7 @@ export interface Purchase {
   materialId: string;
   date: string;
   weight: number;
-  weightUnit: "KGs" | "Tons";
+  weightUnit: "KG" | "PCS";
   ratePerUnit: number;
   weightPerPiece: number;
   calculatedPcs: number;
@@ -225,6 +258,14 @@ export interface ProcessingReceipt {
   rateMethod?: "per_piece" | "per_kg";
   /** Billing unit label (e.g. 'PCS' or 'KG'). */
   billingUnit?: string;
+  /**
+   * Manufacturing v4: processing cost capitalised into inventory at the moment
+   * of receipt. This is the accrual amount posted Dr Raw Material Inventory /
+   * Cr Accrued Expenses, and later cleared by the processor bill.
+   */
+  accruedProcessingCost?: number;
+  /** Voucher that posted the receipt accrual (for reversal/reclassification). */
+  accruedVoucherId?: string;
 }
 
 export interface ProcessorBill {
@@ -260,7 +301,128 @@ export interface Product {
   status?: string;
   sellingPrice: number;
   description?: string;
+  /**
+   * How the product is fulfilled.
+   *  - 'simple'    (default) — made from ONE material, so it is sold out of
+   *    that material's finished stock and nothing extra is consumed.
+   *  - 'assembled' — made from SEVERAL materials (a jug = circle + no.4 +
+   *    handle). Each sale deducts every component in `components`; the product
+   *    itself holds no stock of its own.
+   */
+  usageType?: ProductUsageType;
+  /** Only meaningful for 'assembled'. How many of each material ONE unit takes. */
+  components?: ProductComponent[];
+  /**
+   * Manufacturing v4: monotonically increasing revision of the recipe. An MO
+   * snapshots the BOM it was planned against, so editing the product later
+   * never rewrites an order that has already been completed.
+   */
+  bomVersion?: number;
+  /**
+   * Manufacturing v4 stock model. 'manufactured' products hold stock only in
+   * FinishedGoodsLot rows; legacy 'material' products still sell from their
+   * linked material's finished pcs until they are migrated.
+   */
+  stockModel?: 'material' | 'manufactured';
 }
+
+/** Whether a product is sold from one material's own stock, or from several. */
+export type ProductUsageType = 'simple' | 'assembled';
+
+// ── Manufacturing (v4) ───────────────────────────────────────────────────────
+
+export type ManufacturingOrderStatus = 'Planned' | 'In Progress' | 'Completed' | 'Cancelled';
+
+/** One BOM line captured on a manufacturing order at planning time. */
+export interface ManufacturingOrderComponent {
+  materialId: string;
+  /** BOM quantity for ONE finished unit. */
+  quantityPerUnit: number;
+  /** quantityPerUnit × plannedQty — consumed in full when the MO completes. */
+  plannedQuantity: number;
+  /** Actual pcs drawn from the batch trail (equals plannedQuantity today). */
+  consumedQuantity?: number;
+}
+
+/** One batch draw made when an MO completed. Immutable after completion. */
+export interface ManufacturingComponentConsumption {
+  materialId: string;
+  batchId: string;
+  pcs: number;
+  costPerPiece: number;
+  cost: number;
+}
+
+export interface ManufacturingOrder {
+  id: string;
+  orderNo: string;
+  productId: string;
+  date: string;
+  plannedQty: number;
+  /** Good units actually produced. Must be > 0 and ≤ plannedQty. */
+  finishedQty?: number;
+  status: ManufacturingOrderStatus;
+  /** Frozen BOM snapshot — editing the product never changes a saved MO. */
+  components: ManufacturingOrderComponent[];
+  /** Optional per-order conversion cost (labour/power), accrued once at completion. */
+  productionCost?: number;
+  lotId?: string;
+  materialCost?: number;
+  totalCost?: number;
+  costPerPiece?: number;
+  consumptions?: ManufacturingComponentConsumption[];
+  completedAt?: string;
+  completedBy?: string;
+  remarks?: string;
+  createdAt?: string;
+}
+
+export interface FinishedGoodsLot {
+  id: string;
+  lotNo: string;
+  productId: string;
+  manufacturingOrderId: string;
+  date: string;
+  pcsProduced: number;
+  pcsRemaining: number;
+  costPerPiece: number;
+  totalCost: number;
+  status: 'Active' | 'Depleted';
+  remarks?: string;
+}
+
+export interface SaleLotAllocation {
+  lotId: string;
+  lotNo: string;
+  pcs: number;
+  costPerPiece: number;
+  cost: number;
+}
+
+export interface ProcessingLossRecord {
+  id: string;
+  sendId: string;
+  materialId: string;
+  date: string;
+  pcsLost: number;
+  cost: number;
+  voucherId?: string;
+  remarks?: string;
+}
+
+/**
+ * One-time capitalization of processing charges that were expensed before the
+ * v4 policy. The marker makes the reclassification strictly once-only: the
+ * engine can never post a second voucher for the same historical cost.
+ */
+export interface ProcessingCostReclassification {
+  amount: number;
+  voucherId: string;
+  voucherNo: string;
+  reclassifiedAt: string;
+  batchCount: number;
+}
+
 
 export interface Sale {
   id: string;
@@ -272,6 +434,15 @@ export interface Sale {
   pcsSold: number;
   pricePerPiece: number;
   totalAmount: number;
+  /** Manufacturing v4: which finished-goods lots this sale consumed (FIFO). */
+  lotAllocations?: SaleLotAllocation[];
+  /** Cost of goods sold at the lots' actual produced cost. */
+  cogsAmount?: number;
+  /**
+   * Which stock model this sale used. 'manufactured' sales consume FG lots and
+   * are skipped by the legacy batch-trail replay. Undefined means legacy.
+   */
+  stockModelAtSale?: 'material' | 'manufactured';
 }
 
 // -- Accounting System --
@@ -323,6 +494,7 @@ export type SourceModule =
   | "Purchase" 
   | "Sales" 
   | "Processing" 
+  | "Manufacturing"
   | "Cashbook" 
   | "Manual" 
   | "Inventory Adjustment";

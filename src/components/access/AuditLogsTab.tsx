@@ -4,6 +4,7 @@ import { Column, DataTable } from '@/components/DataTable';
 import { Badge } from '@/components/ui/badge';
 import { useAccessStore } from '@/store/useAccessStore';
 import { AuditLog } from '@/types/access';
+import { formInputClass } from '../../components/form/formStyles';
 import { SearchInput } from '../ui/SearchInput';
 
 export function AuditLogsTab() {
@@ -95,7 +96,7 @@ export function AuditLogsTab() {
         <select
           value={moduleFilter}
           onChange={(e) => setModuleFilter(e.target.value)}
-          className="h-10 px-3 rounded-md border border-input bg-background text-sm"
+          className={formInputClass}
         >
           <option value="">All Modules</option>
           {modules.map((m) => (
