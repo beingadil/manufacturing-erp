@@ -4,7 +4,6 @@ import { getSystemAccountBySubtype, getSystemCOGSAccount, getSystemInventoryAcco
 import {
   buildManufacturedSale,
   buildProcessorBill,
-  buildProcessingLoss,
   buildReceiptAccrual,
   postingTotal,
 } from '../lib/accounting/manufacturingPosting';
@@ -19,7 +18,7 @@ import { UnitConversionService } from '../lib/business/UnitConversionService';
 import { AppError } from '../lib/errorHandler';
 import type { Batch, InventoryMovement, JournalEntry, ProcessingReceipt, ProcessingSend, Product, RawMaterial, Sale, Voucher } from '../types/erp';
 import { ERPState } from './useERPStore';
-import { createVoucher } from './erpVoucher';
+import { buildVoidMirror } from './dispatchVoidMirror';
 
 /**
  * A completed manufacturing order freezes the cost and quantity of every batch
@@ -1167,56 +1166,23 @@ export const createCRUDActions = (
       // phantom send carrying the outstanding pcs as wastage so the stage chain
       // deletes them from the right bucket at the right stage — the ledger
       // never silently disappears pieces.
-      const outstanding = Math.max(0, send.pcsSent - send.pcsReceived - (send.lossQuantity || 0));
-      const replaySends =
-        outstanding > 0
-          ? [
-              ...remainingSends,
-              { ...send, lossQuantity: (send.lossQuantity || 0) + outstanding, status: 'Pending' as const },
-            ]
-          : remainingSends;
-      // Mirror id — the record carries sendId of the deleted dispatch, so the
-      // "filter out the deleted send's losses" pass below must keep it.
-      const mirrorId = uuidv4();
+      const mirror = buildVoidMirror(
+        send,
+        state.accounts,
+        state.accountSubtypes,
+        state.batches || [],
+        updatedVouchers,
+        new Date().toISOString().slice(0, 10),
+        state.currentUser?.name,
+      );
+      const replaySends = mirror.replaySend
+        ? [...remainingSends, mirror.replaySend]
+        : remainingSends;
       let updatedLossRecords = state.processingLosses || [];
-      if (outstanding > 0) {
-        const originBatch = (state.batches || []).find(b => b.id === send.batchId);
-        const costPerPiece = originBatch ? InventoryCalculationService.getBatchCostPerPiece(originBatch) : 0;
-        const cost = Math.round(outstanding * costPerPiece * 100) / 100;
-        const lossDate = new Date().toISOString().slice(0, 10);
-        const narration = `Dispatch void — ${outstanding} PCS unaccounted for (${send.dispatchNo})`;
-        let mirrorVoucherId: string | undefined;
-        const posting = buildProcessingLoss(state.accounts, state.accountSubtypes, cost, narration);
-        if (posting.length > 0) {
-          const built = createVoucher(updatedVouchers, {
-            date: lossDate,
-            type: 'Journal Voucher',
-            referenceNo: send.dispatchNo,
-            sourceModule: 'Processing',
-            sourceId: mirrorId,
-            narration,
-            lines: posting,
-            createdBy: state.currentUser?.name,
-          });
-          if (built) {
-            mirrorVoucherId = built.voucher.id;
-            updatedVouchers = [built.voucher, ...updatedVouchers];
-            updatedJournalEntries = [...built.entries, ...updatedJournalEntries];
-          }
-        }
-        updatedLossRecords = [
-          ...(state.processingLosses || []),
-          {
-            id: mirrorId,
-            sendId: send.id,
-            materialId: send.materialId,
-            date: lossDate,
-            pcsLost: outstanding,
-            cost,
-            voucherId: mirrorVoucherId,
-            remarks: narration,
-          },
-        ];
+      if (mirror.lossRecord) {
+        if (mirror.voucher) updatedVouchers = [mirror.voucher, ...updatedVouchers];
+        if (mirror.voucherEntries.length > 0) updatedJournalEntries = [...mirror.voucherEntries, ...updatedJournalEntries];
+        updatedLossRecords = [...updatedLossRecords, mirror.lossRecord];
       }
 
       // Rebuild the batch trail from the remaining history (idempotent,

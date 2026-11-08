@@ -36,7 +36,7 @@ export function migrateERPState(state: any): any {
 
   // 1. Voucher type remap
   let vouchers: Voucher[] = Array.isArray(state.vouchers) ? state.vouchers : [];
-  const journalEntries: { voucherId: string; accountId: string; debit: number; credit: number }[] =
+  let journalEntries: { voucherId: string; accountId: string; debit: number; credit: number }[] =
     Array.isArray(state.journalEntries) ? state.journalEntries : [];
 
   const remapType = (v: Voucher): VoucherType => {
@@ -171,14 +171,14 @@ export function migrateERPState(state: any): any {
   //     exactly equals its purchase's legacy form is renamed, so a batch the
   //     user (or an older migration) already renamed is left alone, and
   //     switching the mode in Settings simply stops renaming going forward.
-  const batches = Array.isArray(state.batches) ? state.batches : [];
-  const sends = Array.isArray(state.processingSends) ? state.processingSends : [];
+  let batches = Array.isArray(state.batches) ? state.batches : [];
+  let sends = Array.isArray(state.processingSends) ? state.processingSends : [];
   const receipts = Array.isArray(state.processingReceipts) ? state.processingReceipts : [];
   const salesArr = Array.isArray(state.sales) ? state.sales : [];
   const products = Array.isArray(state.products) ? state.products : [];
   const manufacturingOrders = Array.isArray(state.manufacturingOrders) ? state.manufacturingOrders : [];
   const finishedGoodsLots = Array.isArray(state.finishedGoodsLots) ? state.finishedGoodsLots : [];
-  const processingLosses = Array.isArray(state.processingLosses) ? state.processingLosses : [];
+  let processingLosses = Array.isArray(state.processingLosses) ? state.processingLosses : [];
 
   let migratedBatches = batches;
   if (batches.length > 0) {
@@ -376,6 +376,7 @@ export function migrateERPState(state: any): any {
     batches: migratedBatches,
     materials: normalizedMaterials,
     products: migratedProducts,
+    processingSends: sends,
     manufacturingOrders,
     finishedGoodsLots,
     processingLosses,
