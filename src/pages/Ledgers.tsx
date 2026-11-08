@@ -79,7 +79,7 @@ export function Ledgers() {
         material: m?.name,
         pcsSent: '-',
         pcsRecvd: r.pcsReceived,
-        pcsPending: s ? (s.pcsSent - s.pcsReceived) : '-',
+        pcsPending: s ? Math.max(0, s.pcsSent - s.pcsReceived - (s.lossQuantity || 0)) : '-',
         rate: s ? formatCurrency(s.ratePerPiece) : '-',
         billAmount: formatCurrency(r.billAmount),
         timestamp: new Date(r.date).getTime()

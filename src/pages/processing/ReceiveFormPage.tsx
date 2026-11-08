@@ -56,7 +56,7 @@ export default function ReceiveFormPage() {
   ), [processingSends, processorId]);
 
   const selectedSend = processingSends.find(s => s.id === sendId);
-  const maxPcs = selectedSend ? selectedSend.pcsSent - selectedSend.pcsReceived : 0;
+  const maxPcs = selectedSend ? Math.max(0, selectedSend.pcsSent - selectedSend.pcsReceived - (selectedSend.lossQuantity || 0)) : 0;
   const qty = parseInt(pcs, 10) || 0;
   const remainingAfter = Math.max(0, maxPcs - qty);
   const selectedStage = processingStages?.find(x => x.id === selectedSend?.stageId);
@@ -182,7 +182,7 @@ export default function ReceiveFormPage() {
                         return {
                           id: s.id,
                           label: s.dispatchNo,
-                          secondaryLabel: `${new Date(s.date).toLocaleDateString()} · ${m?.name} (${st?.name || 'Initial Processor'}) · ${formatNumber(s.pcsSent - s.pcsReceived)} pending`,
+                          secondaryLabel: `${new Date(s.date).toLocaleDateString()} · ${m?.name} (${st?.name || 'Initial Processor'}) · ${formatNumber(Math.max(0, s.pcsSent - s.pcsReceived - (s.lossQuantity || 0)))} pending`,
                         };
                       })
                   )}

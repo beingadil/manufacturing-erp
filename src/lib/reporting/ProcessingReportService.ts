@@ -39,7 +39,7 @@ const mapped = pendingDispatches.map(s => {
   
   const relatedReceipts = processingReceipts.filter(r => r.sendId === s.id);
   const totalReceived = relatedReceipts.reduce((sum, r) => sum + r.pcsReceived, 0);
-  const pendingPcs = s.pcsSent - totalReceived;
+  const pendingPcs = Math.max(0, s.pcsSent - totalReceived - (s.lossQuantity || 0));
 
   return {
     dispatchNo: s.dispatchNo,

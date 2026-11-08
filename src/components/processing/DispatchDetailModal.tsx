@@ -1,7 +1,10 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { Undo2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { formatCurrency, formatNumber } from '../../lib/utils';
-import type { Batch, ProcessingReceipt, ProcessingSend, ProcessingStage, Processor, ProcessorBill, RawMaterial, Voucher } from '../../types/erp';
+import { ProcessingService } from '../../services/ProcessingService';
+import type { Batch, ProcessingReceipt, ProcessingSend, ProcessingStage, Processor, ProcessorBill, RawMaterial, Voucher, ProcessingLossRecord } from '../../types/erp';
 import { PageModal } from '../ui/PageModal';
 import { StageProgressStepper } from './StageProgressStepper';
 import { visibleStagesForMaterial } from '../../lib/processing/stageProgress';
@@ -17,6 +20,8 @@ interface DispatchDetailModalProps {
   receipts: ProcessingReceipt[];
   bills: ProcessorBill[];
   vouchers: Voucher[];
+  /** Recorded loss entries — each can be reversed with one tap. */
+  losses: ProcessingLossRecord[];
 }
 
 /**
@@ -35,6 +40,7 @@ export function DispatchDetailModal({
   receipts,
   bills,
   vouchers,
+  losses,
 }: DispatchDetailModalProps) {
   const sorted = useMemo(() => [...stages].sort((a, b) => a.sequence - b.sequence), [stages]);
 
@@ -56,6 +62,7 @@ export function DispatchDetailModal({
   const sendReceipts = receipts.filter(r => r.sendId === send.id);
   const linkedBill = bills.find(b => b.receiptIds.some(rid => sendReceipts.some(r => r.id === rid)));
   const voucher = linkedBill ? vouchers.find(v => v.sourceId === linkedBill.id && v.sourceModule === 'Processing') : undefined;
+  const sendLosses = losses.filter(l => l.sendId === send.id);
   const pending = send.pcsSent - send.pcsReceived - (send.lossQuantity || 0);
   const currentIdx = send.stageId ? viewStages.findIndex(s => s.id === send.stageId) : -1;
   const completed = currentIdx > 0 ? viewStages.slice(0, currentIdx).map(s => s.id) : [];
@@ -143,6 +150,56 @@ export function DispatchDetailModal({
                       <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${r.billedStatus === 'Billed' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
                         {r.billedStatus || 'Unbilled'}
                       </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Recorded losses — each can be reversed with one tap */}
+      <div>
+        <h5 className="text-sm font-semibold text-foreground mb-2">Loss records ({sendLosses.length})</h5>
+        {sendLosses.length === 0 ? (
+          <div className="text-xs text-muted-foreground/60 py-3">No wastage recorded against this dispatch.</div>
+        ) : (
+          <div className="rounded-xl border border-border overflow-hidden">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-muted/40 text-muted-foreground text-xs">
+                <tr>
+                  <th className="px-3 py-2">Date</th>
+                  <th className="px-3 py-2 text-right">Pcs</th>
+                  <th className="px-3 py-2 text-right">Value</th>
+                  <th className="px-3 py-2">Remarks</th>
+                  <th className="px-3 py-2 w-16"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {sendLosses.map(l => (
+                  <tr key={l.id}>
+                    <td className="px-3 py-2">{new Date(l.date).toLocaleDateString()}</td>
+                    <td className="px-3 py-2 text-right font-medium text-destructive">{formatNumber(l.pcsLost)} PCS</td>
+                    <td className="px-3 py-2 text-right">{formatCurrency(l.cost)}</td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">{l.remarks || '—'}</td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        type="button"
+                        title="Undo this loss — restores the pcs to the at-processor bucket"
+                        onClick={() => {
+                          try {
+                            ProcessingService.undoLoss(l.id);
+                            toast.success(`Loss reversed — ${formatNumber(l.pcsLost)} PCS restored.`);
+                          } catch (error: any) {
+                            toast.error(error?.message || 'Could not undo the loss.');
+                          }
+                        }}
+                        className="p-1.5 rounded-md text-warning transition-colors hover:bg-warning/10 hover:text-warning-foreground"
+                        aria-label="Undo loss"
+                      >
+                        <Undo2 className="h-4 w-4" />
+                      </button>
                     </td>
                   </tr>
                 ))}

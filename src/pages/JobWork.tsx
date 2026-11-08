@@ -24,7 +24,7 @@ type JobWorkTab = "Board" | "Send" | "Receive" | "Billing" | "Vouchers" | "Timel
 export function JobWork() {
   const {
     materials, processors, processingSends, processingReceipts, processorBills, vouchers,
-    batches, processingStages
+    batches, processingStages, processingLosses
   } = useERPStore();
 
   const [activeTab, setActiveTab] = useState<JobWorkTab>("Board");
@@ -548,6 +548,7 @@ export function JobWork() {
         receipts={processingReceipts}
         bills={processorBills}
         vouchers={vouchers}
+        losses={processingLosses || []}
       />
 
       <DeleteConfirmationModal
@@ -558,7 +559,7 @@ export function JobWork() {
         recordNo={deleteModal.no}
         description={
           deleteModal.type === 'send'
-            ? 'Are you sure you want to permanently delete this dispatch? Its receipts will be removed and any processor bills (and their vouchers) reversed; stock returns to raw material.'
+            ? 'Are you sure you want to permanently delete this dispatch? Receipts are removed, processor bills (and their vouchers) reversed, and any pcs still out at the processor are written off to Processing Loss with a journal entry.'
             : deleteModal.type === 'receipt'
               ? 'Are you sure you want to permanently delete this receipt? The received pcs will move back to At Processor (WIP).'
               : 'Are you sure you want to permanently delete this processor bill? Receipts will be marked unbilled and the processor balance reversed.'

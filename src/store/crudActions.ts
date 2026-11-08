@@ -4,6 +4,7 @@ import { getSystemAccountBySubtype, getSystemCOGSAccount, getSystemInventoryAcco
 import {
   buildManufacturedSale,
   buildProcessorBill,
+  buildProcessingLoss,
   buildReceiptAccrual,
   postingTotal,
 } from '../lib/accounting/manufacturingPosting';
@@ -18,6 +19,7 @@ import { UnitConversionService } from '../lib/business/UnitConversionService';
 import { AppError } from '../lib/errorHandler';
 import type { Batch, InventoryMovement, JournalEntry, ProcessingReceipt, ProcessingSend, Product, RawMaterial, Sale, Voucher } from '../types/erp';
 import { ERPState } from './useERPStore';
+import { createVoucher } from './erpVoucher';
 
 /**
  * A completed manufacturing order freezes the cost and quantity of every batch
@@ -1082,7 +1084,12 @@ export const createCRUDActions = (
             && productIds.has(sale.productId)
           )
           .reduce((sum, sale) => sum + sale.pcsSold, 0);
-        if (remainingProduction < soldPcs) return state;
+        if (remainingProduction < soldPcs) {
+          throw new AppError(
+            `Cannot delete dispatch ${send.dispatchNo} — the finished goods its receipts produced were already sold. ` +
+            'Delete the sale first, or record a fresh purchase instead.',
+          );
+        }
       }
 
       // Sends merged back into this dispatch ('adjusted') — restore to Pending.
@@ -1138,19 +1145,78 @@ export const createCRUDActions = (
         }
       }
 
-      // Remove the accrual vouchers of the cascaded receipts and the write-off
-      // vouchers of this dispatch's recorded losses. Deleting the source
-      // document must never leave orphaned journal entries behind.
+      // Remove accrual vouchers of the cascaded receipts. Vouchers for recorded
+      // losses are NEVER removed — the dispatch being deleted is not a magic
+      // pause-button for physical pcs that are already gone. The vouchers stay
+      // in the books; the mirror entry (posted below) covers what is *new*.
       const orphanVoucherIds = new Set<string>();
       for (const receipt of receiptsToDelete) {
         if (receipt.accruedVoucherId) orphanVoucherIds.add(receipt.accruedVoucherId);
       }
-      for (const loss of state.processingLosses || []) {
-        if (loss.sendId === id && loss.voucherId) orphanVoucherIds.add(loss.voucherId);
-      }
       if (orphanVoucherIds.size > 0) {
         updatedVouchers = updatedVouchers.filter(v => !orphanVoucherIds.has(v.id));
         updatedJournalEntries = updatedJournalEntries.filter(je => !orphanVoucherIds.has(je.voucherId));
+      }
+
+      // ── Mirror mirror — pcs that never made it back out the pipeline ─────
+      // A send deleted mid-pipeline leaves pcs physically at the processor with
+      // no trace. The replay alone cannot handle that correctly — it would
+      // re-fall those pcs back into raw stock as if they had never left.
+      // Mirror them exactly like wastage: a journal entry writes off the loss
+      // (Dr Processing Loss / Cr Raw Material), and the replay runs through a
+      // phantom send carrying the outstanding pcs as wastage so the stage chain
+      // deletes them from the right bucket at the right stage — the ledger
+      // never silently disappears pieces.
+      const outstanding = Math.max(0, send.pcsSent - send.pcsReceived - (send.lossQuantity || 0));
+      const replaySends =
+        outstanding > 0
+          ? [
+              ...remainingSends,
+              { ...send, lossQuantity: (send.lossQuantity || 0) + outstanding, status: 'Pending' as const },
+            ]
+          : remainingSends;
+      // Mirror id — the record carries sendId of the deleted dispatch, so the
+      // "filter out the deleted send's losses" pass below must keep it.
+      const mirrorId = uuidv4();
+      let updatedLossRecords = state.processingLosses || [];
+      if (outstanding > 0) {
+        const originBatch = (state.batches || []).find(b => b.id === send.batchId);
+        const costPerPiece = originBatch ? InventoryCalculationService.getBatchCostPerPiece(originBatch) : 0;
+        const cost = Math.round(outstanding * costPerPiece * 100) / 100;
+        const lossDate = new Date().toISOString().slice(0, 10);
+        const narration = `Dispatch void — ${outstanding} PCS unaccounted for (${send.dispatchNo})`;
+        let mirrorVoucherId: string | undefined;
+        const posting = buildProcessingLoss(state.accounts, state.accountSubtypes, cost, narration);
+        if (posting.length > 0) {
+          const built = createVoucher(updatedVouchers, {
+            date: lossDate,
+            type: 'Journal Voucher',
+            referenceNo: send.dispatchNo,
+            sourceModule: 'Processing',
+            sourceId: mirrorId,
+            narration,
+            lines: posting,
+            createdBy: state.currentUser?.name,
+          });
+          if (built) {
+            mirrorVoucherId = built.voucher.id;
+            updatedVouchers = [built.voucher, ...updatedVouchers];
+            updatedJournalEntries = [...built.entries, ...updatedJournalEntries];
+          }
+        }
+        updatedLossRecords = [
+          ...(state.processingLosses || []),
+          {
+            id: mirrorId,
+            sendId: send.id,
+            materialId: send.materialId,
+            date: lossDate,
+            pcsLost: outstanding,
+            cost,
+            voucherId: mirrorVoucherId,
+            remarks: narration,
+          },
+        ];
       }
 
       // Rebuild the batch trail from the remaining history (idempotent,
@@ -1160,7 +1226,7 @@ export const createCRUDActions = (
         send.materialId,
         state.batches || [],
         remainingReceipts,
-        remainingSends,
+        replaySends,
         state.sales || [],
         state.products || [],
         undefined,
@@ -1184,7 +1250,7 @@ export const createCRUDActions = (
         journalEntries: updatedJournalEntries,
         materials: updatedMaterials,
         batches: updatedBatches,
-        processingLosses: (state.processingLosses || []).filter(l => l.sendId !== id),
+        processingLosses: updatedLossRecords,
         inventoryMovements: state.inventoryMovements.filter(im => !removedReferenceNos.has(im.referenceNo))
       };
     });
@@ -1249,7 +1315,11 @@ export const createCRUDActions = (
       if (!receipt) return state;
 
       // Guard: billed receipts must be un-billed (delete the bill) first.
-      if (receipt.billedStatus === 'Billed') return state;
+      if (receipt.billedStatus === 'Billed') {
+        throw new AppError(
+          `Receipt ${receipt.receiveNo} is already billed. Delete its processor bill first.`,
+        );
+      }
 
       const receiptSend = state.processingSends.find(s => s.id === receipt.sendId);
       if (receiptSend?.batchId) {
@@ -1269,7 +1339,12 @@ export const createCRUDActions = (
       const soldPcs = state.sales
         .filter(s => s.stockModelAtSale !== 'manufactured' && productIds.has(s.productId))
         .reduce((sum, s) => sum + s.pcsSold, 0);
-      if (remainingProduction < soldPcs) return state;
+      if (remainingProduction < soldPcs) {
+        throw new AppError(
+          `Cannot delete receipt ${receipt.receiveNo} — the finished goods it produced were already sold. ` +
+          'Delete the sale first, or record a fresh purchase instead.',
+        );
+      }
 
       // Remove only this receipt's share from the send and recompute status
       const updatedSends = state.processingSends.map(s => {

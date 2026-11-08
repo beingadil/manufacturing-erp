@@ -65,6 +65,13 @@ export class ProcessingService {
     }, 'Loss recorded');
   }
 
+  static undoLoss(lossId: string) {
+    return BusinessWorkflowEngine.executeWorkflow('Undo Processing Loss', () => {
+      const state = useERPStore.getState();
+      state.undoProcessingLoss(lossId);
+    }, 'Loss reversed');
+  }
+
   static addStage(data: ProcessingStageDTO) {
     return BusinessWorkflowEngine.executeWorkflow('Add Processing Stage', () => {
       ValidationEngine.validate(new ProcessingStageValidator(), data, 'Add Processing Stage');

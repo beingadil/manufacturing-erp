@@ -399,6 +399,16 @@ export interface SaleLotAllocation {
   cost: number;
 }
 
+export interface LossAttribution {
+  batchId: string;
+  /** pcs drawn from this batch's at-processor bucket. */
+  fromProcessor: number;
+  /** pcs drawn from this batch's stage-availability bucket. */
+  fromAvailable: number;
+  /** Cost per piece attributed for this batch (batch cost including accumulated processing charges). */
+  costPerPiece: number;
+}
+
 export interface ProcessingLossRecord {
   id: string;
   sendId: string;
@@ -408,6 +418,9 @@ export interface ProcessingLossRecord {
   cost: number;
   voucherId?: string;
   remarks?: string;
+  /** Per-batch attribution written at record time so an undo can reverse
+   *  exactly the same buckets instead of guessing FIFO order. */
+  attributions?: LossAttribution[];
 }
 
 /**

@@ -437,7 +437,7 @@ export class InventoryCalculationService {
     pcsLost: number,
     batches: Batch[],
     preferredBatchId?: string
-  ): { batches: Batch[]; fromProcessor: number; fromAvailable: number; cost: number; costFromProcessor: number; costFromAvailable: number } {
+  ): { batches: Batch[]; fromProcessor: number; fromAvailable: number; cost: number; costFromProcessor: number; costFromAvailable: number; attributions: { batchId: string; fromProcessor: number; fromAvailable: number; costPerPiece: number }[] } {
     const ordered = (src: Batch[], get: (b: Batch) => number) => {
       const candidates = src.filter(b => b.materialId === materialId && b.status === 'Active' && get(b) > 0)
         .sort((a, b) => a.date.localeCompare(b.date));
@@ -460,11 +460,24 @@ export class InventoryCalculationService {
       return { takeByBatch, consumed: qty - remaining, remaining, cost };
     };
 
+    type Attr = { batchId: string; fromProcessor: number; fromAvailable: number; costPerPiece: number };
+    const attrs = new Map<string, Attr>();
+    const touchAttr = (batchId: string, costPerPiece: number) => {
+      const cur = attrs.get(batchId);
+      if (cur) return cur;
+      const fresh: Attr = { batchId, fromProcessor: 0, fromAvailable: 0, costPerPiece };
+      attrs.set(batchId, fresh);
+      return fresh;
+    };
+
     // Pass 1: pcs still at the processor.
     const p1 = takeFrom(batches, b => b.atProcessorPcs || 0, pcsLost);
     let work = batches.map(b => {
       const take = p1.takeByBatch.get(b.id) || 0;
-      return take > 0 ? { ...b, atProcessorPcs: Math.max(0, (b.atProcessorPcs || 0) - take) } : b;
+      if (take <= 0) return b;
+      const attr = touchAttr(b.id, this.getBatchCostPerPiece(b));
+      attr.fromProcessor += take;
+      return { ...b, atProcessorPcs: Math.max(0, (b.atProcessorPcs || 0) - take) };
     });
 
     // Pass 2: pcs waiting in this stage's availability bucket.
@@ -476,6 +489,8 @@ export class InventoryCalculationService {
         work = work.map(b => {
           const take = p2.takeByBatch.get(b.id) || 0;
           if (take <= 0) return b;
+          const attr = touchAttr(b.id, this.getBatchCostPerPiece(b));
+          attr.fromAvailable += take;
           const map = { ...(b.stageAvailableBySource || {}) };
           const left = (map[stageId] || 0) - take;
           if (left > 0) map[stageId] = left; else delete map[stageId];
@@ -491,6 +506,8 @@ export class InventoryCalculationService {
           work = work.map(b => {
             const take = p3.takeByBatch.get(b.id) || 0;
             if (take <= 0) return b;
+            const attr = touchAttr(b.id, this.getBatchCostPerPiece(b));
+            attr.fromAvailable += take;
             const map = { ...(b.stageAvailableBySource || {}) };
             let need = take;
             for (const e of stageAvailableEntries(b)) {
@@ -517,6 +534,7 @@ export class InventoryCalculationService {
       cost: Math.round((p1.cost + costFromAvailable + Number.EPSILON) * 100) / 100,
       costFromProcessor: Math.round((p1.cost + Number.EPSILON) * 100) / 100,
       costFromAvailable: Math.round((costFromAvailable + Number.EPSILON) * 100) / 100,
+      attributions: [...attrs.values()].filter(a => a.fromProcessor > 0 || a.fromAvailable > 0),
     };
   }
 

@@ -6,8 +6,8 @@ import { createCRUDActions } from './crudActions';
  * (deleteProcessingSend / deleteProcessingReceipt / deleteProcessorBill).
  *
  * The two guarantees that matter:
- *  1. Deleting a dispatch/receipt fully reverses stock AND the batch trail —
- *     including legacy no-batch dispatches and FIFO-across-multiple-batches —
+ *  1. Deleting a dispatch/receipt fully reverses stock AND the batch trail â€”
+ *     including legacy no-batch dispatches and FIFO-across-multiple-batches â€”
  *     so the same pcs are never counted twice and nothing is silently wiped.
  *  2. Deleting a dispatch CASCADES: its receipts are removed with it and any
  *     processor bills covering them are reversed (vouchers deleted) in one
@@ -35,6 +35,30 @@ function makeBatch(overrides: any = {}) {
   };
 }
 
+function baseAccounts() {
+  return [
+    { id: 'acct-ap', code: '2000', name: 'Accounts Payable', subtypeId: 'st-ap', type: 'Liabilities' as const, openingBalance: 0, openingBalanceType: 'Credit' as const, status: 'Active' as const, isSystem: true },
+    { id: 'acct-accrued', code: '2010', name: 'Accrued Expenses', subtypeId: 'st-ap', type: 'Liabilities' as const, openingBalance: 0, openingBalanceType: 'Credit' as const, status: 'Active' as const, isSystem: true },
+    { id: 'acct-rm', code: '1101', name: 'Raw Material Inventory', subtypeId: 'st-inv', type: 'Assets' as const, openingBalance: 0, openingBalanceType: 'Debit' as const, status: 'Active' as const, isSystem: true },
+    { id: 'acct-wip', code: '1102', name: 'Work in Progress Inventory', subtypeId: 'st-inv', type: 'Assets' as const, openingBalance: 0, openingBalanceType: 'Debit' as const, status: 'Active' as const, isSystem: true },
+    { id: 'acct-fg', code: '1103', name: 'Finished Goods Inventory', subtypeId: 'st-inv', type: 'Assets' as const, openingBalance: 0, openingBalanceType: 'Debit' as const, status: 'Active' as const, isSystem: true },
+    { id: 'acct-inventory', code: '1100', name: 'Inventory Control', subtypeId: 'st-inv', type: 'Assets' as const, openingBalance: 0, openingBalanceType: 'Debit' as const, status: 'Active' as const, isSystem: true },
+    { id: 'acct-cogs', code: '5201', name: 'Cost of Goods Sold', subtypeId: 'st-cogs', type: 'Cost of Goods Sold' as const, openingBalance: 0, openingBalanceType: 'Debit' as const, status: 'Active' as const, isSystem: true },
+    { id: 'acct-proc-loss', code: '5109', name: 'Processing Loss', subtypeId: 'st-proc', type: 'Expenses' as const, openingBalance: 0, openingBalanceType: 'Debit' as const, status: 'Active' as const, isSystem: true },
+  ];
+}
+
+function baseSubtypes() {
+  return [
+    { id: 'st-inv', name: 'Inventory', type: 'Assets' as const, isSystem: true },
+    { id: 'st-ap', name: 'Accounts Payable', type: 'Liabilities' as const, isSystem: true },
+    { id: 'st-ar', name: 'Accounts Receivable', type: 'Assets' as const, isSystem: true },
+    { id: 'st-sales', name: 'Sales', type: 'Revenue' as const, isSystem: true },
+    { id: 'st-proc', name: 'Processing Expense', type: 'Expenses' as const, isSystem: true },
+    { id: 'st-cogs', name: 'Purchases', type: 'Expenses' as const, isSystem: true },
+  ];
+}
+
 function setup(initial: any) {
   let state: any = initial;
   const set = (partial: any) => {
@@ -59,18 +83,18 @@ describe('deleteProcessingSend', () => {
       ],
       processingReceipts: [],
       sales: [], products: [], inventoryMovements: [], purchases: [],
-      suppliers: [], customers: [], processors: [], accounts: [], accountSubtypes: [],
+      suppliers: [], customers: [], processors: [], accounts: baseAccounts(), accountSubtypes: baseSubtypes(),
       vouchers: [], journalEntries: []
     });
 
     actions.deleteProcessingSend('send1');
     const s = getState();
 
-    // Stock fully returned to raw; WIP zeroed
-    expect(s.materials[0].stockPcs).toBe(4000);
+    // Mirror write-off: the 4000 pcs out at the processor are retired to Processing Loss
+    // (the send was never received). Nothing silently returns to stock.
+    expect(s.materials[0].stockPcs).toBe(0);
     expect(s.materials[0].atProcessorPcs).toBe(0);
-    // Batch trail rebuilt — pcs back in raw, none at processor
-    expect(s.batches[0].remainingPcs).toBe(4000);
+    expect(s.batches[0].remainingPcs).toBe(0);
     expect(s.batches[0].atProcessorPcs).toBe(0);
     expect(s.batches[0].processedPcs).toBe(0);
     expect(s.processingSends).toHaveLength(0);
@@ -97,19 +121,18 @@ describe('deleteProcessingSend', () => {
       ],
       processingReceipts: [],
       sales: [], products: [], inventoryMovements: [], purchases: [],
-      suppliers: [], customers: [], processors: [], accounts: [], accountSubtypes: [],
+      suppliers: [], customers: [], processors: [], accounts: baseAccounts(), accountSubtypes: baseSubtypes(),
       vouchers: [], journalEntries: []
     });
 
     actions.deleteProcessingSend('sendB');
     const s = getState();
 
-    // Physical 200 returns to stock; the 400 adjusted pcs stay in WIP (they
-    // were drawn by send A, now restored to Pending).
-    expect(s.materials[0].stockPcs).toBe(3600);
+    // sendB's 600 outstanding pcs are written off by the mirror. sendA's 400
+    // outstanding pcs are unaffected and remain pending at the processor.
+    expect(s.materials[0].stockPcs).toBe(3000);
     expect(s.materials[0].atProcessorPcs).toBe(400);
-    // Batch trail: 400 raw→WIP from restored send A
-    expect(s.batches[0].remainingPcs).toBe(3600);
+    expect(s.batches[0].remainingPcs).toBe(3000);
     expect(s.batches[0].atProcessorPcs).toBe(400);
     // Orphan restored to Pending
     const restoredA = s.processingSends.find((x: any) => x.id === 'sendA');
@@ -133,7 +156,7 @@ describe('deleteProcessingSend', () => {
         { id: 'rec1', receiveNo: 'REC-1', sendId: 'send1', materialId: 'm1', pcsReceived: 4000, date: '2026-01-06', billedStatus: 'Unbilled' }
       ],
       sales: [], products: [], inventoryMovements: [], purchases: [],
-      suppliers: [], customers: [], processors: [], accounts: [], accountSubtypes: [],
+      suppliers: [], customers: [], processors: [], accounts: baseAccounts(), accountSubtypes: baseSubtypes(),
       vouchers: [], journalEntries: []
     });
 
@@ -174,7 +197,7 @@ describe('deleteProcessingSend', () => {
         { voucherId: 'v1', accountId: 'ap1', debit: 0, credit: 20000 }
       ],
       sales: [], products: [], inventoryMovements: [], purchases: [],
-      suppliers: [], customers: [], processors: [], accounts: [], accountSubtypes: []
+      suppliers: [], customers: [], processors: [], accounts: baseAccounts(), accountSubtypes: baseSubtypes()
     });
 
     actions.deleteProcessingSend('send1');
@@ -204,12 +227,11 @@ describe('deleteProcessingSend', () => {
       products: [{ id: 'prod1', materialId: 'm1' }],
       sales: [{ id: 'sale1', productId: 'prod1', pcsSold: 400 }],
       inventoryMovements: [], purchases: [],
-      suppliers: [], customers: [], processors: [], accounts: [], accountSubtypes: [],
+      suppliers: [], customers: [], processors: [], accounts: baseAccounts(), accountSubtypes: baseSubtypes(),
       vouchers: [], journalEntries: []
     });
 
-    actions.deleteProcessingSend('send1');
-    // Guarded — the sold pcs cannot be covered by remaining production
+    expect(() => actions.deleteProcessingSend('send1')).toThrow(/finished goods/i);
     expect(getState().processingSends).toHaveLength(1);
     expect(getState().processingReceipts).toHaveLength(1);
   });
@@ -231,7 +253,7 @@ describe('deleteProcessingReceipt', () => {
       { id: 'recB', receiveNo: 'REC-2', sendId: 'send1', materialId: 'm1', pcsReceived: 600, date: '2026-01-07', billedStatus: 'Unbilled' }
     ],
     sales: [], products: [], inventoryMovements: [], purchases: [],
-    suppliers: [], customers: [], processors: [], accounts: [], accountSubtypes: [],
+    suppliers: [], customers: [], processors: [], accounts: baseAccounts(), accountSubtypes: baseSubtypes(),
     vouchers: [], journalEntries: []
   });
 
@@ -240,10 +262,10 @@ describe('deleteProcessingReceipt', () => {
     actions.deleteProcessingReceipt('recA');
     const s = getState();
 
-    // Send keeps the OTHER receipt's 600 pcs — not zeroed
+    // Send keeps the OTHER receipt's 600 pcs â€” not zeroed
     expect(s.processingSends[0].pcsReceived).toBe(600);
     expect(s.processingSends[0].status).toBe('Partial');
-    // Material: finished 1000 → 600, WIP back to 400
+    // Material: finished 1000 â†’ 600, WIP back to 400
     expect(s.materials[0].processedStockPcs).toBe(600);
     expect(s.materials[0].atProcessorPcs).toBe(400);
     // Batch trail rebuilt from remaining receipts
@@ -256,7 +278,7 @@ describe('deleteProcessingReceipt', () => {
     const initial = sendWithTwoReceipts();
     initial.processingReceipts[0].billedStatus = 'Billed';
     const { actions, getState } = setup(initial);
-    actions.deleteProcessingReceipt('recA');
+    expect(() => actions.deleteProcessingReceipt('recA')).toThrow(/already billed/);
     expect(getState().processingReceipts).toHaveLength(2);
     expect(getState().materials[0].processedStockPcs).toBe(1000);
   });
@@ -266,8 +288,8 @@ describe('deleteProcessingReceipt', () => {
     initial.products = [{ id: 'prod1', materialId: 'm1' }];
     initial.sales = [{ id: 'sale1', productId: 'prod1', pcsSold: 700, date: '2026-01-10' }];
     const { actions, getState } = setup(initial);
-    // Remaining production after deleting recA = 600 < sold 700 → blocked
-    actions.deleteProcessingReceipt('recA');
+    // Remaining production after deleting recA = 600 < sold 700 -> blocked
+    expect(() => actions.deleteProcessingReceipt('recA')).toThrow(/finished goods/i);
     expect(getState().processingReceipts).toHaveLength(2);
   });
 });
@@ -298,7 +320,7 @@ describe('deleteProcessorBill', () => {
         { id: 'je2', voucherId, accountId: 'a2', debit: 0, credit: 5000 }
       ],
       sales: [], products: [], inventoryMovements: [], purchases: [],
-      suppliers: [], customers: [], accounts: [], accountSubtypes: []
+      suppliers: [], customers: [], accounts: baseAccounts(), accountSubtypes: baseSubtypes()
     });
 
     actions.deleteProcessorBill('bill1');
@@ -308,14 +330,14 @@ describe('deleteProcessorBill', () => {
     expect(s.processingReceipts[0].billedStatus).toBe('Unbilled');
     // Balance is NOT touched in-state: AccountingEngine.recomputePartyBalances()
     // derives it from the linked account's COMPLETE ledger after every mutation
-    // (spec §14), so the record here is left untouched by the delete.
+    // (spec Â§14), so the record here is left untouched by the delete.
     expect(s.processors[0].balancePayable).toBe(5000);
     expect(s.vouchers).toHaveLength(0);
     expect(s.journalEntries).toHaveLength(0);
   });
 });
 
-describe('updatePurchase — material change fallback', () => {
+describe('updatePurchase â€” material change fallback', () => {
   const purchase = {
     id: 'p1', purchaseNo: 'PUR-1', supplierId: 's1', materialId: 'm1',
     date: '2026-01-01', weight: 1000, weightUnit: 'KG', ratePerUnit: 100,
@@ -336,12 +358,12 @@ describe('updatePurchase — material change fallback', () => {
     processingSends: [], processingReceipts: [], processorBills: [],
     sales: [], products: [], inventoryMovements: [],
     suppliers: [], customers: [], processors: [],
-    accounts: [], accountSubtypes: [], vouchers: [], journalEntries: [],
+    accounts: baseAccounts(), accountSubtypes: baseSubtypes(), vouchers: [], journalEntries: [],
     processingStages: [],
     ...overrides
   });
 
-  it('never dispatched → moves the lot to raw stock of the new material (no confirmation needed)', () => {
+  it('never dispatched â†’ moves the lot to raw stock of the new material (no confirmation needed)', () => {
     const { actions, getState } = setup(baseState({
       inventoryMovements: [
         { id: 'im1', materialId: 'm1', batchId: 'b1', referenceNo: 'PUR-1', module: 'Purchase', transactionType: 'IN', quantity: 4000, runningBalance: 4000, date: '2026-01-01' }
@@ -363,7 +385,7 @@ describe('updatePurchase — material change fallback', () => {
     expect(s.inventoryMovements[0].materialId).toBe('m2');
   });
 
-  it('already dispatched → refuses without the confirmation flag', () => {
+  it('already dispatched â†’ refuses without the confirmation flag', () => {
     const withSend = baseState({
       materials: [
         { id: 'm1', stockPcs: 0, atProcessorPcs: 4000, processedStockPcs: 0 },
@@ -387,7 +409,7 @@ describe('updatePurchase — material change fallback', () => {
     expect(getState().processingSends).toHaveLength(1);
   });
 
-  it('already dispatched + received → confirmed change deletes dispatch and receipts and falls back to raw', () => {
+  it('already dispatched + received â†’ confirmed change deletes dispatch and receipts and falls back to raw', () => {
     const { actions, getState } = setup(baseState({
       materials: [
         { id: 'm1', stockPcs: 0, atProcessorPcs: 0, processedStockPcs: 4000 },
@@ -460,7 +482,7 @@ describe('updatePurchase — material change fallback', () => {
     expect(getState().processingReceipts).toHaveLength(1);
   });
 
-  it('ready-made lot re-headed → automatic fallback (no confirmation demanded)', () => {
+  it('ready-made lot re-headed â†’ automatic fallback (no confirmation demanded)', () => {
     const { actions, getState } = setup(baseState({
       materials: [
         { id: 'm1', name: 'Kalsii', stockPcs: 0, atProcessorPcs: 0, processedStockPcs: 1000, processingPath: 'ready_made' },
@@ -489,7 +511,7 @@ describe('updatePurchase — material change fallback', () => {
     expect(s.materials.find((m: any) => m.id === 'm2').processedStockPcs).toBe(1000);
   });
 
-  it('weight edited but material unchanged → ordinary diff path still works', () => {
+  it('weight edited but material unchanged â†’ ordinary diff path still works', () => {
     const { actions, getState } = setup(baseState());
     actions.updatePurchase('p1', {
       supplierId: 's1', materialId: 'm1', date: '2026-01-01',

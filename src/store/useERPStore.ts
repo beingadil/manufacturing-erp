@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+﻿import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { SQLiteStorageAdapter } from '../database/sqlite/SQLiteStorageAdapter';
@@ -11,10 +11,10 @@ import {
   buildProcessingLoss,
   buildProcessorBill,
   buildReceiptAccrual,
-  PostingLine,
 } from '../lib/accounting/manufacturingPosting';
 import { previewProcessingCostReclassification } from '../lib/accounting/processingCostReclassification';
 import { DocumentNumberingService } from '../lib/business/DocumentNumberingService';
+import { createVoucher } from './erpVoucher';
 import { batchAvailableAtSource, batchTotalPcs, InsufficientStockError, InventoryCalculationService } from '../lib/business/InventoryCalculationService';
 import {
   buildableQty,
@@ -38,6 +38,32 @@ import { databaseMiddleware } from './databaseMiddleware';
 import { migrateERPState } from './erpMigration';
 
 /** LAW 3 helper: total pcs across every bucket of one material's Active batches. */
+/** Best-effort attribution for legacy records without attribution data: allocate
+ *  the lost pcs to the oldest at-processor buckets of the material. */
+function fallbackLossAttributions(
+  batches: Batch[],
+  lossPcs: number,
+): { batchId: string; fromProcessor: number; fromAvailable: number; costPerPiece: number }[] {
+  const allocations: { batchId: string; fromProcessor: number; fromAvailable: number; costPerPiece: number }[] = [];
+  let remaining = lossPcs;
+  const candidates = [...batches]
+    .filter(b => b.status === 'Active' && (b.atProcessorPcs || 0) > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  for (const b of candidates) {
+    if (remaining <= 0) break;
+    const take = Math.min(b.atProcessorPcs || 0, remaining);
+    if (take <= 0) continue;
+    allocations.push({
+      batchId: b.id,
+      fromProcessor: take,
+      fromAvailable: 0,
+      costPerPiece: InventoryCalculationService.getBatchCostPerPiece(b),
+    });
+    remaining -= take;
+  }
+  return allocations;
+}
+
 function batchTotalPcsBatch(materialId: string, batches: Batch[]): number {
   return batches
     .filter(b => b.materialId === materialId && b.status === 'Active')
@@ -85,10 +111,10 @@ export interface ERPState {
   removeModuleItem: (table: string, id: string) => void;
   journalEntries: JournalEntry[];
 
-  // ── Product assembly ─────────────────────────────────────────────────────
+  // â”€â”€ Product assembly â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // A product made from several materials lists them here (Product.components);
   // a product made from one material just points at it (Product.materialId).
-  // There is no separate recipe module — the recipe IS the product record.
+  // There is no separate recipe module â€” the recipe IS the product record.
   
   // Entity Add Actions
   addCategory: (data: Omit<MaterialCategory, 'id'>) => string;
@@ -128,6 +154,10 @@ export interface ERPState {
   addProcessingReceipt: (data: Omit<ProcessingReceipt, 'id' | 'receiveNo' | 'billAmount'>) => void;
   addProcessorBill: (data: Omit<ProcessorBill, 'id' | 'billNo' | 'totalAmount'>) => void;
   recordProcessingLoss: (sendId: string, quantity: number, date?: string, remarks?: string) => void;
+  /** Undo a recorded loss exactly: pcs are restored to the at-processor bucket of their
+   *  origin batch (or the stage-available bucket), the journal entry is dropped and the
+   *  send's recorded loss is decremented. The record disappears from the books entirely. */
+  undoProcessingLoss: (lossId: string) => void;
   addSale: (data: Omit<Sale, 'id' | 'invoiceNo' | 'totalAmount'>) => void;
   addSaleGroup: (data: SaleGroupData) => void;
 
@@ -178,60 +208,6 @@ export interface SaleGroupData {
   customerId: string;
   date: string;
   lines: SaleGroupLine[];
-}
-
-/**
- * Build one posted voucher + its journal entries from an already-balanced
- * posting list. Callers pass the vouchers they have accumulated so far, so a
- * multi-line document gets gap-free sequential voucher numbers.
- */
-function createVoucher(
-  existingVouchers: Voucher[],
-  opts: {
-    date: string;
-    type: Voucher['type'];
-    referenceNo: string;
-    sourceModule: Voucher['sourceModule'];
-    sourceId: string;
-    narration: string;
-    lines: PostingLine[];
-    createdBy?: string;
-  },
-): { voucher: Voucher; entries: JournalEntry[] } | null {
-  const lines = opts.lines.filter(l => Math.abs(l.debit) > 0.0001 || Math.abs(l.credit) > 0.0001);
-  if (lines.length === 0) return null;
-  const total = Math.round(lines.reduce((sum, l) => sum + l.debit, 0) * 100) / 100;
-  const voucherId = uuidv4();
-  const voucher: Voucher = {
-    id: voucherId,
-    voucherNo: DocumentNumberingService.nextVoucherNumber(existingVouchers, opts.type, opts.date),
-    date: opts.date,
-    type: opts.type,
-    referenceNo: opts.referenceNo,
-    sourceModule: opts.sourceModule,
-    sourceId: opts.sourceId,
-    narration: opts.narration,
-    totalDebit: total,
-    totalCredit: total,
-    createdBy: opts.createdBy,
-    createdAt: new Date().toISOString(),
-    status: 'Posted',
-    versionHistory: [{
-      id: uuidv4(),
-      modifiedAt: new Date().toISOString(),
-      action: 'Created',
-      reason: 'Auto-generated',
-    }],
-  };
-  const entries: JournalEntry[] = lines.map(l => ({
-    id: uuidv4(),
-    voucherId,
-    accountId: l.accountId,
-    debit: l.debit,
-    credit: l.credit,
-    narration: l.narration,
-  }));
-  return { voucher, entries };
 }
 
 /**
@@ -331,7 +307,7 @@ export const useERPStore = create<ERPState>()(
       journalEntries: [],
 
             // Party balances are re-derived from the COMPLETE ledger after every
-            // purchase/sale/bill create·edit·delete via this callback (spec §14).
+            // purchase/sale/bill createÂ·editÂ·delete via this callback (spec Â§14).
             ...createCRUDActions(set, get, () => AccountingEngine.recomputePartyBalances()),
 
       wipeAllData: () => {
@@ -502,7 +478,7 @@ export const useERPStore = create<ERPState>()(
 
       updateModuleItem: (table, id, item) => {
         // A material's `No.` must stay unique across the list, so the rename is
-        // validated here — the same place the create path checks it.
+        // validated here â€” the same place the create path checks it.
         if (table === 'materials' && item.code !== undefined) {
           const clash = findMaterialCodeConflict(useERPStore.getState().materials, item.code, id);
           if (clash) {
@@ -581,7 +557,7 @@ export const useERPStore = create<ERPState>()(
         const id = uuidv4();
         const state = get();
         
-        // Auto-generate voucher number — max-based, scoped to the voucher's own
+        // Auto-generate voucher number â€” max-based, scoped to the voucher's own
         // date year, gap-free even after deletions (spec: numbering audit)
         const voucherNo = DocumentNumberingService.nextVoucherNumber(state.vouchers, voucherData.type, voucherData.date);
         
@@ -632,7 +608,7 @@ export const useERPStore = create<ERPState>()(
               id: uuidv4(),
               modifiedAt: new Date().toISOString(),
               action: 'Updated' as const,
-              reason: renumber ? 'Date moved to another year — renumbered' : 'User Edit',
+              reason: renumber ? 'Date moved to another year â€” renumbered' : 'User Edit',
               previousValues: { ...v, versionHistory: undefined },
               updatedValues: renumber ? { ...voucherData, voucherNo: nextVoucherNo } : { ...voucherData }
             };
@@ -713,7 +689,7 @@ export const useERPStore = create<ERPState>()(
       }),
 
       deleteProcessingStage: (id) => set((state) => {
-        // Guard: a stage with movements cannot be deleted — it is part of the
+        // Guard: a stage with movements cannot be deleted â€” it is part of the
         // historical chain. Only unused stages can be removed.
         const hasMovements = state.processingSends.some(s => s.stageId === id)
           || state.processingReceipts.some(r => r.stageId === id);
@@ -741,7 +717,7 @@ export const useERPStore = create<ERPState>()(
           const accountSubtype = state.accountSubtypes.find(s => s.name === 'Accounts Payable');
           const sameTypeCount = state.accounts.filter(a => a.type === 'Liabilities').length;
           const code = DocumentNumberingService.generateAccountCode('Liabilities', sameTypeCount);
-          // Nest under the system AP control account (spec §15)
+          // Nest under the system AP control account (spec Â§15)
           const control = state.accounts.find(a => a.subtypeId === accountSubtype?.id && a.isSystem);
           const account: Account = {
             id: uuidv4(),
@@ -771,7 +747,7 @@ export const useERPStore = create<ERPState>()(
           const accountSubtype = state.accountSubtypes.find(s => s.name === 'Accounts Payable');
           const sameTypeCount = state.accounts.filter(a => a.type === 'Liabilities').length;
           const code = DocumentNumberingService.generateAccountCode('Liabilities', sameTypeCount);
-          // Nest under the system AP control account (spec §15)
+          // Nest under the system AP control account (spec Â§15)
           const control = state.accounts.find(a => a.subtypeId === accountSubtype?.id && a.isSystem);
           const account: Account = {
             id: uuidv4(),
@@ -801,7 +777,7 @@ export const useERPStore = create<ERPState>()(
           const accountSubtype = state.accountSubtypes.find(s => s.name === 'Accounts Receivable');
           const sameTypeCount = state.accounts.filter(a => a.type === 'Assets').length;
           const code = DocumentNumberingService.generateAccountCode('Assets', sameTypeCount);
-          // Nest under the system AR control account (spec §15)
+          // Nest under the system AR control account (spec Â§15)
           const control = state.accounts.find(a => a.subtypeId === accountSubtype?.id && a.isSystem);
           const account: Account = {
             id: uuidv4(),
@@ -841,10 +817,10 @@ export const useERPStore = create<ERPState>()(
       addProduct: (data) => {
         // An assembled product with no parts would be billed as "made from
         // several materials" while deducting nothing, so the shape is checked
-        // here too — not only in the form that normally builds it.
+        // here too â€” not only in the form that normally builds it.
         if (data.usageType === 'assembled') validateComponents(data.components ?? []);
 
-        // SKU is never typed in — it is allocated here, year-scoped and
+        // SKU is never typed in â€” it is allocated here, year-scoped and
         // max-based (PRD-2026-0001 style), same discipline as PO/INV numbers.
         const today = new Date().toISOString().slice(0, 10);
         const id = uuidv4();
@@ -973,7 +949,7 @@ export const useERPStore = create<ERPState>()(
           try {
             const order = (state.manufacturingOrders || []).find(o => o.id === id);
             if (!order) throw new AppError('Manufacturing order not found.');
-            if (order.status === 'Completed') throw new AppError('This manufacturing order is already completed — completed costs are immutable.');
+            if (order.status === 'Completed') throw new AppError('This manufacturing order is already completed â€” completed costs are immutable.');
             if (order.status === 'Cancelled') throw new AppError('A cancelled manufacturing order cannot be completed.');
 
             const finishedQty = data?.finishedQty !== undefined ? Math.round(Number(data.finishedQty)) : order.plannedQty;
@@ -989,7 +965,7 @@ export const useERPStore = create<ERPState>()(
               : Math.max(0, Number(order.productionCost) || 0);
 
             // Components are consumed in FULL for the planned quantity. When the
-            // output is short, the same cost is spread over fewer good units —
+            // output is short, the same cost is spread over fewer good units â€”
             // the shortfall is absorbed into the surviving unit cost.
             const requirements = order.components.map(c => ({ materialId: c.materialId, pcs: c.plannedQuantity }));
             const drawn = consumeComponentsForManufacturing(state.batches || [], requirements);
@@ -1054,7 +1030,7 @@ export const useERPStore = create<ERPState>()(
               state.accountSubtypes,
               costed.materialCost,
               costed.productionCost,
-              `Manufacturing ${order.orderNo} — ${finishedQty} × ${product?.name || 'product'}`,
+              `Manufacturing ${order.orderNo} â€” ${finishedQty} Ã— ${product?.name || 'product'}`,
             );
             if (posting.length > 0) {
               const built = createVoucher(vouchers, {
@@ -1098,7 +1074,7 @@ export const useERPStore = create<ERPState>()(
               transactionType: 'IN',
               quantity: finishedQty,
               runningBalance: fgBalance,
-              remarks: `Finished goods produced — ${lot.lotNo}`,
+              remarks: `Finished goods produced â€” ${lot.lotNo}`,
               manufacturingOrderId: order.id,
             };
 
@@ -1125,10 +1101,10 @@ export const useERPStore = create<ERPState>()(
         const { buildable } = buildableQty(product, state.batches || []);
         const finishedQty = input.finishedQty !== undefined ? Math.round(Number(input.finishedQty)) : buildable;
         if (!Number.isFinite(finishedQty) || finishedQty <= 0) {
-          throw new AppError('Nothing can be produced yet — required parts are short.');
+          throw new AppError('Nothing can be produced yet â€” required parts are short.');
         }
         if (finishedQty > buildable) {
-          throw new AppError(`Cannot produce ${finishedQty} — only ${buildable} PCS can be built from the parts on hand.`);
+          throw new AppError(`Cannot produce ${finishedQty} â€” only ${buildable} PCS can be built from the parts on hand.`);
         }
         const date = input.date || new Date().toISOString().slice(0, 10);
 
@@ -1172,7 +1148,7 @@ export const useERPStore = create<ERPState>()(
           try {
             const order = (state.manufacturingOrders || []).find(o => o.id === id);
             if (!order) throw new AppError('Manufacturing order not found.');
-            if (order.status === 'Completed') throw new AppError('A completed manufacturing order cannot be cancelled — its stock and cost are already posted.');
+            if (order.status === 'Completed') throw new AppError('A completed manufacturing order cannot be cancelled â€” its stock and cost are already posted.');
             if (order.status === 'Cancelled') return state;
             return {
               manufacturingOrders: (state.manufacturingOrders || []).map(o =>
@@ -1194,7 +1170,7 @@ export const useERPStore = create<ERPState>()(
             const order = (state.manufacturingOrders || []).find(o => o.id === id);
             if (!order) throw new AppError('Manufacturing order not found.');
             if (order.status === 'Completed') {
-              throw new AppError('A completed manufacturing order cannot be deleted — its finished-goods lot is part of the stock trail.');
+              throw new AppError('A completed manufacturing order cannot be deleted â€” its finished-goods lot is part of the stock trail.');
             }
             return {
               manufacturingOrders: (state.manufacturingOrders || []).filter(o => o.id !== id),
@@ -1268,8 +1244,8 @@ export const useERPStore = create<ERPState>()(
       addPurchase: (data) => {
         set((state) => {
         const purchaseNo = DocumentNumberingService.nextDocumentNumber(state.purchases, 'purchaseNo', 'PO', data.date);
-        // Ready-made purchases enter pcs DIRECTLY (directPcs mode — no weight math);
-        // every other purchase derives pcs from weight ÷ weightPerPiece.
+        // Ready-made purchases enter pcs DIRECTLY (directPcs mode â€” no weight math);
+        // every other purchase derives pcs from weight Ã· weightPerPiece.
         const material = state.materials.find(m => m.id === data.materialId);
         const isReadyMade = (material?.processingPath ?? 'full_chain') === 'ready_made';
         const calculatedPcs = isReadyMade && data.directPcs
@@ -1289,7 +1265,7 @@ export const useERPStore = create<ERPState>()(
         };
 
         const batchId = uuidv4();
-        // {SUPPLIER-FIRST}-{purchaseNo} (AHMED-PO-2026-0003) by default — the
+        // {SUPPLIER-FIRST}-{purchaseNo} (AHMED-PO-2026-0003) by default â€” the
         // batches of one material stay tellable apart by eye; Settings can
         // switch back to the BATCH- prefix.
         const batchNo = DocumentNumberingService.buildBatchNo(
@@ -1308,7 +1284,7 @@ export const useERPStore = create<ERPState>()(
           ratePerUnit: data.ratePerUnit,
           weightPerPiece: data.weightPerPiece,
           initialPcs: calculatedPcs,
-          // Ready-made goods are FINISHED at purchase — write the batch into
+          // Ready-made goods are FINISHED at purchase â€” write the batch into
           // the finished bucket (remainingPcs 0) so the LIVE state matches
           // what the restart replay derives, and sales FIFO consumes them.
           remainingPcs: isReadyMade ? 0 : calculatedPcs,
@@ -1326,7 +1302,7 @@ export const useERPStore = create<ERPState>()(
         const currentStock = currentMaterial?.stockPcs || 0;
         const newStock = currentStock + calculatedPcs;
 
-        // Ready-made pcs are ALREADY finished — they land in the sellable
+        // Ready-made pcs are ALREADY finished â€” they land in the sellable
         // finished pool (processedStockPcs), never in raw stock.
         const updatedMaterials = state.materials.map(m =>
           m.id === data.materialId
@@ -1350,13 +1326,13 @@ export const useERPStore = create<ERPState>()(
           remarks: data.remarks
         };
 
-        // NOTE: the supplier's balancePayable is NOT incremented here — it is
+        // NOTE: the supplier's balancePayable is NOT incremented here â€” it is
         // derived from the linked account's COMPLETE ledger via
         // AccountingEngine.recomputePartyBalances() right after this set, so the
         // listing balance can never drift from the ledger closing balance.
 
-        // Automatic Voucher Generation (spec §25 — resolve accounts by subtype, never by name)
-        // Purchases increase INVENTORY (an asset) — the purchase is NOT an
+        // Automatic Voucher Generation (spec Â§25 â€” resolve accounts by subtype, never by name)
+        // Purchases increase INVENTORY (an asset) â€” the purchase is NOT an
         // expense yet. Ready-made goods are already finished, so they debit
         // Finished Goods; everything else debits Raw Material Inventory.
         const purchaseAccount = getSystemInventoryAccount(
@@ -1433,13 +1409,13 @@ export const useERPStore = create<ERPState>()(
         let failure: AppError | null = null;
         set((state) => {
           try {
-            // ── Processing-path guards (BEFORE the worker guard: a single-stage
+            // â”€â”€ Processing-path guards (BEFORE the worker guard: a single-stage
             // material's designated stage must not be masked by a worker-binding
-            // error — the material's path is the primary constraint).
+            // error â€” the material's path is the primary constraint).
             const sendMaterial = state.materials.find(m => m.id === data.materialId);
             const sendPath = sendMaterial?.processingPath ?? 'full_chain';
             if (sendPath === 'ready_made') {
-              throw new AppError(`"${sendMaterial?.name || 'This material'}" is a ready-made product — it needs no processing.`);
+              throw new AppError(`"${sendMaterial?.name || 'This material'}" is a ready-made product â€” it needs no processing.`);
             }
             if (sendPath === 'single_stage' && data.stageId !== sendMaterial?.fixedStageId) {
               const fixedStage = state.processingStages.find(s => s.id === sendMaterial?.fixedStageId);
@@ -1455,7 +1431,7 @@ export const useERPStore = create<ERPState>()(
               }
             }
 
-            // ── Stage-worker guard: a processor assigned to a stage can only
+            // â”€â”€ Stage-worker guard: a processor assigned to a stage can only
             // work that stage (general workers can work any).
             const worker = state.processors.find(p => p.id === data.processorId);
             if (worker?.stageId && data.stageId && worker.stageId !== data.stageId) {
@@ -1480,9 +1456,9 @@ export const useERPStore = create<ERPState>()(
             // Path-aware: a single_stage material draws RAW at its fixed stage
             // (wherever it sits in the chain); full_chain follows the sequence map.
             const consumesRaw = InventoryCalculationService.sendConsumesRaw(data.stageId, stages, sendMaterial);
-            // ══ MOVEMENT MAP: the ONLY legal source bucket for this target ══
+            // â•â• MOVEMENT MAP: the ONLY legal source bucket for this target â•â•
             // Stage 1 draws RAW; stage N draws the availability produced by
-            // stage N−1. Anything else is rejected — stage-skipping and
+            // stage Nâˆ’1. Anything else is rejected â€” stage-skipping and
             // re-processing already-processed pcs are physically impossible.
             const sourceStageId = consumesRaw
               ? 'raw' as const
@@ -1492,13 +1468,13 @@ export const useERPStore = create<ERPState>()(
             let consumedBatchId = data.batchId;
 
             // Adjusted sends merge their pending pcs into this dispatch. Only
-            // the PHYSICAL pcs move here — adjusted pcs are already in WIP
+            // the PHYSICAL pcs move here â€” adjusted pcs are already in WIP
             // (their original dispatch moved them); merging reassigns their
             // pending receipt target without touching any bucket twice.
             let totalAdjustedPcs = 0;
             const updatedSends = state.processingSends.map(s => {
               if (adjustSendIds?.includes(s.id)) {
-                const adjPending = s.pcsSent - s.pcsReceived;
+                const adjPending = Math.max(0, s.pcsSent - s.pcsReceived - (s.lossQuantity || 0));
                 totalAdjustedPcs += adjPending;
                 return { ...s, status: "Adjusted" as const, adjustedToDispatchId: newSendId, remarks: `${s.remarks || ''} (Adjusted ${adjPending} PCS into ${dispatchNo})` };
               }
@@ -1511,7 +1487,7 @@ export const useERPStore = create<ERPState>()(
                 : InventoryCalculationService.moveAvailableToProcessor(data.materialId, sourceStageId, data.pcsSent, updatedBatches, data.batchId || undefined);
               updatedBatches = res.batches;
               consumedBatchId = res.usedBatchIds[0] || data.batchId;
-              // Display metadata via the shared helper — identical to replay.
+              // Display metadata via the shared helper â€” identical to replay.
               updatedBatches = InventoryCalculationService.advanceDrainedBatches(
                 updatedBatches, res.usedBatchIds, data.stageId, consumesRaw
               );
@@ -1559,7 +1535,7 @@ export const useERPStore = create<ERPState>()(
                       stockPcs: consumesRaw ? Math.max(0, currentStock - data.pcsSent) : m.stockPcs,
                       // Pipeline semantics: a RAW send adds new pcs to the
                       // processing pipeline. An intermediate send moves pcs
-                      // availability → at-processor — both already counted in
+                      // availability â†’ at-processor â€” both already counted in
                       // the pipeline, so the counter does not move.
                       atProcessorPcs: consumesRaw ? currentAtProcessor + data.pcsSent : currentAtProcessor,
                     }
@@ -1583,7 +1559,7 @@ export const useERPStore = create<ERPState>()(
             const send = state.processingSends.find(s => s.id === data.sendId);
             if (!send) throw new AppError('Dispatch not found.');
 
-            // ── Guards: over-receipt and duplicate receipt are rejected HERE,
+            // â”€â”€ Guards: over-receipt and duplicate receipt are rejected HERE,
             // not just in the UI, so the authoritative layer can never be
             // bypassed. Pending is ALWAYS computed, never stored (LAW 2).
             const pending = send.pcsSent - send.pcsReceived - (send.lossQuantity || 0);
@@ -1601,7 +1577,7 @@ export const useERPStore = create<ERPState>()(
             const receiveMaterial = state.materials.find(m => m.id === data.materialId);
             const producesFinished = InventoryCalculationService.receiptProducesFinished(stageId, stages, receiveMaterial);
 
-            // Per-stage billing: per_piece = qty × rate; per_kg = qty × weightPerPiece(kg) × rate.
+            // Per-stage billing: per_piece = qty Ã— rate; per_kg = qty Ã— weightPerPiece(kg) Ã— rate.
             const stage = stages.find(s => s.id === stageId);
             const rateMethod = data.rateMethod ?? stage?.rateMethod ?? 'per_piece';
             const batch = send.batchId ? state.batches.find(b => b.id === send.batchId) : undefined;
@@ -1621,7 +1597,7 @@ export const useERPStore = create<ERPState>()(
 
             // Manufacturing v4: capitalise the processing charge at the moment
             // the pcs come back. Dr Raw Material Inventory / Cr Accrued
-            // Expenses — exactly once, including partial receipts. The later
+            // Expenses â€” exactly once, including partial receipts. The later
             // processor bill clears the accrual and only the difference hits
             // Processing Expense.
             let voucherPatch: { vouchers: Voucher[]; journalEntries: JournalEntry[] } = {
@@ -1633,7 +1609,7 @@ export const useERPStore = create<ERPState>()(
                 state.accounts,
                 state.accountSubtypes,
                 billAmount,
-                `Processing accrued — ${receiveNo}`,
+                `Processing accrued â€” ${receiveNo}`,
               );
               const built = createVoucher(state.vouchers, {
                 date: data.date,
@@ -1674,7 +1650,7 @@ export const useERPStore = create<ERPState>()(
             let updatedBatches: Batch[] = state.batches || [];
 
             if (producesFinished) {
-              // LAW 2 transfer: AT_final → FINISHED.
+              // LAW 2 transfer: AT_final â†’ FINISHED.
               updatedMaterials = state.materials.map(m =>
                 m.id === data.materialId ? {
                   ...m,
@@ -1686,8 +1662,8 @@ export const useERPStore = create<ERPState>()(
                 data.materialId, data.pcsReceived, updatedBatches, send.batchId || undefined, billAmount
               );
             } else {
-              // LAW 2 transfer: AT_stage → AVAILABLE(source = this stage).
-              // atProcessorPcs DECREASES — buckets stay disjoint so the same
+              // LAW 2 transfer: AT_stage â†’ AVAILABLE(source = this stage).
+              // atProcessorPcs DECREASES â€” buckets stay disjoint so the same
               // pcs are never counted in two places, and pcs that came back
               // from DIFFERENT stages keep SEPARATE availability entries
               // (they can never be merged or routed to the wrong next stage).
@@ -1698,13 +1674,13 @@ export const useERPStore = create<ERPState>()(
                 ).batches;
               } catch (e) {
                 if (e instanceof InsufficientStockError) {
-                  throw new AppError("This dispatch's pcs are not traceable in the batch trail — receive was rolled back.");
+                  throw new AppError("This dispatch's pcs are not traceable in the batch trail â€” receive was rolled back.");
                 }
                 throw e;
               }
               // Material roll-up semantics: atProcessorPcs counts the whole
               // processing pipeline (at a processor OR waiting for the next
-              // stage). The pcs moved AT→availability, both counted — the
+              // stage). The pcs moved ATâ†’availability, both counted â€” the
               // pipeline total is unchanged, so the material counter does not
               // move here (same basis as syncMaterialCounters).
             }
@@ -1748,7 +1724,7 @@ export const useERPStore = create<ERPState>()(
             if (!send) throw new AppError('Dispatch not found.');
 
             // Explicit loss only: pending pcs can be received OR recorded as
-            // loss — never automatic. Reject over-loss and non-positive loss.
+            // loss â€” never automatic. Reject over-loss and non-positive loss.
             const pending = send.pcsSent - send.pcsReceived - (send.lossQuantity || 0);
             if (!quantity || quantity <= 0) throw new AppError('Loss quantity must be a positive whole number of PCS.');
             if (quantity > pending) throw new AppError(`Only ${pending} PCS are pending on this dispatch.`);
@@ -1760,13 +1736,13 @@ export const useERPStore = create<ERPState>()(
 
             // LAW 2 shrinkage: the lost pcs leave the trail entirely. They may
             // sit at the processor (not yet received) or in the stage's
-            // availability bucket (received back, reported lost later) —
+            // availability bucket (received back, reported lost later) â€”
             // consumeLoss takes them from whichever holds them.
             const lossId = uuidv4();
             const loss = InventoryCalculationService.consumeLoss(
               send.materialId, send.stageId, quantity, state.batches || [], send.batchId || undefined
             );
-            const { batches: updatedBatches, fromProcessor, fromAvailable, cost } = loss;
+            const { batches: updatedBatches, fromProcessor, fromAvailable, cost, attributions } = loss;
             // Pipeline semantics: the counter spans atProcessor + availability,
             // so a loss from either bucket shrinks it.
             const updatedMaterials = state.materials.map(m =>
@@ -1788,7 +1764,7 @@ export const useERPStore = create<ERPState>()(
                 state.accounts,
                 state.accountSubtypes,
                 cost,
-                `Processing loss — ${send.dispatchNo}`,
+                `Processing loss â€” ${send.dispatchNo}`,
               );
               let voucherId: string | undefined;
               if (posting.length > 0) {
@@ -1818,6 +1794,7 @@ export const useERPStore = create<ERPState>()(
                 pcsLost: quantity,
                 cost,
                 voucherId,
+                attributions,
                 remarks,
               };
             }
@@ -1835,8 +1812,8 @@ export const useERPStore = create<ERPState>()(
               remarks: remarks || `Loss recorded against ${send.dispatchNo}`
             };
 
-            // LAW 3 with the expected shrinkage delta — anything other than
-            // exactly −quantity aborts the whole update.
+            // LAW 3 with the expected shrinkage delta â€” anything other than
+            // exactly âˆ’quantity aborts the whole update.
             InventoryCalculationService.assertConservation(send.materialId, state.batches || [], updatedBatches, -quantity);
 
             return {
@@ -1854,23 +1831,94 @@ export const useERPStore = create<ERPState>()(
         });
         if (failure) throw failure;
       },
+      undoProcessingLoss: (id) => {
+        let failure: AppError | null = null;
+        set((state) => {
+          try {
+            const loss = state.processingLosses?.find(l => l.id === id);
+            if (!loss) throw new AppError('Loss record not found.');
+
+            const attributions = loss.attributions && loss.attributions.length > 0
+              ? loss.attributions
+              : fallbackLossAttributions(state.batches || [], loss.pcsLost);
+
+            const stageId = (state.processingSends.find(s => s.id === loss.sendId))?.stageId;
+            const updatedBatches = (state.batches || []).map(b => {
+              if (b.materialId !== loss.materialId) return b;
+              const attr = attributions.find(a => a.batchId === b.id);
+              if (!attr) return b;
+              const updated: any = { ...b };
+              if (attr.fromProcessor > 0) {
+                updated.atProcessorPcs = (b.atProcessorPcs || 0) + attr.fromProcessor;
+              }
+              if (attr.fromAvailable > 0 && stageId) {
+                const map = { ...(updated.stageAvailableBySource || {}) };
+                map[stageId] = (map[stageId] || 0) + attr.fromAvailable;
+                updated.stageAvailableBySource = map;
+              }
+              return updated;
+            });
+
+            const updatedSends = state.processingSends.map(s =>
+              s.id === loss.sendId
+                ? { ...s, lossQuantity: Math.max(0, (s.lossQuantity || 0) - loss.pcsLost) }
+                : s
+            );
+            const updatedMaterials = state.materials.map(m =>
+              m.id === loss.materialId
+                ? { ...m, atProcessorPcs: (m.atProcessorPcs || 0) + loss.pcsLost }
+                : m
+            );
+            const vouchers = loss.voucherId ? state.vouchers.filter(v => v.id !== loss.voucherId) : state.vouchers;
+            const journalEntries = loss.voucherId ? state.journalEntries.filter(j => j.voucherId !== loss.voucherId) : state.journalEntries;
+            const processingLosses = (state.processingLosses || []).filter(l => l.id !== id);
+            const movement: InventoryMovement = {
+              id: uuidv4(),
+              materialId: loss.materialId,
+              date: new Date().toISOString().slice(0, 10),
+              referenceNo: loss.sendId,
+              module: 'Loss',
+              transactionType: 'IN',
+              quantity: loss.pcsLost,
+              runningBalance: batchTotalPcsBatch(loss.materialId, updatedBatches),
+              remarks: 'Loss reversed',
+            };
+
+            InventoryCalculationService.assertConservation(loss.materialId, state.batches || [], updatedBatches, loss.pcsLost);
+
+            return {
+              processingLosses,
+              processingSends: updatedSends,
+              materials: updatedMaterials,
+              batches: updatedBatches,
+              inventoryMovements: [movement, ...(state.inventoryMovements || [])],
+              vouchers,
+              journalEntries,
+            };
+          } catch (e) {
+            failure = e instanceof AppError ? e : new AppError((e as Error)?.message || 'Could not undo the loss.');
+            return state;
+          }
+        });
+        if (failure) throw failure;
+      },
       addProcessorBill: (data) => {
         set((state) => {
         const billNo = DocumentNumberingService.nextDocumentNumber(state.processorBills, 'billNo', 'BILL', data.date);
         const receiptsToBill = state.processingReceipts.filter(r => data.receiptIds.includes(r.id));
 
-        // ── Store-level guard: duplicate billing (spec §7, §21) — a receipt
+        // â”€â”€ Store-level guard: duplicate billing (spec Â§7, Â§21) â€” a receipt
         // that is already Billed cannot be billed again, so the authoritative
         // layer can never double-pay a stage. LOUD rejection: throws so no
         // silent no-op can hide it (uniform with every other guard).
         if (receiptsToBill.some(r => r.billedStatus === 'Billed')) {
-          throw new AppError('One or more receipts on this bill are already billed — duplicate billing is blocked.');
+          throw new AppError('One or more receipts on this bill are already billed â€” duplicate billing is blocked.');
         }
 
-        // Line-level billing (spec §10): when the bill carries explicit
+        // Line-level billing (spec Â§10): when the bill carries explicit
         // per-receipt amounts (rate finalized at bill time), the total is the
         // sum of those overrides. Otherwise it defaults to each receipt's
-        // computed billAmount (dispatch rate) — unchanged legacy behaviour.
+        // computed billAmount (dispatch rate) â€” unchanged legacy behaviour.
         const { lineAmounts, ...billData } = data;
         const totalAmount = receiptsToBill.reduce((sum, r) => sum + (lineAmounts?.[r.id] ?? r.billAmount), 0);
 
@@ -1892,9 +1940,9 @@ export const useERPStore = create<ERPState>()(
 
         // NOTE: processor balancePayable is derived from the linked account's
         // COMPLETE ledger via AccountingEngine.recomputePartyBalances() after
-        // this set — never incremented here (spec §14).
+        // this set â€” never incremented here (spec Â§14).
 
-        // Automatic Voucher Generation (spec §25 — resolve accounts by subtype, never by name).
+        // Automatic Voucher Generation (spec Â§25 â€” resolve accounts by subtype, never by name).
         const payableAccount = state.accounts.find(a => a.linkedEntityId === data.processorId)
           || getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Accounts Payable');
 
@@ -1936,7 +1984,7 @@ export const useERPStore = create<ERPState>()(
           }
         } else {
           // Legacy policy: stage bills post DR Processing Expense /
-          // CR worker AP — unchanged for pre-v4 data and test fixtures.
+          // CR worker AP â€” unchanged for pre-v4 data and test fixtures.
           const processingExpenseAccount = getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Processing Expense');
 
           if (processingExpenseAccount && payableAccount) {
@@ -2031,7 +2079,7 @@ export const useERPStore = create<ERPState>()(
             data.customerId,
             totalAmount,
             lotResult.cogs,
-            `Sale ${invoiceNo} — ${pcsSold} × ${product.name}`,
+            `Sale ${invoiceNo} â€” ${pcsSold} Ã— ${product.name}`,
           );
           const built = createVoucher(state.vouchers, {
             date: data.date,
@@ -2039,7 +2087,7 @@ export const useERPStore = create<ERPState>()(
             referenceNo: invoiceNo,
             sourceModule: 'Sales',
             sourceId: saleId,
-            narration: `Sale of ${pcsSold} × ${product.name}`,
+            narration: `Sale of ${pcsSold} Ã— ${product.name}`,
             lines: posting,
             createdBy: state.currentUser?.name,
           });
@@ -2088,7 +2136,7 @@ export const useERPStore = create<ERPState>()(
         const assembled = selectedProduct && isAssembled(selectedProduct) ? selectedProduct : null;
         if (assembled) {
           const perUnit = perUnitRequirement(assembled);
-          // NOTE: databaseMiddleware runs the `set` updater TWICE — once to
+          // NOTE: databaseMiddleware runs the `set` updater TWICE â€” once to
           // validate business rules, once to commit. Any handler that mutates
           // its inputs in place therefore runs its mutations twice. Every other
           // handler here builds fresh objects and is unaffected; this one
@@ -2149,7 +2197,7 @@ export const useERPStore = create<ERPState>()(
           }
 
           // The same balanced Sales Voucher a normal sale posts, but the cost leg is
-          // the PURCHASE VALUE OF THE PARTS that left stock — an assembled
+          // the PURCHASE VALUE OF THE PARTS that left stock â€” an assembled
           // product never passes through Finished Goods, so crediting Finished
           // Goods for stock that was never booked there would misstate both
           // accounts. Debit COGS, credit Raw Material Inventory instead.
@@ -2238,11 +2286,11 @@ export const useERPStore = create<ERPState>()(
 
         // NOTE: the customer's balanceReceivable is derived from the linked
         // account's COMPLETE ledger via AccountingEngine.recomputePartyBalances()
-        // after this set — never incremented here (spec §14).
+        // after this set â€” never incremented here (spec Â§14).
         
         const nextMovements = movement ? [movement, ...(state.inventoryMovements || [])] : (state.inventoryMovements || []);
 
-        // Automatic Voucher Generation (spec §25 — resolve accounts by subtype, never by name)
+        // Automatic Voucher Generation (spec Â§25 â€” resolve accounts by subtype, never by name)
         const receivableAccount = state.accounts.find(a => a.linkedEntityId === data.customerId)
           || getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Accounts Receivable');
         const salesAccount = getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Sales');
@@ -2254,9 +2302,9 @@ export const useERPStore = create<ERPState>()(
           const voucherId = uuidv4();
           const voucherNo = DocumentNumberingService.nextVoucherNumber(state.vouchers, 'Sales Voucher', data.date);
           
-          // COGS at ACTUAL purchase cost, recognized at the moment of sale — FIFO
+          // COGS at ACTUAL purchase cost, recognized at the moment of sale â€” FIFO
           // across the batches that produced the finished goods (oldest batch
-          // first, each at its own purchase rate). Profit = selling − purchase.
+          // first, each at its own purchase rate). Profit = selling âˆ’ purchase.
           const fifo = selectedProduct?.materialId
             ? InventoryCalculationService.getFIFOCOGSForSale(selectedProduct.materialId, data.pcsSold, state.batches || [])
             : { cogs: 0 };
@@ -2302,7 +2350,7 @@ export const useERPStore = create<ERPState>()(
           updatedJournalEntries = [...saleEntries, ...state.journalEntries];
         }
 
-        // Reduce finished pcs on the actual batches sold (FIFO — oldest first) so
+        // Reduce finished pcs on the actual batches sold (FIFO â€” oldest first) so
         // each remaining batch keeps its own purchase-rate cost for valuation.
         const updatedBatches = selectedProduct?.materialId
           ? InventoryCalculationService.consumeFinishedFIFO(selectedProduct.materialId, data.pcsSold, state.batches || [])
@@ -2382,7 +2430,7 @@ export const useERPStore = create<ERPState>()(
                 data.customerId,
                 totalAmount,
                 lotResult.cogs,
-                `Sale ${invoiceNo} — ${pcsSold} × ${product.name}`,
+                `Sale ${invoiceNo} â€” ${pcsSold} Ã— ${product.name}`,
               );
               const built = createVoucher(vouchers, {
                 date: data.date,
@@ -2390,7 +2438,7 @@ export const useERPStore = create<ERPState>()(
                 referenceNo: invoiceNo,
                 sourceModule: 'Sales',
                 sourceId: saleId,
-                narration: `Sale of ${pcsSold} × ${product.name}`,
+                narration: `Sale of ${pcsSold} Ã— ${product.name}`,
                 lines: posting,
                 createdBy: state.currentUser?.name,
               });
