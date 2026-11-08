@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { AccessManagementPanel } from "@/components/access/AccessManagementPanel";
 import { SystemMaintenancePanel } from "@/components/maintenance/SystemMaintenancePanel";
 import { AiAssistantTab } from "@/components/settings/AiAssistantTab";
+import { OneTimeRepairSection } from "@/components/settings/OneTimeRepairSection";
 import { CompanyPrintTab } from "@/components/settings/CompanyPrintTab";
 import { SeedChartOfAccountsButton } from "@/components/settings/SeedChartOfAccountsButton";
 import {
@@ -518,7 +519,9 @@ function AdvancedTab() {
   return (
     <SettingsCard title="Advanced Features" subtitle="Backup data, manage integrations, and advanced system configuration." icon={Monitor}>
       <div className="space-y-8">
-        
+        {/* One-time repair — only ever visible when a pre-v4 migration left historical processing cost uncapitalised */}
+        <OneTimeRepairSection />
+
         {/* Demo Data */}
         <div>
           <h4 className="text-sm font-bold text-foreground mb-4 uppercase tracking-wider flex items-center gap-2">
