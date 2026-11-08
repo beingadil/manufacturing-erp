@@ -17,6 +17,7 @@ import { previewProcessingCostReclassification } from '../lib/accounting/process
 import { DocumentNumberingService } from '../lib/business/DocumentNumberingService';
 import { batchAvailableAtSource, batchTotalPcs, InsufficientStockError, InventoryCalculationService } from '../lib/business/InventoryCalculationService';
 import {
+  buildableQty,
   consumeComponentsForManufacturing,
   consumeLotsFIFO,
   isManufacturingEnabled,
@@ -141,6 +142,15 @@ export interface ERPState {
   updateManufacturingOrder: (id: string, data: Partial<Pick<ManufacturingOrder, 'date' | 'plannedQty' | 'productionCost' | 'remarks'>>) => void;
   startManufacturingOrder: (id: string) => void;
   completeManufacturingOrder: (id: string, data?: { finishedQty?: number; productionCost?: number; date?: string; remarks?: string }) => void;
+  /**
+   * One tap from the Products page: create and complete a manufacturing order
+   * atomically for as many finishable units as the stock allows. The order is
+   * created as Planned and completed in the same call; if completion fails
+   * (e.g. a part runs short between the click and the consume), the Planned
+   * shell is rolled back so no orphan orders ever appear.
+   * Returns the finished-goods lot id + order number produced.
+   */
+  produceForProduct: (input: { productId: string; finishedQty?: number; date?: string; productionCost?: number; remarks?: string }) => { orderId: string; orderNo: string; lotId: string; lotNo: string; finishedQty: number };
   cancelManufacturingOrder: (id: string) => void;
   deleteManufacturingOrder: (id: string) => void;
   /** Capitalise the on-hand share of processing charges expensed before v4. */
@@ -1106,6 +1116,54 @@ export const useERPStore = create<ERPState>()(
           }
         });
         if (failure) throw failure;
+      },
+
+      produceForProduct: (input) => {
+        const state = get();
+        const product = (state.products || []).find(p => p.id === input.productId);
+        if (!product) throw new AppError('Product not found.');
+        const { buildable } = buildableQty(product, state.batches || []);
+        const finishedQty = input.finishedQty !== undefined ? Math.round(Number(input.finishedQty)) : buildable;
+        if (!Number.isFinite(finishedQty) || finishedQty <= 0) {
+          throw new AppError('Nothing can be produced yet — required parts are short.');
+        }
+        if (finishedQty > buildable) {
+          throw new AppError(`Cannot produce ${finishedQty} — only ${buildable} PCS can be built from the parts on hand.`);
+        }
+        const date = input.date || new Date().toISOString().slice(0, 10);
+
+        // Create the order and complete it in one breath. The order's planned
+        // qty IS the finished qty (no partial-planning UI); if completion fails
+        // for any reason, the Planned shell is rolled back so no orphan remains.
+        const orderId = get().addManufacturingOrder({
+          productId: product.id,
+          plannedQty: finishedQty,
+          date,
+          productionCost: Math.max(0, Number(input.productionCost) || 0),
+          remarks: input.remarks,
+        });
+        try {
+          get().completeManufacturingOrder(orderId, {
+            finishedQty,
+            date,
+            productionCost: Math.max(0, Number(input.productionCost) || 0),
+            remarks: input.remarks,
+          });
+        } catch (e) {
+          try { get().deleteManufacturingOrder(orderId); } catch { /* best effort rollback */ }
+          throw e;
+        }
+
+        const after = get();
+        const order = (after.manufacturingOrders || []).find(o => o.id === orderId);
+        const lot = (after.finishedGoodsLots || []).find(l => l.manufacturingOrderId === orderId);
+        return {
+          orderId,
+          orderNo: order?.orderNo || '',
+          lotId: lot?.id || order?.lotId || '',
+          lotNo: lot?.lotNo || '',
+          finishedQty,
+        };
       },
 
       cancelManufacturingOrder: (id) => {

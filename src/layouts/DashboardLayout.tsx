@@ -1,4 +1,4 @@
-import { BarChart3, Bell, Briefcase, Calculator, ChevronDown, ChevronRight, Database, DollarSign, Factory, FileText, Hammer, LayoutDashboard, LogOut, Menu, Monitor, Moon, PackageSearch, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings, ShoppingCart, Sun, Truck, UserCog, Users, Wallet, X } from "lucide-react";
+import { BarChart3, Bell, Briefcase, Calculator, ChevronDown, ChevronRight, Database, DollarSign, Factory, FileText, LayoutDashboard, LogOut, Menu, Monitor, Moon, PackageSearch, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings, ShoppingCart, Sun, Truck, UserCog, Users, Wallet, X } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -495,8 +495,6 @@ export function DashboardLayout() {
     sales: useERPStore(s => s.sales.length),
     // Open processing jobs (still awaiting full receipt) — action-oriented count.
     openJobs: useERPStore(s => s.processingSends.filter(j => j.status === 'Pending' || j.status === 'Partial').length),
-    // Manufacturing orders still waiting for completion.
-    openOrders: useERPStore(s => (s.manufacturingOrders || []).filter(o => o.status === 'Planned' || o.status === 'In Progress').length),
     // Parties with money on the street — customers owing us + suppliers we owe.
     partiesWithBalance: useERPStore(s =>
       s.customers.filter(c => (c.balanceReceivable || 0) > 0).length +
@@ -540,7 +538,7 @@ export function DashboardLayout() {
       items: [
         { icon: ShoppingCart, label: "Purchases", path: "/purchases", requiredModule: "Purchases", badge: badgeCounts.purchases },
         { icon: Factory, label: "Processing", path: "/processing", requiredModule: "Processing", badge: badgeCounts.openJobs },
-        { icon: Hammer, label: "Manufacturing", path: "/manufacturing", requiredModule: "Manufacturing", badge: badgeCounts.openOrders },
+
         { icon: DollarSign, label: "Sales", path: "/sales", requiredModule: "Sales", badge: badgeCounts.sales },
         { icon: Users, label: "Ledgers", path: "/ledgers", requiredModule: "Ledgers", badge: badgeCounts.partiesWithBalance },
       ]

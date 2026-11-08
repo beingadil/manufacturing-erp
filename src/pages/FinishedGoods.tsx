@@ -1,8 +1,8 @@
-import { FileText, Layers, Package, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, FileText, Layers, Package, PackageCheck, Pencil, Plus, Trash2 } from "lucide-react";
 import React, { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Column, DataTable, RowActionButton } from "../components/DataTable";
 import { DeleteConfirmationModal } from "../components/DeleteConfirmationModal";
+import { DatePicker } from '../components/ui/date-picker';
 import { FormField } from '../components/form/FormField';
 import { FormFooter } from '../components/form/FormFooter';
 import { FormGrid } from '../components/form/FormGrid';
@@ -11,13 +11,13 @@ import { FormSection } from '../components/form/FormSection';
 import { formInputClass } from '../components/form/formStyles';
 import { QuickAddMaterial } from "../components/QuickAddModals";
 import { SearchableSelect } from "../components/SearchableSelect";
-import { isManufacturingEnabled, lotAverageCost, lotStockForProduct } from "../lib/business/ManufacturingService";
-import { formatCurrency, formatNumber } from "../lib/utils";
+import { isManufacturingEnabled, lotAverageCost, lotStockForProduct, buildableQty, consumeComponentsForManufacturing } from "../lib/business/ManufacturingService";
+import { cn, formatCurrency, formatNumber } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
 import type { ProductComponent, ProductUsageType } from "../types/erp";
 
 export function FinishedGoods() {
-  const { products, materials, categories, sales, finishedGoodsLots, manufacturingOrders, stateSchemaVersion, addProduct, updateModuleItem, removeModuleItem } = useERPStore();
+  const { products, materials, categories, sales, batches, finishedGoodsLots, manufacturingOrders, stateSchemaVersion, addProduct, updateModuleItem, removeModuleItem, produceForProduct } = useERPStore();
   const v4 = isManufacturingEnabled({ stateSchemaVersion });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAddMaterialOpen, setIsAddMaterialOpen] = useState(false);
@@ -39,8 +39,11 @@ export function FinishedGoods() {
   });
   const [components, setComponents] = useState<ProductComponent[]>([]);
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; id: string; no: string }>({ isOpen: false, id: '', no: '' });
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [producing, setProducing] = useState<any | null>(null);
+  const [produceForm, setProduceForm] = useState({ qty: '', productionCost: '0', date: new Date().toISOString().slice(0, 10), remarks: '' });
 
-  const { name, sku:_sku, sellingPrice, usageType, materialId, description } = formData;
+  const { name, sku:_sku, sellingPrice, materialId, description } = formData;
 
   const openEditModal = (product: any) => {
     setEditingProduct(product);
@@ -145,6 +148,61 @@ export function FinishedGoods() {
     setDeleteModal({ isOpen: false, id: '', no: '' });
   };
 
+  const openProduce = (item: any) => {
+    setProducing(item);
+    setProduceForm({
+      qty: String(item.buildable),
+      productionCost: '0',
+      date: new Date().toISOString().slice(0, 10),
+      remarks: '',
+    });
+  };
+
+  const produceQty = Math.round(Number(produceForm.qty));
+  const produceQtyError = !producing
+    ? ''
+    : !Number.isFinite(produceQty) || produceQty <= 0
+      ? 'Enter a whole number greater than zero.'
+      : produceQty > producing.buildable
+        ? `Cannot exceed ${formatNumber(producing.buildable)} PCS — parts are short for more.`
+        : '';
+
+  // Live unit-cost estimate for the chosen quantity (component costs at FIFO).
+  const produceUnitCost = useMemo(() => {
+    if (!producing || !Number.isFinite(produceQty) || produceQty <= 0) return null;
+    const reqs = (producing.buildableLines || []).map((l: any) => ({
+      materialId: l.materialId,
+      pcs: l.quantityPerUnit * produceQty,
+    }));
+    if (reqs.length === 0) return null;
+    try {
+      const drawn = consumeComponentsForManufacturing(batches || [], reqs);
+      return drawn.totalCost / produceQty;
+    } catch {
+      return null;
+    }
+  }, [producing, produceQty, batches]);
+
+  const handleProduce = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!producing) return;
+    if (produceQtyError) return;
+    try {
+      const result = produceForProduct({
+        productId: producing.id,
+        finishedQty: produceQty,
+        date: produceForm.date,
+        productionCost: Number(produceForm.productionCost) || 0,
+        remarks: produceForm.remarks.trim() || undefined,
+      });
+      toast.success(`${producing.name}: ${formatNumber(result.finishedQty)} PCS produced — ${result.lotNo || 'lot'} posted.`);
+      setProducing(null);
+      setExpandedId(producing.id);
+    } catch (error: any) {
+      toast.error(error?.message ?? 'Could not produce.');
+    }
+  };
+
   const _componentMaterials = materials.filter(m => m.usageType === 'component' && m.status !== 'Inactive');
   const _sellableMaterials = materials.filter(m => m.usageType !== 'component' && m.status !== 'Inactive');
 
@@ -168,6 +226,7 @@ export function FinishedGoods() {
   const enrichedProducts = useMemo(() => products.map(p => {
     const m = materials.find(mat => mat.id === p.materialId);
     const cat = categories.find(c => c.id === (m?.categoryId || p.categoryId));
+    const built = v4 ? buildableQty(p, batches || []) : { buildable: 0, lines: [] };
     return {
       ...p,
       categoryName: cat?.name || '-',
@@ -183,75 +242,17 @@ export function FinishedGoods() {
         ? p.components!.length
         : (p.materialId ? 1 : 0),
       bomVersion: p.bomVersion ?? 1,
+      buildable: built.buildable,
+      buildableLines: built.lines.map(line => ({
+        ...line,
+        materialName: materials.find(mat => mat.id === line.materialId)?.name || '?',
+      })),
     };
-  }), [products, materials, categories, finishedGoodsLots, v4]);
+  }), [products, materials, categories, finishedGoodsLots, v4, batches]);
 
-  const _isAssembled = usageType === 'assembled';
+  const canProduceAny = enrichedProducts.filter(p => (p.buildable || 0) > 0).length;
+  const readyToMakeTotal = enrichedProducts.reduce((sum, p) => sum + (p.buildable || 0), 0);
 
-  const columns: Column<typeof enrichedProducts[0]>[] = [
-    { key: "name", label: "Product Name", sortable: true, render: (item) => <span className="font-medium">{item.name}</span> },
-    { key: "sku", label: "SKU", sortable: true, render: (item) => <span className="font-mono text-xs text-muted-foreground">{item.sku || '—'}</span> },
-    { key: "categoryName", label: "Category", sortable: true },
-    { key: "materialName", label: "Made From", sortable: true,
-      render: (item) => {
-        const assembled = item.usageType === 'assembled' && (item.components?.length ?? 0) > 0;
-        const names = assembled
-          ? item.components!.map(c => materials.find(m => m.id === c.materialId)?.name ?? '?')
-          : [item.materialName];
-        return (
-          <div className="flex flex-col gap-0.5">
-            <span className={assembled ? 'text-xs text-foreground' : ''}>{names.join(' + ')}</span>
-            <span className="font-mono text-[10px] text-muted-foreground">
-              BOM v{item.bomVersion} · {item.bomLines} line{item.bomLines === 1 ? '' : 's'}
-            </span>
-          </div>
-        );
-      },
-    },
-    ...(v4 ? [{
-      key: "averageCost",
-      label: "Avg Cost (PKR)",
-      align: "right" as const,
-      sortable: true,
-      render: (item: typeof enrichedProducts[0]) => (
-        <span className="tabular-nums text-muted-foreground">{formatCurrency(item.averageCost)}</span>
-      ),
-    }] : []),
-    { key: "sellingPrice", label: "Selling Price (PKR)", align: "right", sortable: true, render: (item) => <span className="font-medium">{formatCurrency(item.sellingPrice)}</span> },
-    { key: "availableStock", label: v4 ? "Finished Stock (PCS)" : "Available Stock (PCS)", align: "right", sortable: true,
-      render: (item) => (
-        <div className="flex flex-col items-end gap-0.5">
-          <span className={item.availableStock > 0 ? "font-bold text-success" : "font-bold text-muted-foreground"}>{item.availableStock}</span>
-          {v4 && item.availableStock > 0 && (
-            <span className="text-[10px] tabular-nums text-muted-foreground">{formatCurrency(item.stockValue)}</span>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: "actions",
-      label: "Actions",
-      align: "right",
-      render: (item) => (
-        <div className="flex items-center justify-end gap-1">
-          <RowActionButton
-            onClick={() => openEditModal(item)}
-            label={`Edit ${item.name}`}
-            tone="primary"
-          >
-            <Pencil />
-          </RowActionButton>
-          <RowActionButton
-            onClick={() => setDeleteModal({ isOpen: true, id: item.id, no: item.name })}
-            label={`Delete ${item.name}`}
-            tone="destructive"
-          >
-            <Trash2 />
-          </RowActionButton>
-        </div>
-      )
-    }
-  ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
@@ -262,7 +263,7 @@ export function FinishedGoods() {
           </div>
           <div>
             <h2 className="text-2xl font-bold tracking-tight text-foreground">Products</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">Manage final products linked to raw materials.</p>
+            <p className="text-sm text-muted-foreground mt-0.5">What's ready to make, and one tap turns parts into sellable stock.</p>
           </div>
         </div>
         <button onClick={() => setIsModalOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
@@ -287,6 +288,13 @@ export function FinishedGoods() {
         </div>
         {v4 && (
           <div className="border-l border-border/60 pl-10">
+            <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Ready to make</div>
+            <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-emerald-500">{formatNumber(readyToMakeTotal)}</div>
+            <div className="text-xs text-muted-foreground">{canProduceAny} {canProduceAny === 1 ? 'product' : 'products'} possible</div>
+          </div>
+        )}
+        {v4 && (
+          <div className="border-l border-border/60 pl-10">
             <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Stock Value</div>
             <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{formatCurrency(enrichedProducts.reduce((s, p) => s + (p.stockValue || 0), 0))}</div>
             <div className="text-xs text-muted-foreground">At produced cost</div>
@@ -294,14 +302,151 @@ export function FinishedGoods() {
         )}
       </section>
 
-      <DataTable
-        data={enrichedProducts}
-        columns={columns}
-        searchKeys={["name", "sku", "categoryName", "materialName"]}
-        searchPlaceholder="Search products..."
-        persistKey="products-table"
-        defaultSortKey="name"
-      />
+      {/* ── Products: one row each, expand for parts / lots / history, one-tap produce ── */}
+      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <tr>
+              <th className="w-10 px-2 py-3" />
+              <th className="px-4 py-3 text-left">Product</th>
+              <th className="px-4 py-3 text-left">Category</th>
+              <th className="px-4 py-3 text-right">FG on hand</th>
+              {v4 && <th className="px-4 py-3 text-right">Ready to make</th>}
+              {v4 && <th className="px-4 py-3 text-right">Avg cost</th>}
+              <th className="px-4 py-3 text-right">Price</th>
+              <th className="px-4 py-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/50">
+            {enrichedProducts.length === 0 && (
+              <tr><td colSpan={v4 ? 8 : 6} className="px-6 py-10 text-center text-sm text-muted-foreground">No products yet — add one to start the factory floor.</td></tr>
+            )}
+            {enrichedProducts.map(item => {
+              const expanded = expandedId === item.id;
+              const canMake = v4 && (item.buildable || 0) > 0;
+              const zeroLines = v4 ? (item.buildableLines || []).filter((l: any) => l.lineBuildable === 0) : [];
+              return (
+                <React.Fragment key={item.id}>
+                  <tr className="transition-colors hover:bg-muted/20">
+                    <td className="px-2 py-3">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedId(expanded ? null : item.id)}
+                        aria-expanded={expanded}
+                        aria-label={expanded ? `Collapse details for ${item.name}` : `Expand details for ${item.name}`}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <ChevronRight className={cn('h-4 w-4 transition-transform duration-200', expanded && 'rotate-90')} />
+                      </button>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-foreground">{item.name}</div>
+                      <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">{item.sku || '—'} · BOM v{item.bomVersion} · {item.bomLines} line{item.bomLines === 1 ? '' : 's'}</div>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">{item.categoryName}</td>
+                    <td className="px-4 py-3 text-right">
+                      <span className={item.availableStock > 0 ? 'font-bold tabular-nums text-success' : 'tabular-nums text-muted-foreground'}>
+                        {formatNumber(item.availableStock)} PCS
+                      </span>
+                      {v4 && item.availableStock > 0 && (
+                        <div className="text-[10px] tabular-nums text-muted-foreground">{formatCurrency(item.stockValue)}</div>
+                      )}
+                    </td>
+                    {v4 && (
+                      <td className="px-4 py-3 text-right">
+                        {canMake ? (
+                          <span className="text-base font-bold tabular-nums text-emerald-500">{formatNumber(item.buildable)}</span>
+                        ) : (
+                          <div className="flex flex-col items-end">
+                            <span className="text-sm font-semibold tabular-nums text-muted-foreground">0</span>
+                            {zeroLines.length > 0 && (
+                              <span className="text-[10px] leading-tight text-muted-foreground/70">
+                                need {zeroLines.map((l: any) => `${l.materialName} (${l.available}/${l.quantityPerUnit})`).join(' · ')}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                    )}
+                    {v4 && (
+                      <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{item.averageCost > 0 ? formatCurrency(item.averageCost) : '—'}</td>
+                    )}
+                    <td className="px-4 py-3 text-right tabular-nums font-medium text-foreground">{formatCurrency(item.sellingPrice)}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {v4 && (
+                          <button
+                            type="button"
+                            onClick={() => openProduce(item)}
+                            disabled={!canMake}
+                            title={canMake ? `Produce ${formatNumber(item.buildable)} PCS of ${item.name}` : 'Parts are short — nothing can be made yet'}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-30"
+                          >
+                            <PackageCheck className="h-3.5 w-3.5" />
+                            Produce
+                          </button>
+                        )}
+                        <button onClick={() => openEditModal(item)} aria-label={`Edit ${item.name}`} className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-primary"><Pencil className="h-4 w-4" /></button>
+                        <button onClick={() => setDeleteModal({ isOpen: true, id: item.id, no: item.name })} aria-label={`Delete ${item.name}`} className="rounded-md p-1.5 text-destructive transition-colors hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                  {expanded && (
+                    <tr className="bg-muted/10">
+                      <td colSpan={v4 ? 8 : 6} className="px-5 py-4">
+                        <div className="grid gap-4 md:grid-cols-3">
+                          {/* Parts */}
+                          <div className="rounded-xl border border-border/60 bg-card p-4">
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">What it takes</div>
+                            <ul className="mt-2 space-y-1.5">
+                              {(item.buildableLines || []).map((l: any) => {
+                                const short = l.lineBuildable === 0;
+                                return (
+                                  <li key={l.materialId} className="flex items-center justify-between gap-2 text-xs">
+                                    <span className="min-w-0 truncate">{l.materialName} <span className="text-muted-foreground">× {l.quantityPerUnit}/pc</span></span>
+                                    <span className={cn('shrink-0 tabular-nums', short ? 'text-destructive font-semibold' : 'text-foreground')}>{formatNumber(l.available)} on hand</span>
+                                  </li>
+                                );
+                              })}
+                              {(item.buildableLines || []).length === 0 && <li className="text-xs text-muted-foreground">No components configured.</li>}
+                            </ul>
+                          </div>
+                          {/* Lots */}
+                          <div className="rounded-xl border border-border/60 bg-card p-4">
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Finished lots</div>
+                            <ul className="mt-2 space-y-1.5">
+                              {(finishedGoodsLots || []).filter((l: any) => l.productId === item.id).slice(0, 6).map((l: any) => (
+                                <li key={l.id} className="flex items-center justify-between gap-2 text-xs">
+                                  <span className="font-mono text-muted-foreground">{l.lotNo}</span>
+                                  <span className="tabular-nums">{formatNumber(l.pcsRemaining)} PCS · {formatCurrency(l.costPerPiece)}/pc</span>
+                                </li>
+                              ))}
+                              {(finishedGoodsLots || []).filter((l: any) => l.productId === item.id).length === 0 && <li className="text-xs text-muted-foreground">Not produced yet.</li>}
+                            </ul>
+                          </div>
+                          {/* History */}
+                          <div className="rounded-xl border border-border/60 bg-card p-4">
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Produced history</div>
+                            <ul className="mt-2 space-y-1.5">
+                              {(manufacturingOrders || []).filter((o: any) => o.productId === item.id && o.status === 'Completed').slice(0, 6).map((o: any) => (
+                                <li key={o.id} className="flex items-center justify-between gap-2 text-xs">
+                                  <span className="font-mono text-muted-foreground">{o.orderNo}</span>
+                                  <span className="tabular-nums">{formatNumber(o.finishedQty || 0)} PCS · {new Date(o.date).toLocaleDateString()}</span>
+                                </li>
+                              ))}
+                              {(manufacturingOrders || []).filter((o: any) => o.productId === item.id && o.status === 'Completed').length === 0 && <li className="text-xs text-muted-foreground">No production yet.</li>}
+                            </ul>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
       <DeleteConfirmationModal
         isOpen={deleteModal.isOpen}
@@ -311,6 +456,84 @@ export function FinishedGoods() {
         recordNo={deleteModal.no}
         description="Are you sure you want to permanently delete this product? This cannot be undone."
       />
+
+      {/* ── Produce modal: exactly one tap of judgment, nothing else ── */}
+      <FormModal
+        isOpen={!!producing}
+        onClose={() => setProducing(null)}
+        title={producing ? `Produce ${producing.name}` : 'Produce'}
+        description="Parts go out of stock, finished-goods lots go in. One voucher posts it all."
+        icon={<PackageCheck />}
+        size="md"
+        accent="from-emerald-500 to-green-700"
+        footer={
+          <FormFooter
+            onCancel={() => setProducing(null)}
+            formId="produce-form"
+            submitLabel={produceQty > 0 ? `Produce ${formatNumber(produceQty)} PCS` : 'Produce'}
+          />
+        }
+      >
+        {producing && (
+          <form id="produce-form" onSubmit={handleProduce} className="space-y-5">
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
+              <div className="min-w-0">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Ready to make</div>
+                <div className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{formatNumber(producing.buildable)} <span className="text-sm font-semibold text-muted-foreground">PCS</span></div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Unit cost</div>
+                <div className="text-sm font-semibold tabular-nums text-foreground">{produceUnitCost != null ? formatCurrency(produceUnitCost) : '—'}</div>
+                <div className="text-[10px] text-muted-foreground">at current part cost</div>
+              </div>
+            </div>
+
+            <FormGrid cols={2}>
+              <FormField id="produce-qty" label="Quantity to produce (PCS)" required hint={produceQtyError || `Max ${formatNumber(producing.buildable)} PCS at current parts stock`}>
+                <input
+                  id="produce-qty"
+                  type="number"
+                  min={1}
+                  max={producing.buildable}
+                  step={1}
+                  required
+                  autoFocus
+                  value={produceForm.qty}
+                  onChange={e => setProduceForm({ ...produceForm, qty: e.target.value })}
+                  className={cn(formInputClass, produceQtyError && 'border-destructive focus:border-destructive')}
+                />
+              </FormField>
+              <FormField id="produce-date" label="Date" required>
+                <DatePicker id="produce-date" value={produceForm.date} onChange={value => setProduceForm({ ...produceForm, date: value })} className="h-[42px] w-full" />
+              </FormField>
+            </FormGrid>
+
+            <FormField id="produce-cost" label="Conversion cost (optional)">
+              <input
+                id="produce-cost"
+                type="number"
+                min={0}
+                step="0.01"
+                value={produceForm.productionCost}
+                onChange={e => setProduceForm({ ...produceForm, productionCost: e.target.value })}
+                className={formInputClass}
+                placeholder="0.00 — production labor & overhead"
+              />
+            </FormField>
+
+            <FormField id="produce-remarks" label="Remarks">
+              <textarea
+                id="produce-remarks"
+                rows={2}
+                value={produceForm.remarks}
+                onChange={e => setProduceForm({ ...produceForm, remarks: e.target.value })}
+                className={formInputClass}
+                placeholder="Anything worth noting on this run of parts"
+              />
+            </FormField>
+          </form>
+        )}
+      </FormModal>
 
       <FormModal
         isOpen={isModalOpen && !isAddMaterialOpen}

@@ -84,6 +84,52 @@ export interface ComponentConsumptionResult {
   shortage: { materialId: string; required: number; available: number } | null;
 }
 
+export interface BuildableLine {
+  materialId: string;
+  /** Component pcs consumed per ONE finished product. */
+  quantityPerUnit: number;
+  /** pcs of this material available across active batches (remaining + processed). */
+  available: number;
+  /** How many finished products this line's stock alone can cover. */
+  lineBuildable: number;
+}
+
+export interface BuildableResult {
+  /** min over all BOM lines of floor(available / quantityPerUnit). 0 when any part is missing. */
+  buildable: number;
+  /** Line entries in BOM order; used by the UI to show exactly what's short. */
+  lines: BuildableLine[];
+}
+
+/**
+ * How many finished units of `product` the stock can cover right now —
+ * the live "Ready to make" number. Pure (no store, no mutation).
+ *
+ * Mirrors the draw logic of consumeComponentsForManufacturing: pcs available =
+ * max(0, remainingPcs) + max(0, processedPcs) across Active batches of the material,
+ * raw counts toward FG as well (the draw takes raw pcs first, so they are
+ * available stock for assembly).
+ */
+export function buildableQty(
+  product: Product | undefined,
+  batches: Batch[],
+): BuildableResult {
+  const lines = productBom(product);
+  const input: BuildableLine[] = lines.map(line => {
+    const available = (batches || [])
+      .filter(b => b.materialId === line.materialId && b.status === 'Active')
+      .reduce((sum, b) => sum + Math.max(0, b.remainingPcs || 0) + Math.max(0, b.processedPcs || 0), 0);
+    return {
+      materialId: line.materialId,
+      quantityPerUnit: line.quantityPerUnit,
+      available,
+      lineBuildable: line.quantityPerUnit > 0 ? Math.floor(available / line.quantityPerUnit) : 0,
+    };
+  });
+  const buildable = input.length === 0 ? 0 : Math.min(...input.map(l => l.lineBuildable));
+  return { buildable: Math.max(0, buildable), lines: input };
+}
+
 function availableForManufacturing(batch: Batch): number {
   return Math.max(0, batch.remainingPcs || 0) + Math.max(0, batch.processedPcs || 0);
 }

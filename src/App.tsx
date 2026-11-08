@@ -28,7 +28,7 @@ import BillFormPage from './pages/processing/BillFormPage';
 import SendFormPage from './pages/processing/SendFormPage';
 import ReceiveFormPage from './pages/processing/ReceiveFormPage';
 import { Login } from './pages/Login';
-import { Manufacturing } from './pages/Manufacturing';
+
 import { MaterialDetail } from './pages/MaterialDetail';
 import { MonitorScreen } from './pages/MonitorScreen';
 import { Processors } from './pages/Processors';
@@ -143,7 +143,8 @@ export default function App() {
           <Route path="processing/send/:id?" element={<RouteGuard requireModule="Processing" requireAction="View"><SendFormPage /></RouteGuard>} />
           <Route path="processing/receive/:id?" element={<RouteGuard requireModule="Processing" requireAction="View"><ReceiveFormPage /></RouteGuard>} />
           <Route path="processing/generate-bill/:id?" element={<RouteGuard requireModule="Processing" requireAction="View"><BillFormPage /></RouteGuard>} />
-          <Route path="manufacturing" element={<RouteGuard requireModule="Manufacturing" requireAction="View"><Manufacturing /></RouteGuard>} />
+          {/* Manufacturing is retired — the Products page is the factory floor. Keep /manufacturing as a redirect for old bookmarks. */}
+          <Route path="manufacturing" element={<Navigate to="/products" replace />} />
           <Route path="sales" element={<RouteGuard requireModule="Sales" requireAction="View"><Sales /></RouteGuard>} />
           <Route path="sales/new" element={<RouteGuard requireModule="Sales" requireAction="View"><SalesFormPage /></RouteGuard>} />
           <Route path="sales/edit/:id" element={<RouteGuard requireModule="Sales" requireAction="View"><SalesFormPage /></RouteGuard>} />
