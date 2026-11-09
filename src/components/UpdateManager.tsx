@@ -8,6 +8,9 @@ interface UpdateStatus {
   message: string;
   percent?: number;
   silent?: boolean;
+  retryable?: boolean;
+  detail?: string;
+  attempts?: number;
   transferred?: number;
   total?: number;
   info?: { version: string; releaseDate?: string };
@@ -21,8 +24,10 @@ export default function UpdateManager() {
   const isElectron = typeof window !== 'undefined' && !!window.electronDB;
 
   const handleStatus = useCallback((newStatus: UpdateStatus) => {
-    // Don't show silent errors or normal "up-to-date" messages as toast
-    if (newStatus.status === 'error' && newStatus.silent) {
+    // Silent statuses are background housekeeping: automatic checks and the
+    // first retries after a transient failure. Manual checks, available
+    // updates and completed downloads are never silent.
+    if (newStatus.silent) {
       return;
     }
     setStatus(newStatus);
@@ -98,7 +103,8 @@ export default function UpdateManager() {
                     ${status.status === 'up-to-date' ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400' : ''}
                     ${status.status === 'downloading' ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400' : ''}
                     ${status.status === 'downloaded' ? 'bg-violet-100 dark:bg-violet-900/50 text-violet-600 dark:text-violet-400' : ''}
-                    ${status.status === 'error' ? 'bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400' : ''}
+                    ${status.status === 'error' && status.retryable ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400' : ''}
+                    ${status.status === 'error' && !status.retryable ? 'bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400' : ''}
                   `}>
                     {status.status === 'checking' && <RotateCw className="w-5 h-5 animate-spin" />}
                     {status.status === 'available' && <Download className="w-5 h-5" />}
@@ -119,12 +125,15 @@ export default function UpdateManager() {
                       {status.status === 'up-to-date' && `Up to Date`}
                       {status.status === 'downloading' && 'Downloading Update'}
                       {status.status === 'downloaded' && 'Update Ready'}
-                      {status.status === 'error' && 'Update Error'}
+                      {status.status === 'error' && (status.retryable ? "Couldn't Check for Updates" : 'Update Error')}
                     </p>
-                    <p className={`
+                    <p
+                      className={`
                       text-xs mt-0.5 truncate
                       ${isUpToDate ? 'text-emerald-600/70 dark:text-emerald-300/70' : 'text-gray-500 dark:text-gray-400'}
-                    `}>
+                    `}
+                      title={status.status === 'error' ? status.detail : undefined}
+                    >
                       {status.status === 'checking' && 'Checking for new version…'}
                       {status.status === 'available' && `v${status.info?.version || '??'} is ready to download`}
                       {status.status === 'up-to-date' && `v${APP_VERSION} — latest version`}

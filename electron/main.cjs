@@ -340,10 +340,124 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     error: (msg) => console.error('[AutoUpdater]', msg),
   };
 
+  // ── Check Schedule ─────────────────────────────────────────────────────
+  // A single failed check at startup used to leave the app stuck on the old
+  // version until the user fully restarted it. GitHub has served 504s to
+  // anonymous update checks for hours, so one attempt is not enough.
+  //
+  // Attempt 1 runs shortly after launch. Failures retry with backoff, then
+  // fall back to a periodic check every few hours. Automatic checks stay
+  // silent until every retry has failed; only then does the UI show a quiet
+  // "couldn't check for updates" card. Manual checks always report back.
+  const UPDATE_FIRST_CHECK_DELAY_MS = 5000;
+  const UPDATE_RETRY_DELAYS_MS = [30_000, 2 * 60_000, 10 * 60_000];
+  const UPDATE_PERIODIC_INTERVAL_MS = 4 * 60 * 60_000;
+  const UPDATE_PERIODIC_JITTER_MS = 15 * 60_000;
+
+  let updateCheckTimer = null;
+  let updateCheckInFlight = false;
+  let updateCheckReason = 'startup';
+  let updateFailures = 0;
+  let updateLastError = '';
+  let updateLastFailureAt = 0;
+  let updateReadyVersion = null;
+
+  const describeDelay = (ms) => {
+    const seconds = Math.max(1, Math.round(ms / 1000));
+    return seconds < 60 ? `${seconds}s` : `${Math.round(seconds / 60)}m`;
+  };
+
+  const nextPeriodicDelay = () =>
+    UPDATE_PERIODIC_INTERVAL_MS + Math.floor(Math.random() * UPDATE_PERIODIC_JITTER_MS);
+
+  function scheduleUpdateCheck(delayMs, reason) {
+    if (updateCheckTimer) {
+      clearTimeout(updateCheckTimer);
+      updateCheckTimer = null;
+    }
+    updateCheckTimer = setTimeout(() => {
+      updateCheckTimer = null;
+      void runUpdateCheck(reason);
+    }, delayMs);
+    // Do not keep the process alive just to run an update check.
+    if (typeof updateCheckTimer.unref === 'function') updateCheckTimer.unref();
+  }
+
+  function reportUpdateFailure(error, { manual }) {
+    // electron-updater can emit `error` and reject the check promise for the
+    // same failure. Count it once so the backoff is not shortened — but never
+    // swallow a failure the user explicitly asked for.
+    const now = Date.now();
+    if (!manual && now - updateLastFailureAt < 2000) return;
+    updateLastFailureAt = now;
+
+    updateFailures += 1;
+    updateLastError = error?.message || String(error);
+    const canRetry = updateFailures <= UPDATE_RETRY_DELAYS_MS.length;
+    const delay = canRetry
+      ? UPDATE_RETRY_DELAYS_MS[updateFailures - 1]
+      : nextPeriodicDelay();
+    const quiet = canRetry && !manual;
+    const message = canRetry
+      ? `Couldn't check for updates. Retrying in ${describeDelay(delay)}.`
+      : "Couldn't check for updates. Will try again automatically.";
+
+    console.warn(
+      `[AutoUpdater] Check failed (attempt ${updateFailures}): ${updateLastError}. ` +
+      `Next attempt in ${describeDelay(delay)}.`
+    );
+    sendUpdateStatus({
+      status: 'error',
+      message,
+      detail: updateLastError,
+      silent: quiet,
+      retryable: true,
+      attempts: updateFailures,
+    });
+    scheduleUpdateCheck(delay, canRetry ? 'retry' : 'periodic');
+  }
+
+  async function runUpdateCheck(reason) {
+    if (!app.isPackaged) return { success: true, skipped: true };
+    if (updateCheckInFlight) {
+      // A manual click while a background check is already running adopts
+      // that check: the user is now watching, so its result must not be silent.
+      if (reason === 'manual') updateCheckReason = 'manual';
+      return { success: true, skipped: true };
+    }
+    // Once an update is downloaded and waiting for install, stop automatic
+    // re-checks — they would re-emit update-downloaded and run the pre-install
+    // database backup again for the same version. Manual checks still work.
+    if (reason !== 'manual' && updateReadyVersion) return { success: true, skipped: true };
+    // A manual check starts a fresh backoff cycle instead of inheriting the
+    // failures that made the user click the button in the first place.
+    if (reason === 'manual') updateFailures = 0;
+
+    updateCheckInFlight = true;
+    updateCheckReason = reason;
+    try {
+      await autoUpdater.checkForUpdates();
+      updateFailures = 0;
+      updateLastError = '';
+      scheduleUpdateCheck(nextPeriodicDelay(), 'periodic');
+      return { success: true };
+    } catch (error) {
+      reportUpdateFailure(error, { manual: updateCheckReason === 'manual' });
+      return { success: false, error: updateLastError };
+    } finally {
+      updateCheckInFlight = false;
+    }
+  }
+
   // ── Event Handlers ─────────────────────────────────────────────────────
   autoUpdater.on('checking-for-update', () => {
     console.log('[AutoUpdater] Checking for updates...');
-    sendUpdateStatus({ status: 'checking', message: 'Checking for updates...' });
+    sendUpdateStatus({
+      status: 'checking',
+      message: 'Checking for updates...',
+      // Background checks (startup, retries, periodic) must not pop a toast.
+      silent: updateCheckReason !== 'manual',
+    });
   });
 
   autoUpdater.on('update-available', (info) => {
@@ -355,7 +469,13 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
 
   autoUpdater.on('update-not-available', (info) => {
     console.log('[AutoUpdater] No updates available');
-    sendUpdateStatus({ status: 'up-to-date', message: `Up to date (v${app.getVersion()})`, info });
+    sendUpdateStatus({
+      status: 'up-to-date',
+      message: `Up to date (v${app.getVersion()})`,
+      info,
+      // Only a user-initiated check should announce that it is up to date.
+      silent: updateCheckReason !== 'manual',
+    });
   });
 
   autoUpdater.on('download-progress', (progress) => {
@@ -376,12 +496,17 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
 
     // ── Critical: backup database before update installs ──
     // The backup goes to the EXE directory which survives uninstall.
-    const backupResult = db.createUpdateSafeBackup();
-    if (backupResult.success) {
-      console.log('[AutoUpdater] Pre-update database backup saved:', backupResult.path);
-    } else {
-      console.warn('[AutoUpdater] Pre-update backup failed (non-fatal):', backupResult.error);
+    // Only back up once per version: a manual re-check after the download
+    // re-emits this event from the cache, and a second backup is pointless.
+    if (updateReadyVersion !== info.version) {
+      const backupResult = db.createUpdateSafeBackup();
+      if (backupResult.success) {
+        console.log('[AutoUpdater] Pre-update database backup saved:', backupResult.path);
+      } else {
+        console.warn('[AutoUpdater] Pre-update backup failed (non-fatal):', backupResult.error);
+      }
     }
+    updateReadyVersion = info.version;
 
     sendUpdateStatus({
       status: 'downloaded',
@@ -400,19 +525,21 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
 
   autoUpdater.on('error', (error) => {
     console.error('[AutoUpdater] Error:', error.message);
-    // Don't show network errors to users — they're expected behind firewalls
-    sendUpdateStatus({ status: 'error', message: error.message, silent: true });
+    updateLastError = error.message;
+    // A failed CHECK is handled (and retried) by runUpdateCheck's catch. This
+    // event also fires for failed background DOWNLOADS, which happen after the
+    // check promise has resolved — retry those on the same backoff instead of
+    // waiting for the next periodic check.
+    if (!updateCheckInFlight) {
+      reportUpdateFailure(error, { manual: updateCheckReason === 'manual' });
+    }
   });
 
   // ── IPC Handlers ────────────────────────────────────────────────────────
   ipcMain.handle('update:check', async () => {
-    try {
-      await autoUpdater.checkForUpdates();
-      return { success: true };
-    } catch (error) {
-      console.warn('[AutoUpdater] Check failed:', error.message);
-      return { success: false, error: error.message };
-    }
+    // Never throws: failures are reported through update:status and retried
+    // on the schedule above, so the renderer just needs success/skipped.
+    return runUpdateCheck('manual');
   });
 
   ipcMain.handle('update:install', async () => {
@@ -442,17 +569,14 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
 
   createWindow();
 
-  // Check for updates after a delay (give the window time to render)
-  setTimeout(() => {
-    if (app.isPackaged) {
-      console.log('[AutoUpdater] Starting update check...');
-      autoUpdater.checkForUpdates().catch(err => {
-        console.warn('[AutoUpdater] Initial check failed:', err.message);
-      });
-    } else {
-      console.log('[AutoUpdater] Skipping update check in dev mode');
-    }
-  }, 5000);
+  // First check runs shortly after launch, then the schedule owns every
+  // subsequent attempt (retry backoff or the periodic re-check).
+  if (app.isPackaged) {
+    console.log('[AutoUpdater] First update check scheduled in 5s');
+    scheduleUpdateCheck(UPDATE_FIRST_CHECK_DELAY_MS, 'startup');
+  } else {
+    console.log('[AutoUpdater] Skipping update check in dev mode');
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

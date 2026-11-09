@@ -918,6 +918,8 @@ function AboutUpdatesTab() {
     message: string;
     version?: string;
     percent?: number;
+    detail?: string;
+    retryable?: boolean;
   } | null>(null);
   const [checking, setChecking] = useState(false);
   const isElectron = typeof window !== 'undefined' && !!(window as any).electronDB;
@@ -948,11 +950,16 @@ function AboutUpdatesTab() {
   React.useEffect(() => {
     if (isElectron && (window as any).electronDB?.onUpdateStatus) {
       const unsubscribe = (window as any).electronDB.onUpdateStatus((status: any) => {
+        // Background checks and retries are silent by design; only manual
+        // checks, real progress, and the exhausted-retry state reach the UI.
+        if (status.silent) return;
         setUpdateStatus({
           status: status.status,
           message: status.message,
           version: status.info?.version,
           percent: status.percent,
+          detail: status.detail,
+          retryable: status.retryable,
         });
         if (status.status !== 'checking' && status.status !== 'downloading') {
           setChecking(false);
@@ -1105,7 +1112,9 @@ function AboutUpdatesTab() {
                   : updateStatus.status === 'downloading'
                   ? 'border-info/30 bg-info/10'
                   : updateStatus.status === 'error'
-                  ? 'border-destructive/30 bg-destructive/10'
+                  ? updateStatus.retryable
+                    ? 'border-warning/30 bg-warning/10'
+                    : 'border-destructive/30 bg-destructive/10'
                   : 'border-border/50 bg-muted/20'
               }`}>
                 <div className="flex items-center gap-3">
@@ -1114,13 +1123,16 @@ function AboutUpdatesTab() {
                   {updateStatus.status === 'available' && <DownloadCloud className="h-5 w-5 text-info shrink-0" />}
                   {updateStatus.status === 'downloaded' && <CheckCircle2 className="h-5 w-5 text-success shrink-0" />}
                   {updateStatus.status === 'downloading' && <RotateCw className="h-5 w-5 text-info animate-spin shrink-0" />}
-                  {updateStatus.status === 'error' && <AlertCircle className="h-5 w-5 text-destructive shrink-0" />}
+                  {updateStatus.status === 'error' && (
+                    <AlertCircle className={`h-5 w-5 shrink-0 ${updateStatus.retryable ? 'text-warning' : 'text-destructive'}`} />
+                  )}
 
                   <div className="flex-1 min-w-0">
                     <p className={`text-sm font-semibold ${
                       updateStatus.status === 'up-to-date' ? 'text-success' :
-                      updateStatus.status === 'error' ? 'text-destructive' :
-                      'text-foreground'
+                      updateStatus.status === 'error'
+                        ? updateStatus.retryable ? 'text-warning' : 'text-destructive'
+                        : 'text-foreground'
                     }`}>
                       {updateStatus.message}
                     </p>
@@ -1136,6 +1148,11 @@ function AboutUpdatesTab() {
                       <p className="text-xs text-muted-foreground mt-1">
                         Version {updateStatus.version} is downloading in the background.
                         You'll be notified when it's ready to install.
+                      </p>
+                    )}
+                    {updateStatus.status === 'error' && updateStatus.detail && (
+                      <p className="text-xs text-muted-foreground mt-1 break-words">
+                        {updateStatus.detail}
                       </p>
                     )}
                   </div>

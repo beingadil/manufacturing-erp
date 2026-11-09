@@ -230,3 +230,116 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash scripts/set-release-notes.sh
+
+      - name: Verify update feed is publicly reachable
+        # Post-publish gate. A release is not done until an ANONYMOUS client
+        # can read latest.yml and download the installer it describes — that
+        # is exactly how electron-updater asks for updates. This check exists
+        # because GitHub served 504s for latest.yml while the release page and
+        # CI were green, silently blocking every installed app from updating.
+        #
+        # No token is used here on purpose: an authenticated request would not
+        # reproduce what the app actually does.
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(node -e "console.log(require('./package.json').version)")
+          TAG="v${VERSION}"
+          BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
+          MANIFEST_URL="${BASE}/latest.yml"
+          LATEST_URL="https://github.com/${GITHUB_REPOSITORY}/releases/latest"
+
+          echo "Verifying anonymous update feed for ${TAG} ..."
+
+          # Step 1: the updater discovers the newest version from this redirect.
+          RESOLVED=""
+          for attempt in $(seq 1 18); do
+            RESOLVED=$(curl -sS -o /dev/null -w "%{url_effective}" -L --max-time 30 "${LATEST_URL}" || true)
+            case "${RESOLVED}" in
+              *"/tag/${TAG}")
+                echo "  ✓ releases/latest -> ${TAG} (attempt ${attempt})"
+                break
+                ;;
+            esac
+            echo "  attempt ${attempt}/18: releases/latest -> ${RESOLVED:-<no response>}; retrying in 10s"
+            sleep 10
+          done
+          case "${RESOLVED}" in
+            *"/tag/${TAG}")
+              ;;
+            *)
+              echo "::error::releases/latest does not resolve to ${TAG} (got: ${RESOLVED:-<no response>})"
+              echo "::error::Installed apps resolve the latest version from this URL, so none of them can see this release."
+              exit 1
+              ;;
+          esac
+
+          # Step 2: latest.yml must be readable anonymously. GitHub has served
+          # 504s here during incidents while the release page itself stayed up.
+          HTTP_CODE=""
+          for attempt in $(seq 1 18); do
+            HTTP_CODE=$(curl -sS -o /dev/null -w "%{http_code}" -L --max-time 30 "${MANIFEST_URL}" || true)
+            if [ "${HTTP_CODE}" = "200" ]; then
+              echo "  ✓ latest.yml -> HTTP 200 (attempt ${attempt})"
+              break
+            fi
+            echo "  attempt ${attempt}/18: latest.yml -> HTTP ${HTTP_CODE:-<no response>}; retrying in 10s"
+            sleep 10
+          done
+          if [ "${HTTP_CODE}" != "200" ]; then
+            echo "::error::latest.yml is NOT publicly reachable (HTTP ${HTTP_CODE:-<no response>}): ${MANIFEST_URL}"
+            echo "::error::Installed apps cannot auto-update from this release. Do NOT announce it as shipped."
+            exit 1
+          fi
+          curl -sS -L --max-time 30 -o latest.yml.check "${MANIFEST_URL}"
+
+          # Step 3: the manifest must describe this exact version and asset.
+          EXPECTED_VERSION="${VERSION}" node -e '
+            const fs = require("fs");
+            const yml = fs.readFileSync("latest.yml.check", "utf8");
+            const version = /^version:\s*(\S+)/m.exec(yml)?.[1];
+            const url = /^\s*-\s*url:\s*(\S+)/m.exec(yml)?.[1];
+            const size = Number(/^\s*size:\s*(\d+)/m.exec(yml)?.[1]);
+            const sha512 = /^sha512:\s*(\S+)/m.exec(yml)?.[1];
+            if (!version) { console.error("::error::latest.yml has no version field"); process.exit(1); }
+            if (version !== process.env.EXPECTED_VERSION) {
+              console.error(`::error::latest.yml version ${version} does not match package.json ${process.env.EXPECTED_VERSION}`);
+              process.exit(1);
+            }
+            if (!url) { console.error("::error::latest.yml has no file url"); process.exit(1); }
+            if (!Number.isFinite(size) || size <= 0) { console.error("::error::latest.yml has no valid size"); process.exit(1); }
+            if (!sha512) { console.error("::error::latest.yml has no sha512"); process.exit(1); }
+            fs.writeFileSync("latest.yml.target", url);
+            console.log(`  ✓ manifest: version=${version} file=${url} size=${size}`);
+          '
+
+          # Step 4: the installer itself must download and match the manifest.
+          # A partial or corrupted upload would otherwise pass a manifest-only
+          # check and fail on every user's machine.
+          TARGET=$(cat latest.yml.target)
+          FILE_URL="${BASE}/${TARGET}"
+          echo "  downloading installer anonymously: ${FILE_URL}"
+          if ! curl -sS --fail -L --max-time 900 -o installer.check "${FILE_URL}"; then
+            echo "::error::installer referenced by latest.yml is NOT downloadable: ${FILE_URL}"
+            exit 1
+          fi
+          node -e '
+            const fs = require("fs");
+            const crypto = require("crypto");
+            const yml = fs.readFileSync("latest.yml.check", "utf8");
+            const expectedSize = Number(/^\s*size:\s*(\d+)/m.exec(yml)?.[1]);
+            const expectedSha = /^sha512:\s*(\S+)/m.exec(yml)?.[1];
+            const bytes = fs.readFileSync("installer.check");
+            const actualSha = crypto.createHash("sha512").update(bytes).digest("base64");
+            if (bytes.length !== expectedSize) {
+              console.error(`::error::installer size ${bytes.length} does not match latest.yml size ${expectedSize}`);
+              process.exit(1);
+            }
+            if (actualSha !== expectedSha) {
+              console.error("::error::installer sha512 does not match latest.yml");
+              process.exit(1);
+            }
+            console.log(`  ✓ installer verified: ${bytes.length} bytes, sha512 matches latest.yml`);
+          '
+          rm -f latest.yml.check latest.yml.target installer.check
+          echo "✓ Anonymous auto-update path verified for ${TAG}."
