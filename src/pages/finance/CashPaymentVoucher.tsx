@@ -6,7 +6,6 @@ export function CashPaymentVoucher() {
       kind="cash-payment"
       title="Cash Payment Voucher"
       subtitle="Record money paid out of the cash in hand"
-      accent="rose"
     />
   );
 }

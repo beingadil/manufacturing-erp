@@ -80,6 +80,53 @@ export function batchTotalPcs(batch: Batch): number {
 
 export class InventoryCalculationService {
   /**
+   * Sequential batch-trail FIFO across a LIST of sales, walked in chronological
+   * order. Each sale consumes finished pcs (and their cost) from the virtual
+   * remainder of the batch trail — so the sum of per-sale COGS matches one
+   * sequential consumption, unlike calling getFIFOCOGSForSale per sale (which
+   * always draws from the same initial trail and overstates headroom).
+   * Sales flagged stockModelAtSale === 'manufactured' with a recorded
+   * cogsAmount use that figure directly and consume nothing from material
+   * batches.
+   */
+  static getFIFOCOGSForSales(
+    materialId: string,
+    sales: Array<Pick<Sale, 'id' | 'date' | 'pcsSold' | 'totalAmount'> & Partial<Sale>>,
+    batches: Batch[],
+  ): Map<string, number> {
+    const result = new Map<string, number>();
+    if (!sales || sales.length === 0) return result;
+    const trail = batches
+      .filter(b => b.materialId === materialId && b.status === 'Active' && (b.processedPcs || 0) > 0)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map(b => ({ remaining: b.processedPcs || 0, costPerPiece: this.getBatchCostPerPiece(b) }));
+    for (const sale of [...sales].sort((a, b) => (a.date || '').localeCompare(b.date || '') || a.id.localeCompare(b.id))) {
+      if (sale.stockModelAtSale === 'manufactured' && typeof (sale as Sale).cogsAmount === 'number') {
+        result.set(sale.id, (sale as Sale).cogsAmount as number);
+        continue;
+      }
+      let need = sale.pcsSold || 0;
+      let cogs = 0;
+      for (const slot of trail) {
+        if (need <= 0) break;
+        const take = Math.min(slot.remaining, need);
+        if (take <= 0) continue;
+        cogs += take * slot.costPerPiece;
+        slot.remaining -= take;
+        need -= take;
+      }
+      // Legacy shortfall — value at the average tracked batch cost so COGS is never silently 0.
+      if (need > 0) {
+        cogs += need * (trail.length > 0
+          ? trail.reduce((sumCost, slot) => sumCost + slot.costPerPiece, 0) / trail.length
+          : this.getWeightedAverageCostPerPiece(materialId, batches));
+      }
+      result.set(sale.id, cogs);
+    }
+    return result;
+  }
+
+  /**
    * Weighted-average cost per piece for a material, derived from its Active
    * batches (remaining value ÷ remaining pcs). Zero when the material has no
    * costed batches yet. Used for the per-batch fallback only — never selling price.

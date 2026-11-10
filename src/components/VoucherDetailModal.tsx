@@ -1,5 +1,6 @@
 import { AlertCircle, CheckCircle2, Edit, FileText, History, Trash2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AccountingEngine } from '../lib/accounting/AccountingEngine';
 import { formatCurrency } from '../lib/utils';
 import { ErrorManagement } from '../lib/validation';
@@ -9,6 +10,7 @@ import { ModalOverlay } from './ui/ModalOverlay';
 
 export function VoucherDetailModal({ voucherId, onClose }: { voucherId: string, onClose: () => void }) {
   const { vouchers, journalEntries, accounts } = useERPStore();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'entries' | 'audit'>('entries');
   const [confirmOpen, setConfirmOpen] = useState(false);
   
@@ -96,7 +98,15 @@ export function VoucherDetailModal({ voucherId, onClose }: { voucherId: string, 
           <div className="flex items-center gap-2">
             {voucher.status === 'Posted' && (
               <>
-                <button className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium bg-muted hover:bg-muted/80 text-foreground rounded-lg transition-colors">
+                <button
+                  onClick={() => {
+                    const seg = ({ 'Cash Payment': 'cash-payment', 'Bank Payment': 'bank-payment', 'Cash Receipt': 'cash-receipt', 'Bank Receipt': 'bank-receipt', 'Journal Voucher': 'journal-voucher' } as Record<string, string>)[voucher.type];
+                    if (!seg) return;
+                    onClose();
+                    navigate(`/accounting/${seg}/edit/${voucher.id}`);
+                  }}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium bg-muted hover:bg-muted/80 text-foreground rounded-lg transition-colors"
+                >
                   <Edit className="h-3.5 w-3.5" />
                   Edit
                 </button>

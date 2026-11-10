@@ -1,8 +1,9 @@
-import { PackageSearch, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Eye, PackageSearch, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from 'sonner';
 import { InlineEditInput } from '../components/common/InlineEditInput';
+import { RawMaterialPreview } from '../components/materials/RawMaterialPreview';
 import { SafeDeleteDialog } from '../components/common/SafeDeleteDialog';
 import { FormModal } from '../components/form/FormModal';
 import { MaterialForm } from '../components/forms/MaterialForm';
@@ -36,6 +37,7 @@ export function RawMaterials() {
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<any | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [deleteDialog, setDeleteDialog] = useState<{
@@ -436,6 +438,14 @@ export function RawMaterials() {
                       </span>
                       <div className="flex items-center gap-1">
                         <button
+                          onClick={() => setPreviewId(item.id)}
+                          aria-label={`Preview ${item.name}`}
+                          title={`Preview ${item.name}`}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground/80 transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </button>
+                        <button
                           onClick={() => openEditModal(item)}
                           aria-label={`Edit ${item.name}`}
                           title={`Edit ${item.name}`}
@@ -460,6 +470,16 @@ export function RawMaterials() {
           )}
         </div>
       </section>
+
+      <RawMaterialPreview
+        open={previewId !== null}
+        onOpenChange={(open) => { if (!open) setPreviewId(null); }}
+        materialId={previewId}
+        onEdit={(m) => {
+          setPreviewId(null);
+          openEditModal(m);
+        }}
+      />
 
       <FormModal
         isOpen={isModalOpen}

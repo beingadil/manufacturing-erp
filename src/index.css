@@ -332,3 +332,16 @@
     background: hsl(var(--muted-foreground) / 0.4);
   }
 }
+
+/* No native number-input spinners anywhere — amounts are typed, not stepped
+   (journal debit/credit, simple-mode amount rows, purchase rates…). */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}

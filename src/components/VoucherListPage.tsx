@@ -1,9 +1,10 @@
 import { ArrowDownLeft, ArrowUpRight, CheckCircle2, Eye, FileText, Pencil, Plus, Trash2, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { AccountingEngine } from '../lib/accounting/AccountingEngine';
-import { cn, formatCurrency } from '../lib/utils';
+import { cn } from '../lib/utils';
+import { formatCurrency } from '../lib/utils';
 import { useERPStore } from '../store/useERPStore';
 import { Voucher } from '../types/erp';
 import { formInputClass } from './form/formStyles';
@@ -12,45 +13,43 @@ import { DatePicker } from './ui/date-picker';
 import { KpiCard } from './ui/KpiCard';
 import { SearchInput } from './ui/SearchInput';
 import { VoucherDetailModal } from './VoucherDetailModal';
-import { VoucherEditorModal, VoucherPageKind } from './VoucherEditorModal';
-import { ACCENT_BAR, ACCENT_BTN, ACCENT_HEAD, ACCENT_SOFT, KIND_ICON } from './voucherAccents';
+import type { VoucherFormMode } from './CashbookVoucherForm';
 
 interface VoucherListPageProps {
-  kind: VoucherPageKind;
+  kind: VoucherFormMode;
   title: string;
   subtitle: string;
-  accent: 'rose' | 'emerald' | 'sky' | 'amber';
-  /** Voucher types shown on this page. For JV, system module vouchers are excluded. */
 }
 
-
-export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPageProps) {
+export function VoucherListPage({ kind, title, subtitle }: VoucherListPageProps) {
   const { vouchers, journalEntries, accounts } = useERPStore();
   const today = new Date().toISOString().split('T')[0];
+  const navigate = useNavigate();
+
+  const LIST_ROUTES: Record<VoucherFormMode, string> = {
+    'cash-payment': '/accounting/cash-payment',
+    'bank-payment': '/accounting/bank-payment',
+    'cash-receipt': '/accounting/cash-receipt',
+    'bank-receipt': '/accounting/bank-receipt',
+    journal: '/accounting/journal-voucher',
+  };
+  const listRoute = LIST_ROUTES[kind];
 
   const [dateFrom, setDateFrom] = useState(today);
   const [dateTo, setDateTo] = useState(today);
   const [search, setSearch] = useState('');
   const [accountFilter, setAccountFilter] = useState('all');
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; description: string; onConfirm: () => void; variant?: 'default' | 'destructive' }>({ open: false, title: '', description: '', onConfirm: () => {} });
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
-  const [editVoucherId, setEditVoucherId] = useState<string | undefined>();
   const [viewVoucherId, setViewVoucherId] = useState<string | null>(null);
 
-  const KindIcon = KIND_ICON[kind];
-
-  // Deep link: /accounting/journal-voucher?new=1 (Dashboard Quick Entry)
-  // opens the create editor directly. Keyed on the param itself so it also
-  // fires on same-route navigations; consumes the param when done.
-  const [searchParams, setSearchParams] = useSearchParams();
+  // Deep link: /accounting/<kind>?new=1 (Dashboard Quick Entry) opens the
+  // full-page create form. Keyed on the param itself so it also fires on
+  // same-route navigations; consumes the param when done.
+  const [searchParams] = useSearchParams();
   const isNewParam = searchParams.get('new') === '1';
   useEffect(() => {
     if (!isNewParam) return;
-    setEditVoucherId(undefined);
-    setIsEditorOpen(true);
-    const params = new URLSearchParams(searchParams);
-    params.delete('new');
-    setSearchParams(params, { replace: true });
+    navigate(`${listRoute}/new`, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNewParam]);
 
@@ -134,24 +133,16 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
   }, [filteredVouchers]);
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-card">
-      {/* Accent banner */}
-      <div className={cn('shrink-0 h-1.5 bg-gradient-to-r', ACCENT_BAR[accent])} />
-
+    <div className="flex-1 flex flex-col h-full bg-background min-w-0">
       {/* Header */}
-      <div className="p-6 border-b border-border/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className={cn('flex h-11 w-11 items-center justify-center rounded-xl border shadow-sm', ACCENT_SOFT[accent])}>
-            <KindIcon className="h-5 w-5" />
-          </div>
-          <div>
-            <h2 className={cn('text-xl font-bold', ACCENT_HEAD[accent])}>{title}</h2>
-            <p className="text-sm text-muted-foreground">{subtitle}</p>
-          </div>
+      <div className="px-6 py-5 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
+        <div className="min-w-0">
+          <h2 className="text-2xl font-bold tracking-tight text-foreground">{title}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
         </div>
         <button
-          onClick={() => { setEditVoucherId(undefined); setIsEditorOpen(true); }}
-          className={cn('flex items-center gap-2 px-4 py-2.5 rounded-lg text-white font-semibold shadow-sm transition-all active:scale-95 text-sm', ACCENT_BTN[accent])}
+          onClick={() => navigate(`${listRoute}/new`)}
+          className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
         >
           <Plus className="h-4 w-4" />
           New Voucher
@@ -159,7 +150,7 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
       </div>
 
       {/* Filters */}
-      <div className="p-4 border-b border-border/50 bg-muted/10 flex flex-wrap items-center gap-3 shrink-0">
+      <div className="px-6 py-4 border-b border-border/50 flex flex-wrap items-center gap-3 shrink-0">
         <div className="flex items-center gap-2">
           <DatePicker value={dateFrom} onChange={setDateFrom} size="sm" className="w-40" placeholder="From" />
           <span className="text-muted-foreground text-sm">to</span>
@@ -186,13 +177,14 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
       </div>
 
       {/* Stat strip */}
-      <div className="px-4 py-3 border-b border-border/50 shrink-0 bg-card">
+      <div className="px-6 py-4 border-b border-border/50 shrink-0">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <KpiCard
             label="Vouchers in range"
             value={filteredVouchers.length}
             size="sm"
             icon={FileText}
+            iconClassName="text-muted-foreground"
             description="Shown for the selected filters"
           />
           <KpiCard
@@ -200,7 +192,7 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
             value={formatCurrency(totals.debit)}
             size="sm"
             icon={ArrowDownLeft}
-            iconClassName="text-success"
+            iconClassName="text-muted-foreground"
             accent="text-success"
           />
           <KpiCard
@@ -208,7 +200,7 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
             value={formatCurrency(totals.credit)}
             size="sm"
             icon={ArrowUpRight}
-            iconClassName="text-destructive"
+            iconClassName="text-muted-foreground"
             accent="text-destructive"
           />
         </div>
@@ -282,13 +274,13 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
                           <button
                             className={cn('inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-card text-muted-foreground hover:text-foreground border border-border/60 hover:border-primary/40 transition-all active:scale-95')}
                             title="Edit voucher"
-                            onClick={() => { setEditVoucherId(v.id); setIsEditorOpen(true); }}
+                            onClick={() => navigate(`${listRoute}/edit/${v.id}`)}
                           >
                             <Pencil className="h-3.5 w-3.5" />
                             Edit
                           </button>
                           <button
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-card text-amber-600 dark:text-amber-400 border border-border/60 hover:border-amber-400/50 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-all active:scale-95"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-card text-muted-foreground border border-border/60 hover:text-foreground hover:bg-muted transition-all"
                             title="Cancel / void voucher"
                             onClick={() => handleCancel(v)}
                           >
@@ -314,13 +306,6 @@ export function VoucherListPage({ kind, title, subtitle, accent }: VoucherListPa
         </table>
       </div>
 
-      <VoucherEditorModal
-        isOpen={isEditorOpen}
-        onClose={() => setIsEditorOpen(false)}
-        onSaved={() => setIsEditorOpen(false)}
-        kind={kind}
-        editVoucherId={editVoucherId}
-      />
       {viewVoucherId && <VoucherDetailModal voucherId={viewVoucherId} onClose={() => setViewVoucherId(null)} />}
 
 

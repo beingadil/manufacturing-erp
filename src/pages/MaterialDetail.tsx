@@ -6,81 +6,39 @@ import {
   ArrowRightLeft,
   ArrowUp,
   CheckCircle2,
-  ChevronDown,
   Clock,
-  Layers,
   Package,
   PackageCheck,
   Truck,
+  Pencil,
   Wallet,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { BatchRegister, batchPathLabel } from '../components/materials/BatchRegister';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { FormModal } from '../components/form/FormModal';
+import { MaterialForm } from '../components/forms/MaterialForm';
 import { InventoryCalculationService, stageAvailableEntries } from '../lib/business/InventoryCalculationService';
 import { materialCostSummary } from '../lib/processing/batchCosts';
 import { getMaterialBatchProgress, getSortedStages } from '../lib/processing/stageProgress';
 import { cn, formatCurrency, formatNumber } from '../lib/utils';
 import { useERPStore } from '../store/useERPStore';
 
-/** Collapsible tall section — no scroll traps, opens inline. */
-function Expander({
-  title,
-  icon,
-  subtitle,
-  children,
-}: {
-  title: string;
-  icon?: React.ReactNode;
-  subtitle?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center justify-between px-5 py-4 border-b border-border/50 bg-muted/30 text-left hover:bg-muted/50 transition-colors"
-        aria-expanded={open}
-      >
-        <div className="flex items-center gap-2">
-          {icon && <span className="text-muted-foreground">{icon}</span>}
-          <h3 className="font-semibold text-foreground">{title}</h3>
-          {subtitle && <span className="ml-auto text-xs text-muted-foreground">{subtitle}</span>}
-        </div>
-        <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform duration-200", open && "rotate-180")} />
-      </button>
-      {open && <div className="p-0">{children}</div>}
-    </div>
-  );
-}
-
-/** Micro-bar inside a status badge showing raw / WIP / finished split. */
-function BucketBar({
-  raw,
-  wip,
-  finished,
-}: {
-  raw: number;
-  wip: number;
-  finished: number;
-}) {
-  const total = raw + wip + finished;
-  return (
-    <div className="h-1 w-4 rounded-full border border-white/20 overflow-hidden flex">
-      {raw > 0 && <div className="h-full w-[calc({raw}*100%)] bg-muted/40" style={{ width: `${Math.max(1, (raw / total) * 100)}%` }} />}
-      {wip > 0 && <div className="h-full bg-amber-500/60" style={{ width: `${Math.max(1, (wip / total) * 100)}%` }} />}
-      {finished > 0 && <div className="h-full bg-emerald-500/70" style={{ width: `${Math.max(1, (finished / total) * 100)}%` }} />}
-    </div>
-  );
-}
-
 export function MaterialDetail() {
+  const [editOpen, setEditOpen] = useState(false);
   const { id } = useParams<{ id: string }>();
   const {
     materials, categories, batches, processingSends, purchases,
     products, sales, inventoryMovements,
     suppliers, processors, processingStages, customers, processingReceipts,
   } = useERPStore();
+
+  const [movementModuleFilter, setMovementModuleFilter] = useState('');
+  const [movementTypeFilter, setMovementTypeFilter] = useState<'' | 'IN' | 'OUT'>('');
+  const [movementQuery, setMovementQuery] = useState('');
+  const [movementVisible, setMovementVisible] = useState(200);
+  const [activeTab, setActiveTab] = useState('batches');
 
   const material = materials.find(m => m.id === id);
   const category = categories.find(c => c.id === material?.categoryId);
@@ -157,6 +115,11 @@ export function MaterialDetail() {
       pcs: InventoryCalculationService.getStageWIP(stage.id, processingSends || [], processingReceipts || [], id),
     })), [sortedStages, processingSends, processingReceipts, id]);
 
+  const cogsBySaleId = useMemo(
+    () => (material ? InventoryCalculationService.getFIFOCOGSForSales(material.id, materialSales, batches || []) : new Map<string, number>()),
+    [material, materialSales, batches],
+  );
+
   // Loss / yield analytics across the whole chain.
   const totals = useMemo(() => {
     const sent = materialSends.reduce((s, x) => s + (x.pcsSent || 0), 0);
@@ -167,10 +130,7 @@ export function MaterialDetail() {
       .filter(r => r.materialId === material?.id)
       .reduce((s, r) => s + (r.billAmount || 0), 0);
     const salesValue = materialSales.reduce((s, x) => s + (x.totalAmount || 0), 0);
-    const cogs = materialSales.reduce((s, x) => {
-      const fifo = InventoryCalculationService.getFIFOCOGSForSale(material!.id, x.pcsSold, batches || []);
-      return s + fifo.cogs;
-    }, 0);
+    const cogs = materialSales.reduce((s, x) => s + (cogsBySaleId.get(x.id) ?? 0), 0);
     return {
       sent, loss, received,
       yieldPct: sent > 0 ? Math.round(((received) / sent) * 100) : null,
@@ -179,7 +139,7 @@ export function MaterialDetail() {
       grossMargin: salesValue - cogs,
       processingCostPerPiece: received > 0 ? processingCost / received : (sent > 0 ? processingCost / sent : 0),
     };
-  }, [materialSends, materialBatches, materialSales, batches, material, processingReceipts]);
+  }, [materialSends, materialBatches, materialSales, batches, material, processingReceipts, cogsBySaleId]);
 
   if (!material) {
     return (
@@ -198,34 +158,67 @@ export function MaterialDetail() {
   const getProductName = (productId: string) => products.find(p => p.id === productId)?.name || 'Unknown';
   const getCustomerName = (customerId: string) => customers.find(c => c.id === customerId)?.name || 'Unknown';
 
-  // FIFO profit per sale (batch cost of the pcs this sale consumed).
-  const saleProfit = (saleId: string, pcsSold: number) => {
-    const fifo = InventoryCalculationService.getFIFOCOGSForSale(material.id, pcsSold, batches || []);
-    const sale = materialSales.find(s => s.id === saleId);
-    return sale ? sale.totalAmount - fifo.cogs : 0;
-  };
+  const saleProfitOf = (sale: { id: string; totalAmount: number }) =>
+    sale.totalAmount - (cogsBySaleId.get(sale.id) ?? 0);
 
-  // ── Group purchases by supplier for the card list ───────────────────────
-  const purchasesBySupplier = useMemo(() => {
-    const bySupplier = new Map<string, { supplierName: string; batches: typeof materialBatches }>();
-    for (const b of materialBatches) {
-      const purchase = purchases.find(x => x.id === b.purchaseId);
-      const supplierName = purchase ? getSupplierName(purchase.supplierId) : 'Unknown supplier';
-      const entry = bySupplier.get(supplierName) || { supplierName, batches: [] };
-      entry.batches.push(b);
-      bySupplier.set(supplierName, entry);
-    }
-    return [...bySupplier.values()].sort((a, b) => a.supplierName.localeCompare(b.supplierName));
-  }, [materialBatches, purchases]);
+  const pathChip = (p?: string) => batchPathLabel(p);
+
+  // ── Batch register rows (consumed by BatchRegister) ──────────────────────
+  const registerRows = useMemo(() => materialBatches.map(b => {
+    const purchase = purchases.find(x => x.id === b.purchaseId);
+    const prog = batchProgress.find(p => p.batch.id === b.id);
+    const costPcs = InventoryCalculationService.getBatchCostPerPiece(b);
+    const onHand = (prog?.rawPcs || 0) + (b.atProcessorPcs || 0) + (prog?.availablePcs || 0) + (prog?.finishedPcs || 0);
+    const supplierName = purchase
+      ? getSupplierName(purchase.supplierId)
+      : (b.supplierId ? getSupplierName(b.supplierId) : 'Unknown supplier');
+    return {
+      id: b.id,
+      batchNo: b.batchNo,
+      purchaseNo: purchase?.purchaseNo || '',
+      supplierName,
+      date: b.date,
+      pathLabel: pathChip(b.processingPath ?? material?.processingPath),
+      rawPcs: prog?.rawPcs ?? 0,
+      availPcs: prog?.availablePcs ?? 0,
+      wipPcs: b.atProcessorPcs || 0,
+      finishedPcs: prog?.finishedPcs ?? 0,
+      onHandPcs: onHand,
+      valueOnHand: onHand * costPcs,
+      costPerPiece: costPcs,
+      depleted: onHand <= 0,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [materialBatches, batchProgress, purchases, batches, id, material]);
+
+  const movementModules = useMemo(
+    () => [...new Set(materialMovements.map(m => m.module).filter(Boolean))] as string[],
+    [materialMovements],
+  );
+
+  const filteredMovements = useMemo(() => {
+    const q = movementQuery.trim().toLowerCase();
+    return materialMovements.filter(m => {
+      if (movementModuleFilter && m.module !== movementModuleFilter) return false;
+      if (movementTypeFilter && m.transactionType !== movementTypeFilter) return false;
+      if (q && ![m.referenceNo, m.module].filter(Boolean).some(f => String(f).toLowerCase().includes(q))) return false;
+      return true;
+    });
+  }, [materialMovements, movementModuleFilter, movementTypeFilter, movementQuery]);
+  const movementRows = filteredMovements.slice(0, movementVisible);
+
+  const trackedPcs = positions.raw + positions.inTransit + positions.available + positions.finished;
+  const trackedValue = (stageValues?.raw.value ?? 0) + (stageValues?.atProcessor.value ?? 0) + (stageValues?.finished.value ?? 0);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
+      {/* ── Header ── */}
       <div className="flex items-center gap-4">
         <Link to="/materials" className="p-2 -ml-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <div>
-          <div className="flex items-center gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
             <h2 className="text-2xl font-bold tracking-tight text-foreground">{material.name}</h2>
             <span className={cn(
               "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium",
@@ -233,374 +226,371 @@ export function MaterialDetail() {
             )}>
               {material.status}
             </span>
+            <button
+              onClick={() => setEditOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+            >
+              <Pencil className="h-3.5 w-3.5" /> Edit material
+            </button>
           </div>
           <p className="text-sm text-muted-foreground mt-1">{category?.name || 'Uncategorized'} • {material.description || 'No description'}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+            <span>No. {material.code || '—'}</span>
+            <span aria-hidden="true">·</span>
+            <span>{pathChip(material.processingPath)}</span>
+            <span aria-hidden="true">·</span>
+            <span>{material.usageType === 'component' ? 'part of a product' : 'sold on its own'}</span>
+            {material.unit && <><span aria-hidden="true">·</span><span>unit {material.unit}</span></>}
+            {material.minStockLevel !== undefined && <><span aria-hidden="true">·</span><span>min {formatNumber(material.minStockLevel)}</span></>}
+            {material.currentStock !== undefined && <><span aria-hidden="true">·</span><span>declared current {formatNumber(material.currentStock)}</span></>}
+          </div>
         </div>
       </div>
 
-      {/* ── Header summary strip — one row, no boxed KPI cards ── */}
+      {/* ── Summary strip (always visible) ── */}
       <section className="flex flex-wrap items-center gap-x-10 gap-y-4 rounded-2xl border border-border bg-card px-6 py-5 shadow-sm">
-        <div className="min-w-[120px]">
+        <div className="min-w-[110px]">
           <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Raw Stock</div>
           <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{formatNumber(stageValues?.raw.pcs ?? 0)}<span className="ml-1.5 text-sm font-medium text-muted-foreground">PCS</span></div>
-          <div className="mt-0.5 text-xs text-muted-foreground">{formatCurrency(stageValues?.raw.value ?? 0)} on hand</div>
+          <div className="mt-0.5 text-xs text-muted-foreground">{formatCurrency(stageValues?.raw.value ?? 0)}</div>
         </div>
         <div className="border-l border-border/60 pl-10">
           <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">At Processor (WIP)</div>
           <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-amber-500">{formatNumber(stageValues?.atProcessor.pcs ?? 0)}<span className="ml-1.5 text-sm font-medium text-amber-500/70">PCS</span></div>
-          <div className="mt-0.5 text-xs text-muted-foreground">{formatCurrency(stageValues?.atProcessor.value ?? 0)} on hand</div>
+          <div className="mt-0.5 text-xs text-muted-foreground">{formatCurrency(stageValues?.atProcessor.value ?? 0)}</div>
         </div>
         <div className="border-l border-border/60 pl-10">
           <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Finished Stock</div>
           <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-success">{formatNumber(stageValues?.finished.pcs ?? 0)}<span className="ml-1.5 text-sm font-medium text-success/70">PCS</span></div>
-          <div className="mt-0.5 text-xs text-muted-foreground">{formatCurrency(stageValues?.finished.value ?? 0)} on hand</div>
+          <div className="mt-0.5 text-xs text-muted-foreground">{formatCurrency(stageValues?.finished.value ?? 0)}</div>
         </div>
         <div className="border-l border-border/60 pl-10">
           <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Processing cost / piece</div>
           <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-info">{formatCurrency(totals.processingCostPerPiece)}</div>
-          <div className="mt-0.5 text-xs text-muted-foreground">{formatCurrency(totals.processingCost)} total spent on processing</div>
+          <div className="mt-0.5 text-xs text-muted-foreground">{formatCurrency(totals.processingCost)} spent on processing</div>
+        </div>
+        <div className="border-l border-border/60 pl-10">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Tracked total</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-foreground">{formatNumber(trackedPcs)}<span className="ml-1.5 text-sm font-medium text-muted-foreground">PCS</span></div>
+          <div className="mt-0.5 text-xs text-muted-foreground">{formatCurrency(trackedValue)} across all stages</div>
         </div>
       </section>
 
-      {/* ── Per-stage processing cost table (material level) ── */}
-      {materialCost && (
-        <Expander title="Per-stage processing cost" icon={<Clock className="h-4 w-4" />}>
-          <div className="rounded-xl border border-border bg-muted/20">
-            <table className="w-full text-sm text-left">
-              <thead className="text-xs text-muted-foreground bg-muted/60 sticky top-0 border-b border-border/60">
-                <tr>
-                  <th className="px-5 py-3 font-medium">Stage</th>
-                  <th className="px-5 py-3 font-medium text-right">Dispatched</th>
-                  <th className="px-5 py-3 font-medium text-right">Sent</th>
-                  <th className="px-5 py-3 font-medium text-right">Received</th>
-                  <th className="px-5 py-3 font-medium text-right">Bill amount</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60">
-                {materialCost.lines.length > 0 ? (
-                  materialCost.lines.map(l => (
-                    <tr key={l.name} className="hover:bg-muted/80 transition-colors">
-                      <td className="px-5 py-3 text-foreground">{l.name}</td>
-                      <td className="px-5 py-3 text-right font-medium text-foreground tabular-nums">{formatNumber(l.dispatches)}</td>
-                      <td className="px-5 py-3 text-right text-muted-foreground tabular-nums">{formatNumber(l.sent)}</td>
-                      <td className="px-5 py-3 text-right text-muted-foreground tabular-nums">{formatNumber(l.received)}</td>
-                      <td className="px-5 py-3 text-right font-bold text-foreground tabular-nums">{formatCurrency(l.billed)}</td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={5} className="px-5 py-8 text-center text-muted-foreground">No processing cost recorded</td>
-                  </tr>
-                )}
-              </tbody>
-              {materialCost.lines.length > 0 && (
-                <tfoot className="border-t border-border/60 bg-muted/40">
-                  <tr>
-                    <th className="px-5 py-3 font-medium text-foreground">Total</th>
-                    <th className="px-5 py-3 text-right font-medium text-foreground tabular-nums">{formatNumber(materialCost.lines.reduce((s, l) => s + l.dispatches, 0))}</th>
-                    <th className="px-5 py-3 text-right font-medium text-foreground tabular-nums">{formatNumber(materialCost.lines.reduce((s, l) => s + l.sent, 0))}</th>
-                    <th className="px-5 py-3 text-right font-medium text-foreground tabular-nums">{formatNumber(materialCost.lines.reduce((s, l) => s + l.received, 0))}</th>
-                    <th className="px-5 py-3 text-right font-bold text-foreground tabular-nums">{formatCurrency(materialCost.processingCost)}</th>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
-        </Expander>
-      )}
+      {/* ── Tabs ── */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList aria-label="Material sections" className="grid w-full grid-cols-2 sm:grid-cols-5 h-auto">
+          <TabsTrigger value="batches" className="justify-center">Batches <span className="ml-1.5 tabular-nums text-muted-foreground">{materialBatches.length}</span></TabsTrigger>
+          <TabsTrigger value="overview" className="justify-center">Overview</TabsTrigger>
+          <TabsTrigger value="processing" className="justify-center">Processing <span className="ml-1.5 tabular-nums text-muted-foreground">{materialSends.length}</span></TabsTrigger>
+          <TabsTrigger value="movements" className="justify-center">Movements <span className="ml-1.5 tabular-nums text-muted-foreground">{materialMovements.length}</span></TabsTrigger>
+          <TabsTrigger value="sales" className="justify-center">Sales <span className="ml-1.5 tabular-nums text-muted-foreground">{materialSales.length}</span></TabsTrigger>
+        </TabsList>
 
-      {/* ── Where the pieces sit right now ── */}
-      <Expander title="Where the pieces are right now" icon={<Layers className="h-4 w-4" />} subtitle={
-        <span className="text-xs text-muted-foreground">
-          Total tracked: {formatNumber(positions.raw + positions.inTransit + positions.available + positions.finished)} PCS
-          · Dispatched {formatNumber(totals.sent)} · Received back {formatNumber(totals.received)}
-          {totals.yieldPct != null && <> · Return yield {totals.yieldPct}%</>}
-          {totals.lossPct != null && totals.loss > 0 && <> · <span className="text-destructive font-medium">Loss {formatNumber(totals.loss)} PCS ({totals.lossPct}%)</span></>}
-        </span>
-      }>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="rounded-xl border border-border bg-muted/30 p-3">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1"><Package className="h-3.5 w-3.5" /> Raw — ready for stage 1</div>
-            <div className="text-xl font-bold text-foreground">{formatNumber(positions.raw)} <span className="text-xs font-medium text-muted-foreground">PCS</span></div>
-          </div>
-          <div className="rounded-xl border border-border bg-muted/30 p-3">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1"><Truck className="h-3.5 w-3.5" /> Out with processors</div>
-            <div className="text-xl font-bold text-foreground">{formatNumber(positions.inTransit)} <span className="text-xs font-medium text-muted-foreground">PCS</span></div>
-          </div>
-          <div className="rounded-xl border border-border bg-muted/30 p-3">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-              <CheckCircle2 className="h-3.5 w-3.5" /> Received — awaiting next stage
-              {positions.availableFromStage && <span className="font-medium text-foreground/70"> (from {positions.availableFromStage})</span>}
-            </div>
-            <div className="text-xl font-bold text-foreground">{formatNumber(positions.available)} <span className="text-xs font-medium text-muted-foreground">PCS</span></div>
-          </div>
-          <div className="rounded-xl border border-border bg-muted/30 p-3">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1"><PackageCheck className="h-3.5 w-3.5" /> Finished — sellable</div>
-            <div className="text-xl font-bold text-foreground">{formatNumber(positions.finished)} <span className="text-xs font-medium text-muted-foreground">PCS</span></div>
-          </div>
-        </div>
-        {stageWip.some(s => s.pcs > 0) && (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {stageWip.filter(s => s.pcs > 0).map(({ stage, pcs }) => (
-              <span key={stage.id} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs">
-                <span className="h-2 w-2 rounded-full bg-amber-500" />
-                {stage.name}: <span className="font-semibold">{formatNumber(pcs)} PCS</span> in transit
-              </span>
-            ))}
-          </div>
-        )}
-      </Expander>
+        {/* ── Batches — the register (default) ── */}
+        <TabsContent value="batches" className="mt-5">
+          <BatchRegister materialId={id!} rows={registerRows} />
+        </TabsContent>
 
-      {/* ── Purchases grouped by supplier ── */}
-      <Expander title="Purchases" icon={<Package className="h-4 w-4" />} subtitle={
-        <span className="text-xs text-muted-foreground">{materialBatches.length} purchase{s(materialBatches.length)} · {formatCurrency(materialCost?.purchaseCost ?? 0)} purchase value</span>
-      }>
-        <div className="space-y-4">
-          {purchasesBySupplier.length === 0 ? (
-            <div className="rounded-2xl border border-border bg-card px-6 py-10 text-center text-sm text-muted-foreground">No purchases recorded yet.</div>
-          ) : (
-            purchasesBySupplier.map(({ supplierName, batches: supplierBatches }) => (
-              <div key={supplierName} className="space-y-3">
-                <div className="flex items-center justify-between px-4 py-2 border-b border-border/60">
-                  <span className="font-semibold text-foreground">{supplierName}</span>
-                  <span className="text-xs font-medium text-muted-foreground">{supplierBatches.length} purchase{s(supplierBatches.length)}</span>
-                </div>
-                <div className="space-y-2">
-                  {supplierBatches.map(b => {
-                    const purchase = purchases.find(x => x.id === b.purchaseId);
-                    const prog = batchProgress.find(x => x.batch.id === b.id);
-                    const costPcs = InventoryCalculationService.getBatchCostPerPiece(b);
-                    const availPcs = prog?.availablePcs ?? 0;
-                    const sendsHere = materialSends.filter(x => x.batchId === b.id);
-                    const sendIds = new Set(sendsHere.map(x => x.id));
-                    const receiptsHere = processingReceipts.filter(r => sendIds.has(r.sendId));
-                    const recvPcs = receiptsHere.reduce((sum2, r) => sum2 + (r.pcsReceived || 0), 0);
-                    const costBilled = receiptsHere.reduce((sum2, r) => sum2 + (r.billAmount || 0), 0);
-                    const procCostPerPiece = recvPcs > 0 ? costBilled / recvPcs : 0;
-                    const sentPcs = sendsHere.reduce((sum2, x) => sum2 + (x.pcsSent || 0), 0);
-                    const lossPcs = sendsHere.reduce((sum2, x) => sum2 + (x.lossQuantity || 0), 0);
-                    const pending = Math.max(0, sentPcs - recvPcs - lossPcs);
-                    const onHand = (prog?.rawPcs || 0) + (b.atProcessorPcs || 0) + availPcs + (prog?.finishedPcs || 0);
-                    const valueOnHand = onHand * costPcs;
-                    const PO = purchase?.purchaseNo || '—';
-                    return (
-                      <article key={b.id} className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden group cursor-pointer">
-                        {/* Purchase header */}
-                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-muted/30 px-5 py-4 hover:bg-muted/50 transition-colors">
-                          <div className="flex items-center gap-4">
-                            <Link to={`/materials/${id}/purchases/${b.id}`} className="group text-sm font-semibold text-foreground hover:text-primary">
-                              <span className="block text-xs font-normal text-muted-foreground">{PO}</span>
-                              {b.batchNo}
-                            </Link>
-                            <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground">
-                              {getSupplierName(b.supplierId)}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                              {b.processingPath === 'ready_made' ? 'Ready-made' : 'Full chain'}
-                            </span>
-                            {/* Status badge + bucket micro-bars */}
-                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border text-[10px] font-bold uppercase tracking-wider">
-                              {onHand > 0 ? (
-                                <>
-                                  <span className={onHand === b.initialPcs ? 'text-success' : 'text-amber-500'}>{formatNumber(onHand)} on hand</span>
-                                  <BucketBar
-                                    raw={prog?.rawPcs ?? 0}
-                                    wip={b.atProcessorPcs || 0}
-                                    finished={prog?.finishedPcs ?? 0}
-                                  />
-                                </>
-                              ) : (
-                                <span className="text-destructive">Depleted</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        {/* Purchase numbers */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border/40">
-                          {[
-                            { label: 'Weight', value: `${formatNumber(b.weight)} ${b.weightUnit || ''}` },
-                            { label: 'Pieces', value: formatNumber(b.initialPcs) },
-                            { label: 'Rate', value: `${formatCurrency(b.ratePerUnit)} / ${b.weightUnit || 'unit'}` },
-                            { label: 'Amount', value: formatCurrency(b.amount) },
-                          ].map(cell => (
-                            <div key={cell.label} className="bg-card px-4 py-3">
-                              <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{cell.label}</div>
-                              <div className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">{cell.value}</div>
-                            </div>
-                          ))}
-                        </div>
-                        {/* Processing economics of THIS purchase */}
-                        <div className="flex flex-wrap items-center gap-x-8 gap-y-2 border-t border-border/60 px-5 py-3">
-                          <div>
-                            <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Processing cost / piece</div>
-                            <div className="mt-0.5 text-sm font-semibold tabular-nums text-info">{formatCurrency(procCostPerPiece)}</div>
-                          </div>
-                          <div>
-                            <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Processing</div>
-                            <div className="mt-0.5 text-xs text-muted-foreground">Sent {formatNumber(sentPcs)} · Recv {formatNumber(recvPcs)} · Loss {formatNumber(lossPcs)}{pending > 0 ? ` · Pending ${formatNumber(pending)}` : ''}</div>
-                          </div>
-                          <div>
-                            <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Cost / piece</div>
-                            <div className="mt-0.5 text-xs font-medium tabular-nums text-foreground">{costPcs > 0 ? formatCurrency(costPcs) : '—'}</div>
-                          </div>
-                          <div>
-                            <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Value on hand</div>
-                            <div className="mt-0.5 text-xs font-medium tabular-nums text-foreground">{formatCurrency(valueOnHand)}</div>
-                          </div>
-                        </div>
-                        <div className="border-t border-border/60 px-5 py-3">
-                          <div className="flex items-center justify-between">
-                            <Link to={`/materials/${id}/purchases/${b.id}`} className="text-xs font-semibold text-primary hover:underline">
-                              Open purchase detail →
-                            </Link>
-                            <span className="text-xs text-muted-foreground">{format(new Date(b.date), 'd MMM yyyy')}</span>
-                          </div>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
+        {/* ── Overview — where the pieces sit + stage cost ── */}
+        <TabsContent value="overview" className="mt-5 space-y-5">
+          <section>
+            <h3 className="mb-2 text-sm font-semibold text-foreground">Where the pieces are right now</h3>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Total tracked: {formatNumber(trackedPcs)} PCS
+              · Dispatched {formatNumber(totals.sent)} · Received back {formatNumber(totals.received)}
+              {totals.yieldPct != null && <> · Return yield {totals.yieldPct}%</>}
+              {totals.lossPct != null && totals.loss > 0 && <> · <span className="text-destructive font-medium">Loss {formatNumber(totals.loss)} PCS ({totals.lossPct}%)</span></>}
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="rounded-xl border border-border bg-muted/30 p-3">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1"><Package className="h-3.5 w-3.5" /> Raw — ready for stage 1</div>
+                <div className="text-xl font-bold text-foreground">{formatNumber(positions.raw)} <span className="text-xs font-medium text-muted-foreground">PCS</span></div>
               </div>
-            ))
+              <div className="rounded-xl border border-border bg-muted/30 p-3">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1"><Truck className="h-3.5 w-3.5" /> Out with processors</div>
+                <div className="text-xl font-bold text-foreground">{formatNumber(positions.inTransit)} <span className="text-xs font-medium text-muted-foreground">PCS</span></div>
+              </div>
+              <div className="rounded-xl border border-border bg-muted/30 p-3">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Received — awaiting next stage
+                  {positions.availableFromStage && <span className="font-medium text-foreground/70"> (from {positions.availableFromStage})</span>}
+                </div>
+                <div className="text-xl font-bold text-foreground">{formatNumber(positions.available)} <span className="text-xs font-medium text-muted-foreground">PCS</span></div>
+              </div>
+              <div className="rounded-xl border border-border bg-muted/30 p-3">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1"><PackageCheck className="h-3.5 w-3.5" /> Finished — sellable</div>
+                <div className="text-xl font-bold text-foreground">{formatNumber(positions.finished)} <span className="text-xs font-medium text-muted-foreground">PCS</span></div>
+              </div>
+            </div>
+            {stageWip.some(s => s.pcs > 0) && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {stageWip.filter(s => s.pcs > 0).map(({ stage, pcs }) => (
+                  <span key={stage.id} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs">
+                    <span className="h-2 w-2 rounded-full bg-amber-500" />
+                    {stage.name}: <span className="font-semibold">{formatNumber(pcs)} PCS</span> in transit
+                  </span>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {materialCost && (
+            <section>
+              <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground"><Clock className="h-4 w-4" /> Per-stage processing cost</h3>
+              <div className="overflow-x-auto rounded-xl border border-border bg-muted/20">
+                <table className="w-full min-w-[36rem] text-sm text-left">
+                  <thead className="text-xs text-muted-foreground bg-muted/60 border-b border-border/60">
+                    <tr>
+                      <th className="px-5 py-3 font-medium">Stage</th>
+                      <th className="px-5 py-3 font-medium text-right">Dispatched</th>
+                      <th className="px-5 py-3 font-medium text-right">Sent</th>
+                      <th className="px-5 py-3 font-medium text-right">Received</th>
+                      <th className="px-5 py-3 font-medium text-right">Bill amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {materialCost.lines.length > 0 ? (
+                      materialCost.lines.map(l => (
+                        <tr key={l.name} className="hover:bg-muted/80 transition-colors">
+                          <td className="px-5 py-3 text-foreground">{l.name}</td>
+                          <td className="px-5 py-3 text-right font-medium text-foreground tabular-nums">{formatNumber(l.dispatches)}</td>
+                          <td className="px-5 py-3 text-right text-muted-foreground tabular-nums">{formatNumber(l.sent)}</td>
+                          <td className="px-5 py-3 text-right text-muted-foreground tabular-nums">{formatNumber(l.received)}</td>
+                          <td className="px-5 py-3 text-right font-bold text-foreground tabular-nums">{formatCurrency(l.billed)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={5} className="px-5 py-8 text-center text-muted-foreground">No processing cost recorded</td>
+                      </tr>
+                    )}
+                  </tbody>
+                  {materialCost.lines.length > 0 && (
+                    <tfoot className="border-t border-border/60 bg-muted/40">
+                      <tr>
+                        <th className="px-5 py-3 font-medium text-foreground">Total</th>
+                        <th className="px-5 py-3 text-right font-medium text-foreground tabular-nums">{formatNumber(materialCost.lines.reduce((s, l) => s + l.dispatches, 0))}</th>
+                        <th className="px-5 py-3 text-right font-medium text-foreground tabular-nums">{formatNumber(materialCost.lines.reduce((s, l) => s + l.sent, 0))}</th>
+                        <th className="px-5 py-3 text-right font-medium text-foreground tabular-nums">{formatNumber(materialCost.lines.reduce((s, l) => s + l.received, 0))}</th>
+                        <th className="px-5 py-3 text-right font-bold text-foreground tabular-nums">{formatCurrency(materialCost.processingCost)}</th>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </section>
           )}
-        </div>
-      </Expander>
+        </TabsContent>
 
-      {/* ── Movement ledger ── */}
-      <Expander title="Movement Ledger" icon={<ArrowRightLeft className="h-4 w-4" />} subtitle={materialMovements.length ? `${materialMovements.length} movement${materialMovements.length === 1 ? '' : 's'}` : 'No movements'}>
-        {materialMovements.length === 0 ? (
-          <div className="rounded-xl border border-border bg-card px-6 py-8 text-center text-sm text-muted-foreground">No movements recorded.</div>
-        ) : (
-          <table className="w-full text-sm text-left whitespace-nowrap">
-            <thead className="text-xs text-muted-foreground bg-card sticky top-0 border-b border-border/50">
-              <tr>
-                <th className="px-4 py-3 font-medium">Date</th>
-                <th className="px-4 py-3 font-medium">Ref</th>
-                <th className="px-4 py-3 font-medium">Type</th>
-                <th className="px-4 py-3 font-medium text-right">Qty</th>
-                <th className="px-4 py-3 font-medium text-right">Balance</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/50">
-              {materialMovements.map(m => (
-                <tr key={m.id} className="hover:bg-muted/40 transition-colors">
-                  <td className="px-4 py-3 text-muted-foreground tabular-nums">{format(new Date(m.date), 'MMM d, yyyy')}</td>
-                  <td className="px-4 py-3 font-medium text-foreground">
-                    <div>{m.referenceNo}</div>
-                    <div className="text-xs text-muted-foreground font-normal">{m.module}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={cn(
-                      "inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wider",
-                      m.transactionType === 'IN' ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
-                    )}>
-                      {m.transactionType === 'IN' ? <ArrowDown className="w-3 h-3 mr-1" /> : <ArrowUp className="w-3 h-3 mr-1" />}
-                      {m.transactionType}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right font-medium text-foreground tabular-nums">{formatNumber(m.quantity)}</td>
-                  <td className="px-4 py-3 text-right text-muted-foreground tabular-nums">{formatNumber(m.runningBalance)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </Expander>
+        {/* ── Processing history ── */}
+        <TabsContent value="processing" className="mt-5">
+          <section>
+            <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground"><Truck className="h-4 w-4" /> Processing history</h3>
+            {materialSends.length === 0 ? (
+              <div className="rounded-xl border border-border bg-card px-6 py-8 text-center text-sm text-muted-foreground">No processing history yet.</div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-border">
+                <table className="w-full whitespace-nowrap text-sm text-left">
+                  <thead className="text-xs text-muted-foreground bg-muted/40 sticky top-0 border-b border-border/50">
+                    <tr>
+                      <th className="px-4 py-3 font-medium">Ref</th>
+                      <th className="px-4 py-3 font-medium">Processor</th>
+                      <th className="px-4 py-3 font-medium">Stage</th>
+                      <th className="px-4 py-3 font-medium">Batch</th>
+                      <th className="px-4 py-3 font-medium text-right">Sent</th>
+                      <th className="px-4 py-3 font-medium text-right">Recv</th>
+                      <th className="px-4 py-3 font-medium text-right">Loss</th>
+                      <th className="px-4 py-3 font-medium text-right">Pending</th>
+                      <th className="px-4 py-3 font-medium text-right">Est. Cost</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/50">
+                    {materialSends.map(s => {
+                      const stage = sortedStages.find(st => st.id === s.stageId);
+                      const batch = (batches || []).find(b => b.id === s.batchId);
+                      const pending = (s.pcsSent || 0) - (s.pcsReceived || 0) - (s.lossQuantity || 0);
+                      const rateMethod = stage?.rateMethod || 'per_piece';
+                      const estCost = rateMethod === 'per_kg'
+                        ? (s.pcsReceived || 0) * (batch?.weightPerPiece || 0) * (s.ratePerPiece || 0)
+                        : (s.pcsReceived || 0) * (s.ratePerPiece || 0);
+                      return (
+                        <tr key={s.id} className="hover:bg-muted/40 transition-colors">
+                          <td className="px-4 py-3 font-medium text-foreground">{s.dispatchNo}</td>
+                          <td className="px-4 py-3 text-muted-foreground">{getProcessorName(s.processorId)}</td>
+                          <td className="px-4 py-3 text-muted-foreground">{stage?.name ?? '—'}</td>
+                          <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{batch?.batchNo || '—'}</td>
+                          <td className="px-4 py-3 text-right text-foreground tabular-nums">{formatNumber(s.pcsSent)}</td>
+                          <td className="px-4 py-3 text-right text-success tabular-nums">{formatNumber(s.pcsReceived)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">
+                            {(s.lossQuantity || 0) > 0
+                              ? <span className="text-destructive font-medium">{formatNumber(s.lossQuantity || 0)}</span>
+                              : <AlertTriangle className="inline h-3 w-3 text-muted-foreground/25" aria-hidden="true" />}
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums">
+                            {pending > 0
+                              ? <span className="text-warning font-bold">{formatNumber(pending)}</span>
+                              : <span className="text-muted-foreground/40">—</span>}
+                          </td>
+                          <td className="px-4 py-3 text-right text-muted-foreground tabular-nums">{estCost > 0 ? formatCurrency(estCost) : '—'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </TabsContent>
 
-      {/* ── Processing history ── */}
-      <Expander title="Processing History" icon={<Truck className="h-4 w-4" />} subtitle={materialSends.length ? `${materialSends.length} dispatch${materialSends.length === 1 ? '' : 'es'}` : 'No processing history'}>
-        {materialSends.length === 0 ? (
-          <div className="rounded-xl border border-border bg-card px-6 py-8 text-center text-sm text-muted-foreground">No processing history.</div>
-        ) : (
-          <table className="w-full text-sm text-left whitespace-nowrap">
-            <thead className="text-xs text-muted-foreground bg-card sticky top-0 border-b border-border/50">
-              <tr>
-                <th className="px-4 py-3 font-medium">Ref</th>
-                <th className="px-4 py-3 font-medium">Processor</th>
-                <th className="px-4 py-3 font-medium">Batch</th>
-                <th className="px-4 py-3 font-medium text-right">Sent</th>
-                <th className="px-4 py-3 font-medium text-right">Recv</th>
-                <th className="px-4 py-3 font-medium text-right">Loss</th>
-                <th className="px-4 py-3 font-medium text-right">Pending</th>
-                <th className="px-4 py-3 font-medium text-right">Est. Cost</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/50">
-              {materialSends.map(s => {
-                const stage = sortedStages.find(st => st.id === s.stageId);
-                const batch = (batches || []).find(b => b.id === s.batchId);
-                const pending = (s.pcsSent || 0) - (s.pcsReceived || 0) - (s.lossQuantity || 0);
-                const rateMethod = stage?.rateMethod || 'per_piece';
-                const estCost = rateMethod === 'per_kg'
-                  ? (s.pcsReceived || 0) * (batch?.weightPerPiece || 0) * (s.ratePerPiece || 0)
-                  : (s.pcsReceived || 0) * (s.ratePerPiece || 0);
-                return (
-                  <tr key={s.id} className="hover:bg-muted/40 transition-colors">
-                    <td className="px-4 py-3 font-medium text-foreground">{s.dispatchNo}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{getProcessorName(s.processorId)}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{batch?.batchNo || '—'}</td>
-                    <td className="px-4 py-3 text-right text-foreground tabular-nums">{formatNumber(s.pcsSent)}</td>
-                    <td className="px-4 py-3 text-right text-success tabular-nums">{formatNumber(s.pcsReceived)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      {(s.lossQuantity || 0) > 0
-                        ? <span className="text-destructive font-medium">{formatNumber(s.lossQuantity || 0)}</span>
-                        : <AlertTriangle className="inline h-3 w-3 text-muted-foreground/25" aria-hidden="true" />}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      {pending > 0
-                        ? <span className="text-warning font-bold">{formatNumber(pending)}</span>
-                        : <span className="text-muted-foreground/40">—</span>}
-                    </td>
-                    <td className="px-4 py-3 text-right text-muted-foreground tabular-nums">{estCost > 0 ? formatCurrency(estCost) : '—'}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </Expander>
+        {/* ── Movement ledger ── */}
+        <TabsContent value="movements" className="mt-5">
+          <section>
+            <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground"><ArrowRightLeft className="h-4 w-4" /> Movement ledger</h3>
+            <div className="flex flex-wrap items-center gap-2 border-b border-border/50 pb-3">
+              <select
+                aria-label="Filter by module"
+                value={movementModuleFilter}
+                onChange={e => { setMovementModuleFilter(e.target.value); setMovementVisible(200); }}
+                className="h-9 rounded-lg border border-border bg-muted/40 px-3 text-xs text-foreground"
+              >
+                <option value="">All modules</option>
+                {movementModules.map(mod => <option key={mod} value={mod}>{mod}</option>)}
+              </select>
+              <select
+                aria-label="Filter by type"
+                value={movementTypeFilter}
+                onChange={e => { setMovementTypeFilter(e.target.value as '' | 'IN' | 'OUT'); setMovementVisible(200); }}
+                className="h-9 rounded-lg border border-border bg-muted/40 px-3 text-xs text-foreground"
+              >
+                <option value="">IN &amp; OUT</option>
+                <option value="IN">IN</option>
+                <option value="OUT">OUT</option>
+              </select>
+              <input
+                type="text"
+                value={movementQuery}
+                onChange={e => { setMovementQuery(e.target.value); setMovementVisible(200); }}
+                placeholder="Search ref or module…"
+                aria-label="Search movements"
+                className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-muted/40 px-3 text-xs text-foreground placeholder:text-muted-foreground/70"
+              />
+              {(movementModuleFilter || movementTypeFilter || movementQuery) && (
+                <button
+                  onClick={() => { setMovementModuleFilter(''); setMovementTypeFilter(''); setMovementQuery(''); setMovementVisible(200); }}
+                  className="h-9 rounded-lg border border-border px-3 text-xs font-medium text-muted-foreground hover:bg-muted/40"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            {filteredMovements.length === 0 ? (
+              <div className="rounded-xl border border-border bg-card px-6 py-8 text-center text-sm text-muted-foreground">
+                {materialMovements.length === 0 ? 'No movements recorded yet.' : 'No movements match that filter.'}
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto rounded-xl border border-border mt-3">
+                  <table className="w-full whitespace-nowrap text-sm text-left">
+                    <thead className="text-xs text-muted-foreground bg-muted/40 sticky top-0 border-b border-border/50">
+                      <tr>
+                        <th className="px-4 py-3 font-medium">Date</th>
+                        <th className="px-4 py-3 font-medium">Ref</th>
+                        <th className="px-4 py-3 font-medium">Type</th>
+                        <th className="px-4 py-3 font-medium text-right">Qty</th>
+                        <th className="px-4 py-3 font-medium text-right">Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/50">
+                      {movementRows.map(m => (
+                        <tr key={m.id} className="hover:bg-muted/40 transition-colors">
+                          <td className="px-4 py-3 text-muted-foreground tabular-nums">{format(new Date(m.date), 'MMM d, yyyy')}</td>
+                          <td className="px-4 py-3 font-medium text-foreground">
+                            <div>{m.referenceNo}</div>
+                            <div className="text-xs text-muted-foreground font-normal">{m.module}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={cn(
+                              "inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wider",
+                              m.transactionType === 'IN' ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
+                            )}>
+                              {m.transactionType === 'IN' ? <ArrowDown className="w-3 h-3 mr-1" /> : <ArrowUp className="w-3 h-3 mr-1" />}
+                              {m.transactionType}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right font-medium text-foreground tabular-nums">{formatNumber(m.quantity)}</td>
+                          <td className="px-4 py-3 text-right text-muted-foreground tabular-nums">{formatNumber(m.runningBalance)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {filteredMovements.length > movementRows.length && (
+                  <div className="border-t border-border/50 px-4 py-3 text-center">
+                    <button
+                      onClick={() => setMovementVisible(v => v + 200)}
+                      className="text-xs font-semibold text-primary hover:underline"
+                    >
+                      Show {Math.min(200, filteredMovements.length - movementRows.length)} more of {filteredMovements.length} movements
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+        </TabsContent>
 
-      {/* ── Sales ── */}
-      <Expander title="Sales History" icon={<Wallet className="h-4 w-4" />} subtitle={materialSales.length ? `${materialSales.length} sale${materialSales.length === 1 ? '' : 's'} · ${formatCurrency(totals.salesValue)} revenue` : 'No sales'}>
-        {materialSales.length === 0 ? (
-          <div className="rounded-xl border border-border bg-card px-6 py-8 text-center text-sm text-muted-foreground">No sales recorded.</div>
-        ) : (
-          <table className="w-full text-sm text-left whitespace-nowrap">
-            <thead className="text-xs text-muted-foreground bg-card sticky top-0 border-b border-border/50">
-              <tr>
-                <th className="px-4 py-3 font-medium">Date</th>
-                <th className="px-4 py-3 font-medium">Invoice</th>
-                <th className="px-4 py-3 font-medium">Customer</th>
-                <th className="px-4 py-3 font-medium">Product</th>
-                <th className="px-4 py-3 font-medium text-right">Qty</th>
-                <th className="px-4 py-3 font-medium text-right">Revenue</th>
-                <th className="px-4 py-3 font-medium text-right">Profit</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/50">
-              {materialSales.map(s => (
-                <tr key={s.id} className="hover:bg-muted/40 transition-colors">
-                  <td className="px-4 py-3 text-muted-foreground tabular-nums">{format(new Date(s.date), 'MMM d, yyyy')}</td>
-                  <td className="px-4 py-3 font-medium text-foreground">{s.invoiceNo}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{getCustomerName(s.customerId)}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{getProductName(s.productId)}</td>
-                  <td className="px-4 py-3 text-right font-medium text-foreground tabular-nums">{formatNumber(s.pcsSold)}</td>
-                  <td className="px-4 py-3 text-right font-medium text-foreground tabular-nums">{formatCurrency(s.totalAmount)}</td>
-                  <td className={cn("px-4 py-3 text-right font-semibold tabular-nums", saleProfit(s.id, s.pcsSold) >= 0 ? "text-success" : "text-destructive")}>
-                    {formatCurrency(saleProfit(s.id, s.pcsSold))}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </Expander>
+        {/* ── Sales ── */}
+        <TabsContent value="sales" className="mt-5">
+          <section>
+            <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground"><Wallet className="h-4 w-4" /> Sales history</h3>
+            {materialSales.length === 0 ? (
+              <div className="rounded-xl border border-border bg-card px-6 py-8 text-center text-sm text-muted-foreground">No sales recorded for this material yet.</div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-border">
+                <table className="w-full whitespace-nowrap text-sm text-left">
+                  <thead className="text-xs text-muted-foreground bg-muted/40 sticky top-0 border-b border-border/50">
+                    <tr>
+                      <th className="px-4 py-3 font-medium">Date</th>
+                      <th className="px-4 py-3 font-medium">Invoice</th>
+                      <th className="px-4 py-3 font-medium">Customer</th>
+                      <th className="px-4 py-3 font-medium">Product</th>
+                      <th className="px-4 py-3 font-medium text-right">Qty</th>
+                      <th className="px-4 py-3 font-medium text-right">Revenue</th>
+                      <th className="px-4 py-3 font-medium text-right">Profit</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/50">
+                    {materialSales.map(s => (
+                      <tr key={s.id} className="hover:bg-muted/40 transition-colors">
+                        <td className="px-4 py-3 text-muted-foreground tabular-nums">{format(new Date(s.date), 'MMM d, yyyy')}</td>
+                        <td className="px-4 py-3 font-medium text-foreground">{s.invoiceNo}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{getCustomerName(s.customerId)}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{getProductName(s.productId)}</td>
+                        <td className="px-4 py-3 text-right font-medium text-foreground tabular-nums">{formatNumber(s.pcsSold)}</td>
+                        <td className="px-4 py-3 text-right font-medium text-foreground tabular-nums">{formatCurrency(s.totalAmount)}</td>
+                        <td className={cn("px-4 py-3 text-right font-semibold tabular-nums", saleProfitOf(s) >= 0 ? "text-success" : "text-destructive")}>
+                          {formatCurrency(saleProfitOf(s))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </TabsContent>
+      </Tabs>
+
+      <FormModal
+        isOpen={editOpen}
+        onClose={() => setEditOpen(false)}
+        title="Edit Material"
+        description="Raw material identity, how it's used, and how it moves through processors."
+        icon={<Pencil />}
+        accent="from-emerald-500 to-teal-600"
+        size="lg">
+        <MaterialForm material={material} onSaved={() => setEditOpen(false)} onCancel={() => setEditOpen(false)} />
+      </FormModal>
     </div>
   );
-}
-
-function s(n: number): string {
-  return n === 1 ? '' : 's';
 }

@@ -51,6 +51,13 @@ const createWindow = () => {
     title: 'Manufacturing ERP',
   });
 
+  // Chromium persists accidental page zoom per origin (Ctrl+Scroll / Ctrl+-),
+  // and once persisted it appears on EVERY page — looking exactly like the
+  // whole app "shrinking after clicking". Pin zoom to 100% and clamp the
+  // limits so the window can never open at, or drop to, a scaled size again.
+  mainWindow.webContents.setZoomLevelLimits([1, 1]);
+  mainWindow.webContents.setZoomFactor(1);
+
   // Show the window as soon as the first frame is painted so the user never
   // sees a loading spinner or blank white screen.
   mainWindow.once('ready-to-show', () => {

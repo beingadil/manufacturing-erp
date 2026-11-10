@@ -69,54 +69,36 @@ const MODE_META: Record<VoucherFormMode, {
   voucherType: VoucherType;
   title: string;
   saveLabel: string;
-  accentBtn: string;
-  accentText: string;
-  soft: string;
   icon: React.ReactNode;
 }> = {
   'cash-payment': {
     voucherType: 'Cash Payment',
     title: 'New Cash Payment Voucher',
     saveLabel: 'Save Payment',
-    accentBtn: 'bg-rose-600 hover:bg-rose-500',
-    accentText: 'text-rose-600 dark:text-rose-400',
-    soft: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-800',
     icon: <Banknote className="h-5 w-5" />,
   },
   'bank-payment': {
     voucherType: 'Bank Payment',
     title: 'New Bank Payment Voucher',
     saveLabel: 'Save Payment',
-    accentBtn: 'bg-amber-600 hover:bg-amber-500',
-    accentText: 'text-amber-600 dark:text-amber-400',
-    soft: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800',
     icon: <Landmark className="h-5 w-5" />,
   },
   'cash-receipt': {
     voucherType: 'Cash Receipt',
     title: 'New Cash Receipt Voucher',
     saveLabel: 'Save Receipt',
-    accentBtn: 'bg-emerald-600 hover:bg-emerald-500',
-    accentText: 'text-emerald-600 dark:text-emerald-400',
-    soft: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800',
     icon: <Banknote className="h-5 w-5" />,
   },
   'bank-receipt': {
     voucherType: 'Bank Receipt',
     title: 'New Bank Receipt Voucher',
     saveLabel: 'Save Receipt',
-    accentBtn: 'bg-sky-600 hover:bg-sky-500',
-    accentText: 'text-sky-600 dark:text-sky-400',
-    soft: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/30 dark:text-sky-400 dark:border-sky-800',
     icon: <Landmark className="h-5 w-5" />,
   },
   journal: {
     voucherType: 'Journal Voucher',
     title: 'New Journal Voucher',
     saveLabel: 'Post Journal Voucher',
-    accentBtn: 'bg-sky-600 hover:bg-sky-500',
-    accentText: 'text-sky-600 dark:text-sky-400',
-    soft: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/30 dark:text-sky-400 dark:border-sky-800',
     icon: <BookOpen className="h-5 w-5" />,
   },
 };
@@ -353,18 +335,19 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
     if (!isValid) return;
 
     if (isJournal) {
+      const derivedNarration = narration.trim() || journalRows.map(r => r.narration?.trim() || '').find(Boolean) || '';
       const entries = filledJournal.map(r => ({
         accountId: r.accountId,
         debit: Number(r.debit) || 0,
         credit: Number(r.credit) || 0,
-        narration: r.narration?.trim() || narration,
+        narration: r.narration?.trim() || derivedNarration,
       }));
       ErrorManagement.safeExecuteSync(() => {
         if (isEditing) {
-          AccountingEngine.updateVoucher(editVoucherId, { date, referenceNo: referenceNo || undefined, narration }, entries as any);
+          AccountingEngine.updateVoucher(editVoucherId, { date, referenceNo: referenceNo || undefined, narration: derivedNarration }, entries as any);
         } else {
           AccountingEngine.createVoucher({
-            date, type: meta.voucherType, referenceNo: referenceNo || undefined, sourceModule: sourceModule || 'Manual', narration,
+            date, type: meta.voucherType, referenceNo: referenceNo || undefined, sourceModule: sourceModule || 'Manual', narration: derivedNarration,
           }, entries as any);
         }
         toast.success("Journal Voucher posted!", { description: voucherNo });
@@ -479,10 +462,10 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
                 type="text"
                 readOnly
                 value={voucherNo}
-                className={cn('w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm font-mono font-bold', meta.accentText)}
+                className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm font-mono font-bold text-foreground"
               />
             </div>
-            {!isJournal ? (
+            {!isJournal && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">{ledgerLabel}</label>
@@ -502,49 +485,38 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
                   required
                 />
               </div>
-            ) : (
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">Narration</label>
-                <textarea
-                  value={narration}
-                  onChange={e => setNarration(e.target.value)}
-                  rows={1}
-                  placeholder="e.g. Monthly depreciation"
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary resize-none"
-                />
-              </div>
-            )}
+           )}
           </div>
 
-          {/* Total card */}
-          <div className="col-span-12 lg:col-span-4 bg-primary text-primary-foreground rounded-xl p-5 shadow-sm flex flex-col justify-between">
+          {/* Total card — neutral panel in both themes; no inverted colour block */}
+          <div className="col-span-12 lg:col-span-4 rounded-xl border border-border bg-muted/30 p-5 flex flex-col justify-between">
             <div>
-              <p className="text-[11px] uppercase tracking-widest opacity-60 font-medium">
+              <p className="text-[11px] uppercase tracking-widest font-medium text-muted-foreground">
                 {isJournal ? 'Journal Totals' : 'Total Voucher Amount'}
               </p>
-              <h4 className="text-3xl font-bold mt-2 font-mono">
+              <h4 className="text-3xl font-bold mt-2 font-mono text-foreground">
                 {formatCurrency(isJournal ? totalDebit : total)}
               </h4>
             </div>
             {isJournal ? (
               isBalancedJournal ? (
-                <div className="flex items-center gap-2 text-sm text-emerald-400 mt-4">
+                <div className="flex items-center gap-2 text-sm text-success font-medium mt-4">
                   <CheckCircle2 className="h-4 w-4" />
                   Balanced — ready to post
                 </div>
               ) : (
-                <div className="flex items-center gap-2 text-sm text-white/60 mt-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mt-4">
                   <Info className="h-4 w-4" />
                   Difference: {formatCurrency(difference)}
                 </div>
               )
             ) : total > 0 ? (
-              <div className="flex items-center gap-2 text-sm text-emerald-400 mt-4">
+              <div className="flex items-center gap-2 text-sm text-success font-medium mt-4">
                 <CheckCircle2 className="h-4 w-4" />
                 Ready to save
               </div>
             ) : (
-              <div className="flex items-center gap-2 text-sm text-white/60 mt-4">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mt-4">
                 <Info className="h-4 w-4" />
                 Enter an amount
               </div>
@@ -640,7 +612,7 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
             <div className="bg-card border border-border/50 rounded-xl shadow-sm">
               <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <span className={cn('flex h-9 w-9 items-center justify-center rounded-lg border shrink-0', meta.soft)}>{meta.icon}</span>
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-muted text-muted-foreground">{meta.icon}</span>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">
                       {rowsAreDebit ? 'Payment To' : 'Received From'}
@@ -846,8 +818,7 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
             form="cashbook-voucher-form"
             disabled={!isValid}
             className={cn(
-              'flex items-center gap-2 px-6 py-2.5 text-white font-semibold rounded-xl shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-sm',
-              meta.accentBtn
+              'flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50',
             )}
           >
             <Send className="h-4 w-4" />

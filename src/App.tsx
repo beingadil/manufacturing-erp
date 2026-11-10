@@ -22,6 +22,7 @@ import { CashBookPage } from './pages/finance/CashBookPage';
 import { CashPaymentVoucher } from './pages/finance/CashPaymentVoucher';
 import { CashReceiptVoucher } from './pages/finance/CashReceiptVoucher';
 import { JournalVoucher } from './pages/finance/JournalVoucher';
+import { VoucherFormPage } from './pages/finance/VoucherFormPage';
 import { JobWork } from './pages/JobWork';
 import { Ledgers } from './pages/Ledgers';
 import BillFormPage from './pages/processing/BillFormPage';
@@ -30,6 +31,7 @@ import ReceiveFormPage from './pages/processing/ReceiveFormPage';
 import { Login } from './pages/Login';
 
 import { MaterialDetail } from './pages/MaterialDetail';
+import { MonitorMetric } from './pages/monitor/MonitorMetric';
 import { MonitorScreen } from './pages/MonitorScreen';
 import { Processors } from './pages/Processors';
 import { PurchaseDetail } from './pages/PurchaseDetail';
@@ -162,10 +164,20 @@ export default function App() {
           <Route path="accounting" element={<Navigate to="/accounting/chart-of-accounts" replace />} />
           <Route path="accounting/chart-of-accounts" element={<RouteGuard requireModule="Accounting" requireAction="View"><Accounting /></RouteGuard>} />
           <Route path="accounting/cash-payment" element={<RouteGuard requireModule="Accounting" requireAction="View"><CashPaymentVoucher /></RouteGuard>} />
+          <Route path="accounting/cash-payment/new" element={<RouteGuard requireModule="Accounting" requireAction="View"><VoucherFormPage kind="cash-payment" /></RouteGuard>} />
+          <Route path="accounting/cash-payment/edit/:voucherId" element={<RouteGuard requireModule="Accounting" requireAction="View"><VoucherFormPage kind="cash-payment" /></RouteGuard>} />
           <Route path="accounting/bank-payment" element={<RouteGuard requireModule="Accounting" requireAction="View"><BankPaymentVoucher /></RouteGuard>} />
+          <Route path="accounting/bank-payment/new" element={<RouteGuard requireModule="Accounting" requireAction="View"><VoucherFormPage kind="bank-payment" /></RouteGuard>} />
+          <Route path="accounting/bank-payment/edit/:voucherId" element={<RouteGuard requireModule="Accounting" requireAction="View"><VoucherFormPage kind="bank-payment" /></RouteGuard>} />
           <Route path="accounting/cash-receipt" element={<RouteGuard requireModule="Accounting" requireAction="View"><CashReceiptVoucher /></RouteGuard>} />
+          <Route path="accounting/cash-receipt/new" element={<RouteGuard requireModule="Accounting" requireAction="View"><VoucherFormPage kind="cash-receipt" /></RouteGuard>} />
+          <Route path="accounting/cash-receipt/edit/:voucherId" element={<RouteGuard requireModule="Accounting" requireAction="View"><VoucherFormPage kind="cash-receipt" /></RouteGuard>} />
           <Route path="accounting/bank-receipt" element={<RouteGuard requireModule="Accounting" requireAction="View"><BankReceiptVoucher /></RouteGuard>} />
+          <Route path="accounting/bank-receipt/new" element={<RouteGuard requireModule="Accounting" requireAction="View"><VoucherFormPage kind="bank-receipt" /></RouteGuard>} />
+          <Route path="accounting/bank-receipt/edit/:voucherId" element={<RouteGuard requireModule="Accounting" requireAction="View"><VoucherFormPage kind="bank-receipt" /></RouteGuard>} />
           <Route path="accounting/journal-voucher" element={<RouteGuard requireModule="Accounting" requireAction="View"><JournalVoucher /></RouteGuard>} />
+          <Route path="accounting/journal-voucher/new" element={<RouteGuard requireModule="Accounting" requireAction="View"><VoucherFormPage kind="journal" /></RouteGuard>} />
+          <Route path="accounting/journal-voucher/edit/:voucherId" element={<RouteGuard requireModule="Accounting" requireAction="View"><VoucherFormPage kind="journal" /></RouteGuard>} />
           <Route path="accounting/cashbook" element={<RouteGuard requireModule="Accounting" requireAction="View"><CashBookPage /></RouteGuard>} />
           <Route path="accounting/journal-vouchers" element={<Navigate to="/accounting/journal-voucher" replace />} />
           <Route path="accounting/opening-balance" element={<Navigate to="/accounting/chart-of-accounts" replace />} />
@@ -180,6 +192,7 @@ export default function App() {
                     <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
         <Route path="/monitor" element={<MonitorScreen />} />
+        <Route path="/monitor/:metric" element={<MonitorMetric />} />
       </Routes>
       </HashRouter>
       <Toaster position="top-right" richColors />

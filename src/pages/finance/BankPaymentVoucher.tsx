@@ -6,7 +6,6 @@ export function BankPaymentVoucher() {
       kind="bank-payment"
       title="Bank Payment Voucher"
       subtitle="Record money paid out of a bank account"
-      accent="amber"
     />
   );
 }

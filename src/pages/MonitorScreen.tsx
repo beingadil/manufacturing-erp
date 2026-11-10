@@ -1,371 +1,439 @@
-import { 
-  ArrowLeft, DollarSign, Factory, Maximize, Minimize,Package, RefreshCw, 
-  ShoppingCart, TrendingDown, 
-  TrendingUp, Users, Wallet
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ChevronRight,
+  Factory,
+  FileText,
+  Maximize,
+  Minimize,
+  Package,
+  RefreshCw,
+  ShoppingCart,
+  TrendingUp,
+  Users,
+  Wallet,
 } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import {Bar, BarChart, CartesianGrid, 
-  ComposedChart, Legend, Line, 
-  LineChart, Tooltip as RechartsTooltip, ResponsiveContainer,XAxis, YAxis 
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+  XAxis,
+  YAxis,
 } from 'recharts';
-import { formatCurrency, formatNumber } from '../lib/utils';
+import { DatePicker } from '../components/ui/date-picker';
+import { cn, formatCurrency, formatNumber } from '../lib/utils';
+import {
+  parseRange,
+  rangeToParams,
+  inRange,
+  type MonitorRangeId,
+} from '../lib/monitor/monitorRange';
+import {
+  deltaFraction,
+  purchaseTotal,
+  saleTotal,
+  seriesForRange,
+  sumInRange,
+} from '../lib/monitor/monitorMetrics';
 import { useERPStore } from '../store/useERPStore';
+
+const PRESETS: Array<{ id: MonitorRangeId; label: string }> = [
+  { id: 'today', label: 'Today' },
+  { id: 'yesterday', label: 'Yesterday' },
+  { id: '7d', label: '7D' },
+  { id: '30d', label: '30D' },
+  { id: 'mtd', label: 'MTD' },
+];
 
 export function MonitorScreen() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const range = useMemo(() => parseRange(searchParams), [searchParams]);
+  const [lastUpdated, setLastUpdated] = useState(new Date());
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
-  
-  // Destructure state
+
   const {
-    sales, purchases, materials, customers, suppliers, processors, processingSends
+    sales, purchases, materials, customers, suppliers, processors,
+    processingSends, processingReceipts, products, vouchers, journalEntries,
   } = useERPStore();
 
-  const handleRefresh = () => {
-    setLastUpdated(new Date());
+  const updateRange = (patch: Record<string, string>) => {
+    const next = new URLSearchParams(searchParams);
+    if (patch.range && patch.range !== 'custom') {
+      next.delete('from');
+      next.delete('to');
+    }
+    for (const [k, v] of Object.entries(patch)) {
+      if (v) next.set(k, v); else next.delete(k);
+    }
+    setSearchParams(next, { replace: true });
   };
+
+  // ── Fullscreen sync ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(err => {
-        console.error("Error attempting to enable fullscreen:", err);
-      });
-      setIsFullscreen(true);
+      document.documentElement.requestFullscreen().catch(() => {});
     } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-        setIsFullscreen(false);
-      }
+      document.exitFullscreen();
     }
   };
 
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, []);
+  // ── KPIs for the selected range ─────────────────────────────────────────────
+  const revenue = sumInRange(sales, saleTotal, range.from, range.to);
+  const revenuePrior = sumInRange(sales, saleTotal, range.prior.from, range.prior.to);
+  const purchaseAmt = sumInRange(purchases, purchaseTotal, range.from, range.to);
+  const purchasePrior = sumInRange(purchases, purchaseTotal, range.prior.from, range.prior.to);
 
-  // Compute Metrics
-  const metrics = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const rawPcs = useMemo(() => materials.reduce((s, m) => s + (m.stockPcs || 0), 0), [materials]);
+  const wipPcs = useMemo(() => materials.reduce((s, m) => s + (m.atProcessorPcs || 0), 0), [materials]);
+  const totalAR = useMemo(() => customers.reduce((s, c) => s + (c.balanceReceivable || 0), 0), [customers]);
+  const totalAP = useMemo(
+    () => suppliers.reduce((s, p) => s + (p.balancePayable || 0), 0) + processors.reduce((s, p) => s + (p.balancePayable || 0), 0),
+    [suppliers, processors],
+  );
+  const apParties = useMemo(() => suppliers.filter(s => (s.balancePayable || 0) > 0).length + processors.filter(p => (p.balancePayable || 0) > 0).length, [suppliers, processors]);
+  const arParties = useMemo(() => customers.filter(c => (c.balanceReceivable || 0) > 0).length, [customers]);
 
-    let todayRevenue = 0;
-    let monthRevenue = 0;
-    sales.forEach(s => {
-      const d = new Date(s.date);
-      if (d >= today) todayRevenue += s.totalAmount;
-      if (d >= startOfMonth) monthRevenue += s.totalAmount;
-    });
+  const series = useMemo(() => seriesForRange(sales, purchases, range), [sales, purchases, range]);
 
-    let todayPurchase = 0;
-    let monthPurchase = 0;
-    purchases.forEach(p => {
-      const d = new Date(p.date);
-      if (d >= today) todayPurchase += (p.weight * p.ratePerUnit);
-      if (d >= startOfMonth) monthPurchase += (p.weight * p.ratePerUnit);
-    });
-
-    const rawMaterialStock = materials.reduce((sum, m) => sum + (m.stockPcs || 0), 0);
-    // True WIP: pcs in the processing pipeline (at a processor OR waiting for
-    // the next stage) — not finished stock, which has its own column.
-    const wipStock = materials.reduce((sum, m) => sum + (m.atProcessorPcs || 0), 0);
-    
-    const totalAR = customers.reduce((sum, c) => sum + (c.balanceReceivable || 0), 0);
-    const totalAP = suppliers.reduce((sum, s) => sum + (s.balancePayable || 0), 0) + 
-                    processors.reduce((sum, p) => sum + (p.balancePayable || 0), 0);
-
-    return {
-      todayRevenue, monthRevenue, todayPurchase, monthPurchase,
-      rawMaterialStock, wipStock, totalAR, totalAP
-    };
-  }, [sales, purchases, materials, customers, suppliers, processors, lastUpdated]);
-
-  // Compute 30-day trends
-  const trendData = useMemo(() => {
-    const data: Array<{ date: string; revenue: number; purchase: number; profit: number }> = [];
-    const today = new Date();
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split('T')[0];
-      
-      const daySales = sales.filter(s => s.date.startsWith(dateStr)).reduce((sum, s) => sum + s.totalAmount, 0);
-      const dayPurchases = purchases.filter(p => p.date.startsWith(dateStr)).reduce((sum, p) => sum + (p.weight * p.ratePerUnit), 0);
-      
-      data.push({
-        date: dateStr.substring(5), // MM-DD
-        revenue: daySales,
-        purchase: dayPurchases,
-        profit: daySales - dayPurchases
-      });
+  // ── Top lists ───────────────────────────────────────────────────────────────
+  const topProducts = useMemo(() => {
+    const map = new Map<string, { name: string; revenue: number }>();
+    for (const s of sales.filter(s => inRange(s.date, range.from, range.to))) {
+      const name = products.find(p => p.id === s.productId)?.name ?? 'Unknown';
+      const e = map.get(s.productId) ?? { name, revenue: 0 };
+      e.revenue += s.totalAmount || 0;
+      map.set(s.productId, e);
     }
-    return data;
-  }, [sales, purchases, lastUpdated]);
+    return [...map.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 5);
+  }, [sales, products, range.from, range.to]);
 
-  // Rankings
-  const rankings = useMemo(() => {
-    // 1. Product Sales Rank
-    const productSalesMap: Record<string, { name: string, amount: number }> = {};
-    sales.forEach(s => {
-      if (!productSalesMap[s.productId]) {
-        // We'd ideally join with product store, but let's assume we have product names if we look them up
-        productSalesMap[s.productId] = { name: s.productId, amount: 0 };
-      }
-      productSalesMap[s.productId].amount += s.totalAmount;
-    });
-    const productSales = Object.values(productSalesMap).sort((a, b) => b.amount - a.amount).slice(0, 10);
-    // Note: since we don't have product store destructured, we just use ID or fetch products later. Wait, we should get products!
+  const topCustomers = useMemo(
+    () => [...customers].filter(c => (c.balanceReceivable || 0) > 0).sort((a, b) => (b.balanceReceivable || 0) - (a.balanceReceivable || 0)).slice(0, 5),
+    [customers],
+  );
 
-    // 2. Customer Contribution Rank (Top 10 AR)
-    const customerRank = [...customers].sort((a, b) => b.balanceReceivable - a.balanceReceivable).slice(0, 10);
+  const topSuppliers = useMemo(() => {
+    const map = new Map<string, { name: string; amount: number }>();
+    for (const p of purchases.filter(p => inRange(p.date, range.from, range.to))) {
+      const name = suppliers.find(s => s.id === p.supplierId)?.name ?? 'Unknown';
+      const e = map.get(p.supplierId) ?? { name, amount: 0 };
+      e.amount += purchaseTotal(p);
+      map.set(p.supplierId, e);
+    }
+    return [...map.values()].sort((a, b) => b.amount - a.amount).slice(0, 5);
+  }, [purchases, suppliers, range.from, range.to]);
 
-    // 3. Supplier Purchase Rank (Top 10 purchases)
-    const supplierPurchasesMap: Record<string, { name: string, amount: number }> = {};
-    suppliers.forEach(s => {
-      supplierPurchasesMap[s.id] = { name: s.name, amount: 0 };
-    });
-    purchases.forEach(p => {
-      if (supplierPurchasesMap[p.supplierId]) {
-        supplierPurchasesMap[p.supplierId].amount += (p.weight * p.ratePerUnit);
-      }
-    });
-    const supplierRank = Object.values(supplierPurchasesMap).sort((a, b) => b.amount - a.amount).slice(0, 10);
+  const holdingProcessors = useMemo(() => processors.map(p => {
+    const mine = processingSends.filter(s => s.processorId === p.id);
+    const sent = mine.reduce((sum, s) => sum + (s.pcsSent || 0), 0);
+    const recv = mine.reduce((sum, s) => sum + (s.pcsReceived || 0), 0);
+    const loss = mine.reduce((sum, s) => sum + (s.lossQuantity || 0), 0);
+    return { id: p.id, name: p.name, holding: Math.max(0, sent - recv - loss), balance: p.balancePayable || 0 };
+  }).sort((a, b) => b.holding - a.holding).slice(0, 8),
+  [processors, processingSends]);
 
-    return { productSales, customerRank, supplierRank };
-  }, [sales, purchases, customers, suppliers, lastUpdated]);
+  // ── Alert strip ─────────────────────────────────────────────────────────────
+  const alerts = useMemo(() => {
+    const lowStock = materials.filter(m => (m.minStockLevel ?? 0) > 0 && (m.stockPcs ?? 0) < (m.minStockLevel ?? 0)).length;
+    const pendingPcs = processingSends.reduce((sum, s) => sum + Math.max(0, (s.pcsSent || 0) - (s.pcsReceived || 0) - (s.lossQuantity || 0)), 0);
+    const unbilled = processingReceipts.filter(r => (r.billedStatus ?? 'Unbilled') === 'Unbilled' && (r.pcsReceived || 0) > 0).length;
+    const out: Array<{ label: string; detail: string; to: string; tone: 'warning' | 'destructive' | 'info' }> = [];
+    if (lowStock > 0) out.push({ label: `${lowStock} below min stock`, detail: 'Replenish raw materials', to: '/monitor/stock', tone: 'destructive' });
+    if (pendingPcs > 0) out.push({ label: `${formatNumber(pendingPcs)} PCS pending`, detail: 'Out at processors — chase receipts', to: '/monitor/wip', tone: 'warning' });
+    if (totalAR > 0) out.push({ label: `${formatCurrency(totalAR)} receivable`, detail: `${arParties} customers with balance`, to: '/monitor/ar', tone: 'info' });
+    if (totalAP > 0) out.push({ label: `${formatCurrency(totalAP)} payable`, detail: `${apParties} parties`, to: '/monitor/ap', tone: 'warning' });
+    if (unbilled > 0) out.push({ label: `${unbilled} unbilled receipt${unbilled === 1 ? '' : 's'}`, detail: 'Generate processor bills', to: '/processing/generate-bill', tone: 'info' });
+    return out;
+  }, [materials, processingSends, processingReceipts, totalAR, totalAP, arParties, apParties]);
 
-  // For Processor Holdings
-  const processorHoldings = useMemo(() => {
-    return processors.map(p => {
-      const pSends = processingSends.filter(send => send.processorId === p.id);
-      const sentPcs = pSends.reduce((sum, s) => sum + s.pcsSent, 0);
-      const receivedPcs = pSends.reduce((sum, s) => sum + s.pcsReceived, 0);
-      return {
-        id: p.id,
-        name: p.name,
-        sentPcs,
-        receivedPcs,
-        holdingPcs: sentPcs - receivedPcs,
-        balance: p.balancePayable
-      };
-    }).sort((a, b) => b.holdingPcs - a.holdingPcs);
-  }, [processors, processingSends, lastUpdated]);
+  // ── Posting feed (latest posted vouchers in range) ───────────────────────────
+  const feed = useMemo(() => {
+    return vouchers
+      .filter(v => v.status === 'Posted' && inRange(v.date, range.from, range.to))
+      .sort((a, b) => b.date.localeCompare(a.date) || b.voucherNo.localeCompare(a.voucherNo))
+      .slice(0, 12)
+      .map(v => ({
+        id: v.id,
+        date: v.date,
+        no: v.voucherNo,
+        module: v.sourceModule,
+        type: v.type,
+        amount: journalEntries.filter(je => je.voucherId === v.id).reduce((s, je) => s + (je.debit || 0), 0),
+      }));
+  }, [vouchers, journalEntries, range.from, range.to]);
+
+  const chip = (id: MonitorRangeId, label: string) => {
+    const active = range.id === id;
+    return (
+      <button
+        key={id}
+        onClick={() => updateRange({ range: id })}
+        aria-pressed={active}
+        className={cn(
+          'h-9 rounded-lg border px-3 text-xs font-semibold transition-colors',
+          active
+            ? 'border-primary bg-primary/10 text-primary'
+            : 'border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground',
+        )}
+      >
+        {label}
+      </button>
+    );
+  };
+
+  const cardHref = (slug: string) => `/monitor/${slug}?${rangeToParams(range)}`;
+
+  const KPI_CARDS: Array<{
+    slug: string;
+    label: string;
+    value: string;
+    caption: string;
+    icon: React.ComponentType<{ className?: string }>;
+    tone?: 'foreground' | 'success' | 'destructive' | 'warning';
+    delta?: number | null;
+  }> = [
+    { slug: 'revenue', label: `Revenue · ${range.label}`, value: formatCurrency(revenue), caption: `${formatNumber(sales.filter(s => inRange(s.date, range.from, range.to)).length)} sales`, icon: TrendingUp, tone: 'success', delta: deltaFraction(revenue, revenuePrior) },
+    { slug: 'purchases', label: `Purchases · ${range.label}`, value: formatCurrency(purchaseAmt), caption: `${formatNumber(purchases.filter(p => inRange(p.date, range.from, range.to)).length)} purchases`, icon: ShoppingCart, tone: 'destructive', delta: deltaFraction(purchaseAmt, purchasePrior) },
+    { slug: 'stock', label: 'Raw stock', value: `${formatNumber(rawPcs)} PCS`, caption: 'Raw material on hand', icon: Package },
+    { slug: 'wip', label: 'WIP', value: `${formatNumber(wipPcs)} PCS`, caption: 'Out at processors + waiting', icon: Factory, tone: 'warning' },
+    { slug: 'ar', label: 'Accounts receivable', value: formatCurrency(totalAR), caption: `${arParties} customers with balance`, icon: Users, tone: 'warning' },
+    { slug: 'ap', label: 'Accounts payable', value: formatCurrency(totalAP), caption: `${apParties} parties with balance`, icon: Wallet, tone: 'warning' },
+  ];
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col p-4 md:p-6 overflow-x-hidden font-sans">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 shrink-0 gap-4">
-        <div className="flex items-center gap-4">
-          <button 
+      {/* ── Header ── */}
+      <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5 shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
             onClick={() => navigate('/')}
             className="p-2 rounded-lg border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Back to dashboard"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground tracking-tight">Business Monitor</h1>
-            <p className="text-sm text-muted-foreground mt-1">Real-time enterprise metrics & analytics</p>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">Business Monitor</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">Operations floor — live posting, stock and cash position</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="text-xs text-muted-foreground">
-            Updated: {lastUpdated.toLocaleTimeString()}
-          </div>
-          <button 
-            onClick={handleRefresh}
-            className="p-2 rounded-lg border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
-          >
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="hidden md:inline text-xs tabular-nums text-muted-foreground">Updated {lastUpdated.toLocaleTimeString()}</span>
+          <button onClick={() => setLastUpdated(new Date())} className="p-2 rounded-lg border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" aria-label="Refresh">
             <RefreshCw className="h-4 w-4" />
           </button>
-          <button 
-            onClick={toggleFullscreen}
-            className="p-2 rounded-lg border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2"
-          >
+          <button onClick={toggleFullscreen} className="p-2 rounded-lg border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" aria-label="Toggle fullscreen">
             {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
           </button>
         </div>
+      </header>
+
+      {/* ── Date range ── */}
+      <div className="flex flex-wrap items-center gap-2 mb-4 shrink-0">
+        <div role="group" aria-label="Date range presets" className="flex flex-wrap items-center gap-1.5">
+          {PRESETS.map(p => chip(p.id, p.label))}
+        </div>
+        <div className="flex items-center gap-2">
+          <DatePicker size="sm" className="w-40" value={range.from} onChange={(v) => updateRange({ range: 'custom', from: v, to: range.to })} placeholder="From" />
+          <span className="text-xs text-muted-foreground">to</span>
+          <DatePicker size="sm" className="w-40" value={range.to} onChange={(v) => updateRange({ range: 'custom', from: range.from, to: v })} placeholder="To" />
+        </div>
+        <span className="hidden lg:inline text-xs text-muted-foreground ml-1">
+          {range.days} day{range.days === 1 ? '' : 's'} · vs {range.prior.from} → {range.prior.to}
+        </span>
       </div>
 
-      {/* Core Metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 shrink-0">
-        <MetricCard title="Today's Revenue" value={formatCurrency(metrics.todayRevenue)} icon={DollarSign} color="text-emerald-400" />
-        <MetricCard title="This Month Revenue" value={formatCurrency(metrics.monthRevenue)} icon={TrendingUp} color="text-success" />
-        <MetricCard title="Today's Purchases" value={formatCurrency(metrics.todayPurchase)} icon={ShoppingCart} color="text-destructive" />
-        <MetricCard title="This Month Purchases" value={formatCurrency(metrics.monthPurchase)} icon={TrendingDown} color="text-rose-500" />
-        
-        <MetricCard title="Raw Material Stock" value={`${formatNumber(metrics.rawMaterialStock)} PCS`} icon={Package} color="text-blue-400" />
-        <MetricCard title="WIP Stock" value={`${formatNumber(metrics.wipStock)} PCS`} icon={Factory} color="text-indigo-400" />
-        <MetricCard title="Total A/R" value={formatCurrency(metrics.totalAR)} icon={Users} color="text-amber-400" />
-        <MetricCard title="Total A/P" value={formatCurrency(metrics.totalAP)} icon={Wallet} color="text-orange-400" />
+      {/* ── Action alert strip ── */}
+      {alerts.length > 0 && (
+        <div role="alert" className="flex flex-wrap items-center gap-2 mb-4 shrink-0">
+          {alerts.map((a, i) => (
+            <button
+              key={i}
+              onClick={() => navigate(a.to)}
+              className={cn(
+                'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors',
+                a.tone === 'destructive' && 'border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/20',
+                a.tone === 'warning' && 'border-warning/30 bg-warning/10 text-warning hover:bg-warning/20',
+                a.tone === 'info' && 'border-info/30 bg-info/10 text-info hover:bg-info/20',
+              )}
+            >
+              <AlertTriangle className="h-3.5 w-3.5" />
+              {a.label}
+              <span className="font-normal opacity-80">· {a.detail}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ── KPI grid (clickable) ── */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 md:gap-4 mb-6 shrink-0">
+        {KPI_CARDS.map(card => (
+          <button
+            key={card.slug}
+            onClick={() => navigate(cardHref(card.slug))}
+            aria-label={`Open ${card.label} details`}
+            className="group rounded-xl border border-border bg-card p-4 md:p-5 flex flex-col justify-between text-left hover:border-primary/40 hover:shadow-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <div className="flex items-start justify-between gap-2 mb-3">
+              <span className="text-[10px] md:text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{card.label}</span>
+              <card.icon className="h-4 w-4 text-muted-foreground/60 group-hover:text-primary transition-colors shrink-0" />
+            </div>
+            <div>
+              <div className={cn('text-lg md:text-2xl font-bold tracking-tight tabular-nums', card.tone === 'success' ? 'text-success' : card.tone === 'destructive' ? 'text-destructive' : card.tone === 'warning' ? 'text-warning' : 'text-foreground')}>
+                {card.value}
+              </div>
+              <div className="mt-1 flex items-center gap-2 text-[10px] md:text-[11px] text-muted-foreground">
+                {card.delta !== undefined && card.delta !== null && (
+                  <span className={cn('tabular-nums font-semibold', card.delta >= 0 ? 'text-success' : 'text-destructive')}>
+                    {card.delta >= 0 ? '+' : ''}{Math.round(card.delta * 100)}%
+                  </span>
+                )}
+                <span className="truncate">{card.caption}</span>
+              </div>
+            </div>
+          </button>
+        ))}
       </div>
 
-      {/* Middle Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 shrink-0">
-        <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <ChartCard title="Revenue & Purchase Trend (30 Days)">
+      {/* ── Chart + posting feed ── */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-6 shrink-0">
+        <section className="xl:col-span-2 rounded-xl border border-border bg-card p-4 md:p-5">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <h2 className="text-sm font-medium text-foreground">Revenue vs Purchases · {range.label}</h2>
+            <span className="text-[10px] text-muted-foreground">Per {range.granularity}</span>
+          </div>
+          <div className="h-64 md:h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trendData}>
+              <LineChart data={series}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `PKR ${val / 1000}k`} />
-                <RechartsTooltip 
-                  contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}
+                <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
+                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => `${Math.round(v / 1000)}k`} width={40} />
+                <RechartsTooltip
+                  contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: 8, fontSize: 12 }}
                   itemStyle={{ color: 'hsl(var(--foreground))' }}
+                  formatter={(v: number, name: string) => [formatCurrency(v), name === 'revenue' ? 'Revenue' : 'Purchases']}
                 />
-                <Legend />
                 <Line type="monotone" dataKey="revenue" name="Revenue" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="purchase" name="Purchase" stroke="hsl(var(--chart-3))" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="purchase" name="Purchases" stroke="hsl(var(--chart-3))" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
-          </ChartCard>
-          
-          <ChartCard title="Revenue vs Cost">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={trendData.slice(-10)}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `PKR ${val / 1000}k`} />
-                <RechartsTooltip 
-                  contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}
-                />
-                <Legend />
-                <Bar dataKey="revenue" name="Revenue" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                <Bar dataKey="purchase" name="Cost" fill="hsl(var(--chart-3))" radius={[4, 4, 0, 0]} maxBarSize={40} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </ChartCard>
-        </div>
+          </div>
+        </section>
 
-        <div className="flex flex-col gap-6">
-          <RankCard title="Top Customers by A/R" data={rankings.customerRank} nameKey="name" valueKey="balanceReceivable" color="hsl(var(--chart-4))" />
-          <RankCard title="Top Suppliers by Purchase" data={rankings.supplierRank} nameKey="name" valueKey="amount" color="hsl(var(--chart-2))" />
-        </div>
+        <section className="rounded-xl border border-border bg-card flex flex-col min-h-0">
+          <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
+            <h2 className="flex items-center gap-2 text-sm font-medium text-foreground"><FileText className="h-4 w-4" /> Posting activity</h2>
+            <button onClick={() => navigate(`/monitor/activity?${rangeToParams(range)}`)} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+              View all <ChevronRight className="h-3 w-3" />
+            </button>
+          </div>
+          <ul className="divide-y divide-border/50 max-h-72 overflow-y-auto scroll-thin">
+            {feed.length === 0 ? (
+              <li className="px-4 py-8 text-center text-xs text-muted-foreground">No vouchers posted in this range.</li>
+            ) : feed.map(f => (
+              <li key={f.id}>
+                <button onClick={() => navigate(`/monitor/activity?${rangeToParams(range)}`)} className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-muted/40 transition-colors">
+                  <span className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground w-16 justify-center shrink-0">{f.module}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-mono text-[11px] font-semibold text-foreground">{f.no}</span>
+                    <span className="block text-[10px] text-muted-foreground">{new Date(f.date).toLocaleDateString()} · {f.type}</span>
+                  </span>
+                  <span className="tabular-nums text-xs font-medium text-foreground">{formatCurrency(f.amount)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
       </div>
 
-      {/* Bottom Details */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
-        <div className="bg-card border border-border rounded-xl flex flex-col overflow-hidden">
-          <div className="p-4 border-b border-border font-semibold text-foreground">Raw Material Stock Alerts</div>
-          <div className="overflow-x-auto overflow-y-auto flex-1 p-0">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-muted text-muted-foreground sticky top-0">
+      {/* ── Top lists + processors ── */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 flex-1 min-h-0">
+        {/* Products by revenue */}
+        <section className="rounded-xl border border-border bg-card">
+          <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
+            <h2 className="text-sm font-medium text-foreground">Products by revenue</h2>
+            <button onClick={() => navigate(`/monitor/rankings?${rangeToParams(range)}`)} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+              View all <ChevronRight className="h-3 w-3" />
+            </button>
+          </div>
+          <ol className="divide-y divide-border/50">
+            {topProducts.length === 0 ? <li className="px-4 py-8 text-center text-xs text-muted-foreground">No sales in this range.</li>
+              : topProducts.map((p, i) => (
+                <li key={p.name} className="flex items-center gap-3 px-4 py-2.5">
+                  <span className="w-6 text-xs tabular-nums text-muted-foreground">{i + 1}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">{p.name}</span>
+                  <span className="tabular-nums text-sm font-semibold text-success">{formatCurrency(p.revenue)}</span>
+                </li>
+              ))}
+          </ol>
+        </section>
+
+        {/* Customers by A/R + Suppliers by purchase */}
+        <section className="rounded-xl border border-border bg-card flex flex-col">
+          <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
+            <h2 className="text-sm font-medium text-foreground">Parties</h2>
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">A/R · Purchases</span>
+          </div>
+          <div className="divide-y divide-border/50 flex-1">
+            <div className="px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">A/R</div>
+            {topCustomers.length === 0 ? <p className="px-4 py-3 text-xs text-muted-foreground">Nothing outstanding.</p>
+              : topCustomers.map(c => (
+                <button key={c.id} onClick={() => navigate(`/ledgers?id=${c.id}`)} className="flex w-full items-center gap-3 px-4 py-2 hover:bg-muted/40 text-left transition-colors">
+                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">{c.name}</span>
+                  <span className="tabular-nums text-sm font-semibold text-destructive">{formatCurrency(c.balanceReceivable || 0)}</span>
+                </button>
+              ))}
+            <div className="px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-t border-border/50">Suppliers · purchased</div>
+            {topSuppliers.length === 0 ? <p className="px-4 py-3 text-xs text-muted-foreground">No purchases in this range.</p>
+              : topSuppliers.map(s => (
+                <div key={s.name} className="flex items-center gap-3 px-4 py-2">
+                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">{s.name}</span>
+                  <span className="tabular-nums text-sm font-semibold text-foreground">{formatCurrency(s.amount)}</span>
+                </div>
+              ))}
+          </div>
+        </section>
+
+        {/* Processors holding your stock */}
+        <section className="rounded-xl border border-border bg-card flex flex-col min-h-0">
+          <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
+            <h2 className="text-sm font-medium text-foreground">Processors holding stock</h2>
+            <button onClick={() => navigate(`/monitor/wip?${rangeToParams(range)}`)} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+              View all <ChevronRight className="h-3 w-3" />
+            </button>
+          </div>
+          <div className="overflow-y-auto scroll-thin flex-1 max-h-80">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/30 text-xs text-muted-foreground sticky top-0">
                 <tr>
-                  <th className="px-4 py-3 font-medium whitespace-nowrap">Material</th>
-                  <th className="px-4 py-3 font-medium whitespace-nowrap text-right">Stock (PCS)</th>
-                  <th className="px-4 py-3 font-medium whitespace-nowrap text-right">Finished (PCS)</th>
-                  <th className="px-4 py-3 font-medium whitespace-nowrap">Status</th>
+                  <th className="px-4 py-2 text-left font-medium">Processor</th>
+                  <th className="px-4 py-2 text-right font-medium">Holding</th>
+                  <th className="px-4 py-2 text-right font-medium">A/P</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
-                {materials.sort((a, b) => a.stockPcs - b.stockPcs).slice(0, 15).map(m => (
-                  <tr key={m.id} className="hover:bg-muted/50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-foreground whitespace-nowrap">{m.name}</td>
-                    <td className={`px-4 py-3 text-right whitespace-nowrap ${m.stockPcs < 500 ? 'text-destructive font-bold' : 'text-foreground'}`}>
-                      {formatNumber(m.stockPcs)}
-                    </td>
-                    <td className="px-4 py-3 text-foreground text-right whitespace-nowrap">{formatNumber(m.processedStockPcs)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {m.stockPcs < 500 ? (
-                        <span className="px-2 py-1 text-xs rounded-full bg-rose-500/20 text-destructive border border-rose-500/30">Low Stock</span>
-                      ) : (
-                        <span className="px-2 py-1 text-xs rounded-full bg-success/20 text-success border border-success/30">Normal</span>
-                      )}
-                    </td>
+              <tbody className="divide-y divide-border/50">
+                {holdingProcessors.map(p => (
+                  <tr key={p.id} className="hover:bg-muted/40 cursor-pointer" onClick={() => navigate('/monitor/wip')}>
+                    <td className="px-4 py-2 font-medium text-foreground">{p.name}</td>
+                    <td className={cn('px-4 py-2 text-right tabular-nums', p.holding > 5000 ? 'text-warning font-semibold' : 'text-foreground')}>{formatNumber(p.holding)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">{formatCurrency(p.balance)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
-
-        <div className="bg-card border border-border rounded-xl flex flex-col overflow-hidden">
-          <div className="p-4 border-b border-border font-semibold text-foreground">Processor Holdings</div>
-          <div className="overflow-x-auto overflow-y-auto flex-1 p-0">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-muted text-muted-foreground sticky top-0">
-                <tr>
-                  <th className="px-4 py-3 font-medium whitespace-nowrap">Processor</th>
-                  <th className="px-4 py-3 font-medium whitespace-nowrap text-right">Holding (PCS)</th>
-                  <th className="px-4 py-3 font-medium whitespace-nowrap text-right">A/P Balance</th>
-                  <th className="px-4 py-3 font-medium whitespace-nowrap">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {processorHoldings.slice(0, 15).map(p => (
-                  <tr key={p.id} className="hover:bg-muted/50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-foreground whitespace-nowrap">{p.name}</td>
-                    <td className={`px-4 py-3 text-right whitespace-nowrap ${p.holdingPcs > 5000 ? 'text-amber-400 font-bold' : 'text-foreground'}`}>
-                      {formatNumber(p.holdingPcs)}
-                    </td>
-                    <td className="px-4 py-3 text-foreground text-right whitespace-nowrap">{formatCurrency(p.balance)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {p.holdingPcs > 5000 ? (
-                        <span className="px-2 py-1 text-xs rounded-full bg-warning/20 text-warning border border-warning/30">High Holding</span>
-                      ) : (
-                        <span className="px-2 py-1 text-xs rounded-full bg-muted text-muted-foreground border border-border">Normal</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Subcomponents
-
-function MetricCard({ title, value, icon: Icon, color }: { title: string, value: string, icon: any, color: string }) {
-  return (
-    <div className="bg-card border border-border rounded-xl p-5 flex flex-col justify-between hover:border-primary/50 transition-colors">
-      <div className="flex items-start justify-between mb-4">
-        <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
-        <div className={`p-2 rounded-lg bg-muted border border-border ${color}`}>
-          <Icon className="h-4 w-4" />
-        </div>
-      </div>
-      <div className={`text-2xl font-bold tracking-tight ${color}`}>{value}</div>
-    </div>
-  );
-}
-
-function ChartCard({ title, children }: { title: string, children: React.ReactNode }) {
-  return (
-    <div className="bg-card border border-border rounded-xl p-5 flex flex-col h-80 hover:border-primary/50 transition-colors">
-      <h3 className="text-sm font-medium text-foreground mb-6 shrink-0">{title}</h3>
-      <div className="flex-1 min-h-0 w-full">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function RankCard({ title, data, nameKey, valueKey, color }: { title: string, data: any[], nameKey: string, valueKey: string, color: string }) {
-  return (
-    <div className="bg-card border border-border rounded-xl p-5 flex flex-col flex-1 min-h-[14rem] hover:border-primary/50 transition-colors">
-      <h3 className="text-sm font-medium text-foreground mb-4 shrink-0">{title}</h3>
-      <div className="flex-1 min-h-0">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} layout="vertical" margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-            <XAxis type="number" hide />
-            <YAxis dataKey={nameKey} type="category" axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-            <RechartsTooltip 
-              cursor={{ fill: 'hsl(var(--muted))' }}
-              contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}
-              formatter={(val: number) => formatCurrency(val)}
-            />
-            <Bar dataKey={valueKey} fill={color} radius={[0, 4, 4, 0]} maxBarSize={20} />
-          </BarChart>
-        </ResponsiveContainer>
+        </section>
       </div>
     </div>
   );

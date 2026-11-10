@@ -51,6 +51,10 @@ const NavAccordionItem: React.FC<{ item: any, onClose?: () => void }> = ({ item,
     <div
       className="space-y-1"
       onMouseEnter={() => setIsOpen(true)}
+      onMouseLeave={() => setIsOpen(false)}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setIsOpen(false);
+      }}
     >
       <button
         onClick={() => setIsOpen(!isOpen)}
@@ -76,7 +80,8 @@ const NavAccordionItem: React.FC<{ item: any, onClose?: () => void }> = ({ item,
       </button>
       
       {/* Expand on hover — the handler sits on the SECTION wrapper so hovering
-          the header itself opens it. Click still pins/collapses. */}
+          the header itself opens it; leaving the section (mouse or keyboard
+          focus) closes it again. Click still toggles it explicitly. */}
       <div
         className={cn(
           "pl-9 pr-2 space-y-1 mt-1 pb-1 grid transition-all duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]",

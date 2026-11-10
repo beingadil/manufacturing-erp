@@ -6,7 +6,6 @@ export function BankReceiptVoucher() {
       kind="bank-receipt"
       title="Bank Receipt Voucher"
       subtitle="Record money received into a bank account"
-      accent="sky"
     />
   );
 }

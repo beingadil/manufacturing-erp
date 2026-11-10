@@ -6,7 +6,6 @@ export function JournalVoucher() {
       kind="journal"
       title="Journal Voucher"
       subtitle="Manual adjusting entries — the system auto-posts balanced double entries"
-      accent="amber"
     />
   );
 }
