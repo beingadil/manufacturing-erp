@@ -167,6 +167,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           npm_config_python: ${{ steps.setup-python.outputs.python-path }}
+          # electron-builder refuses to upload to a release published more
+          # than two hours ago — it logs "skipped publishing" and still exits
+          # 0, so a repair run silently uploads nothing and leaves the
+          # release broken. A release is only ever rebuilt here when it is
+          # missing its update feed, so uploading to it is the point.
+          EP_GH_IGNORE_TIME: "true"
           # Code signing — see CODE_SIGNING.md. Two supported paths:
           # 1) PFX cert via CSC_LINK/CSC_KEY_PASSWORD (electron-builder built-in)
           # 2) Azure Trusted Signing via azureSignOptions injected below from
