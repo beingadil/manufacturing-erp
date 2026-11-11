@@ -57,7 +57,6 @@ export default function SendFormPage() {
   const [pcs, setPcs] = useState('');
   const [rate, setRate] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [addProcessorOpen, setAddProcessorOpen] = useState(false);
   const [addMaterialOpen, setAddMaterialOpen] = useState(false);
@@ -80,7 +79,6 @@ export default function SendFormPage() {
     setPcs(String(editingSend.pcsSent ?? ''));
     setRate(editingSend.ratePerPiece != null ? String(editingSend.ratePerPiece) : '');
     setDate(editingSend.date || new Date().toISOString().split('T')[0]);
-    setNote(editingSend.remarks || '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingSend?.id]);
 
@@ -329,8 +327,12 @@ export default function SendFormPage() {
     const line = captureCurrentLine();
     if (!line) return;
     setDispatchLines(prev => [...prev, line]);
-    // Clear the editor for the next material.
-    setMaterialId('');
+    // Clear the line editor for the next material. The material itself stays
+    // selected — when you are sending several materials to the same
+    // processor the material changes less often than the quantity, and
+    // re-picking it every time is the slowest part of the form. The
+    // processor already persists; change the dropdown when the material
+    // really changes.
     setStageId('');
     setBatchId('');
     setPcs('');
@@ -388,7 +390,7 @@ export default function SendFormPage() {
           date,
           pcsSent: qty,
           ratePerPiece: rateNum,
-          remarks: note || editingSend.remarks,
+          remarks: editingSend.remarks,
         });
         toast.success(`${editingSend.dispatchNo} updated.`);
       } else {
@@ -421,7 +423,6 @@ export default function SendFormPage() {
             pcsSent: line.pcsSent,
             ratePerPiece: line.ratePerPiece,
             date,
-            remarks: note || undefined,
           });
         }
         toast.success(
@@ -471,35 +472,9 @@ export default function SendFormPage() {
           <section className="rounded-xl border border-border bg-card">
             <div className="border-b border-border/60 px-4 py-3 sm:px-5">
               <h2 className="text-sm font-semibold text-foreground">Work order</h2>
-              <p className="mt-0.5 text-xs text-muted-foreground">Worker, material, batch and stage — the recipe for the next leg.</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">Material, worker, batch and stage — the recipe for the next leg.</p>
             </div>
             <div className="grid gap-4 p-4 sm:grid-cols-2 sm:p-5">
-              {/* Worker */}
-              <div className="min-w-0 sm:col-span-2">
-                <label className={label}>Worker <span className="text-destructive">*</span></label>
-                <SearchableSelect
-                  options={eligibleProcessors.map(p => ({
-                    id: p.id,
-                    label: p.name,
-                    secondaryLabel: p.stageId
-                      ? `${(processingStages || []).find(s => s.id === p.stageId)?.name || 'Worker'}${p.phone ? ` · ${p.phone}` : ''}`
-                      : (p.phone ? `General · ${p.phone}` : 'General Worker'),
-                    searchValue: p.phone,
-                  }))}
-                  value={stageMismatch ? '' : processorId}
-                  onChange={(val) => { setProcessorId(val); setError(null); }}
-                  placeholder="Select worker…"
-                  onAdd={() => setAddProcessorOpen(true)}
-                  required
-                />
-                {stageMismatch && (
-                  <p role="alert" className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-destructive">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                    This worker does not work the {effectiveStage?.name || 'selected'} stage — pick a {effectiveStage?.name || 'stage'} worker or a general worker.
-                  </p>
-                )}
-              </div>
-
               {/* Material */}
               <div className="min-w-0 sm:col-span-2">
                 <label className={label}>Material <span className="text-destructive">*</span></label>
@@ -525,6 +500,32 @@ export default function SendFormPage() {
                 />
                 {!materialId && (
                   <p className="mt-1.5 text-xs text-muted-foreground/70">Only materials that go through the processor appear here.</p>
+                )}
+              </div>
+
+              {/* Worker */}
+              <div className="min-w-0 sm:col-span-2">
+                <label className={label}>Worker <span className="text-destructive">*</span></label>
+                <SearchableSelect
+                  options={eligibleProcessors.map(p => ({
+                    id: p.id,
+                    label: p.name,
+                    secondaryLabel: p.stageId
+                      ? `${(processingStages || []).find(s => s.id === p.stageId)?.name || 'Worker'}${p.phone ? ` · ${p.phone}` : ''}`
+                      : (p.phone ? `General · ${p.phone}` : 'General Worker'),
+                    searchValue: p.phone,
+                  }))}
+                  value={stageMismatch ? '' : processorId}
+                  onChange={(val) => { setProcessorId(val); setError(null); }}
+                  placeholder="Select worker…"
+                  onAdd={() => setAddProcessorOpen(true)}
+                  required
+                />
+                {stageMismatch && (
+                  <p role="alert" className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-destructive">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    This worker does not work the {effectiveStage?.name || 'selected'} stage — pick a {effectiveStage?.name || 'stage'} worker or a general worker.
+                  </p>
                 )}
               </div>
 
@@ -718,20 +719,6 @@ export default function SendFormPage() {
               <div className="min-w-0">
                 <label htmlFor="sf-date" className={label}>Dispatch date <span className="text-destructive">*</span></label>
                 <DatePicker id="sf-date" value={date} onChange={setDate} className="h-[46px] w-full rounded-xl" />
-              </div>
-
-              {/* Remarks */}
-              <div className="min-w-0 sm:col-span-3">
-                <label htmlFor="sf-remarks" className={label}>Remarks <span className="font-normal normal-case text-muted-foreground/60">(optional)</span></label>
-                <input
-                  id="sf-remarks"
-                  type="text"
-                  value={note}
-                  onChange={e => setNote(e.target.value)}
-                  placeholder="e.g. dispatch for Acid stage — 20 Nov"
-                  autoComplete="off"
-                  className={control}
-                />
               </div>
             </div>
 
