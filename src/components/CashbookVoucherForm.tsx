@@ -2,7 +2,7 @@ import { Banknote, BookOpen, CheckCircle2, Info, Landmark, Plus, RotateCcw, Send
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
-import { formInputClass } from '../components/form/formStyles';
+
 import { AccountingEngine } from '../lib/accounting/AccountingEngine';
 import { getBankAccounts, getCashAccounts } from '../lib/accounting/accountClassification';
 import { DocumentNumberingService } from '../lib/business/DocumentNumberingService';

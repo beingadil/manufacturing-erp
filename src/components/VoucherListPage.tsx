@@ -7,7 +7,6 @@ import { cn } from '../lib/utils';
 import { formatCurrency } from '../lib/utils';
 import { useERPStore } from '../store/useERPStore';
 import { Voucher } from '../types/erp';
-import { formInputClass } from './form/formStyles';
 import { Dropdown } from './Dropdown';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import { DatePicker } from './ui/date-picker';
