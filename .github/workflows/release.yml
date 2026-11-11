@@ -45,17 +45,24 @@ jobs:
         with:
           node-version: 22
 
-      - name: Skip if release already exists
+      - name: Skip only when the release is complete
         id: check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION=$(node -e "console.log(require('./package.json').version)")
           TAG="v${VERSION}"
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "⚠️  Release ${TAG} already exists — skipping build to avoid duplicating it."
+          # A release only counts as finished when the update feed an
+          # installed app reads is published next to the installer. A
+          # half-finished release (installer but no latest.yml) breaks
+          # auto-update for every client — the updater 404s on the feed and
+          # surfaces an error instead of updating. Those are rebuilt and
+          # repaired, never skipped.
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null | grep -qx 'latest\.yml'; then
+            echo "⚠️  Release ${TAG} already exists and carries latest.yml — skipping build to avoid duplicating it."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
+            echo "Release ${TAG} is missing or has no latest.yml — rebuilding so the update feed is complete."
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
@@ -160,6 +167,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           npm_config_python: ${{ steps.setup-python.outputs.python-path }}
+          # electron-builder refuses to upload to a release published more
+          # than two hours ago — it logs "skipped publishing" and still exits
+          # 0, so a repair run silently uploads nothing and leaves the
+          # release broken. A release is only ever rebuilt here when it is
+          # missing its update feed, so uploading to it is the point.
+          EP_GH_IGNORE_TIME: "true"
           # Code signing — see CODE_SIGNING.md. Two supported paths:
           # 1) PFX cert via CSC_LINK/CSC_KEY_PASSWORD (electron-builder built-in)
           # 2) Azure Trusted Signing via azureSignOptions injected below from
@@ -202,7 +215,52 @@ jobs:
           else
             echo "Code signing: none configured — building unsigned (SmartScreen will warn)."
           fi
-          npx electron-builder "${ARGS[@]}"
+          # Retry the publish. GitHub's release API intermittently fails
+          # during asset uploads, and a failed upload leaves a
+          # half-published release (installer without latest.yml) that breaks
+          # auto-update for every installed app. Retrying is safe —
+          # electron-builder replaces same-named assets — so a transient
+          # failure becomes a normal release instead of a broken one.
+          for attempt in 1 2 3; do
+            echo "Publish attempt ${attempt}/3 ..."
+            if npx electron-builder "${ARGS[@]}"; then
+              echo "✓ Published on attempt ${attempt}."
+              break
+            fi
+            if [ "$attempt" = "3" ]; then
+              echo "::error::electron-builder failed on all three attempts — the release is incomplete."
+              exit 1
+            fi
+            echo "Publish failed — waiting 30s before retrying."
+            sleep 30
+          done
+
+      - name: Verify the release carries a complete update feed
+        # The release is only usable if the installer AND the update feed are
+        # both on it. electron-builder uploads them as separate artifacts, so
+        # a partial upload can leave the installer published while latest.yml
+        # is missing — which is exactly what breaks the updater in installed
+        # apps. Fail here, loudly, instead of shipping that.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(node -e "console.log(require('./package.json').version)")
+          TAG="v${VERSION}"
+          NAMES=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null || true)
+          echo "Assets on ${TAG}:"
+          echo "$NAMES" | sed '/^$/d;s/^/  - /'
+          MISSING=""
+          for expected in "Manufacturing-ERP-Setup-${VERSION}.exe" "latest.yml"; do
+            echo "$NAMES" | grep -qx "$expected" || MISSING="${MISSING} ${expected}"
+          done
+          if [ -n "$MISSING" ]; then
+            echo "::error::Release ${TAG} is missing:${MISSING}"
+            echo "::error::Installed apps read latest.yml from this release — without it they cannot update."
+            exit 1
+          fi
+          echo "✓ Release ${TAG} carries the installer and its update feed."
 
       - name: Verify installer signature
         # verify-signature.cjs auto-discovers the newest 'Manufacturing ERP Setup *.exe'

@@ -34,8 +34,14 @@ fi
 NEW_VERSION=$(node -e "console.log(require('./package.json').version)")
 RELEASE_DATE=$(date +%Y-%m-%d)
 
-# Previous release tag = newest tag reachable from the commit before this release.
-PREV_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || git tag --sort=-v:refname | grep -v "^v$NEW_VERSION$" | head -1 || true)
+# Previous release tag = the newest tag that is actually part of this branch's
+# history. `git describe` can reach a tag pointing at a commit from another
+# branch — a release cut from a feature branch that was never merged — which
+# makes the changelog cover the wrong range. That is why v1.2.2 reported
+# "since v1.2.0": the v1.2.1 tag lived on a branch outside master's history.
+# --merged restricts the list to ancestors of HEAD, and the current release's
+# own tag is excluded.
+PREV_TAG=$(git tag --merged HEAD --sort=-v:refname 2>/dev/null | grep -v "^v${NEW_VERSION}$" | head -1 || true)
 
 BODY_FILE=$(mktemp)
 trap 'rm -f "$BODY_FILE"' EXIT

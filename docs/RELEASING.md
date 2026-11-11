@@ -99,7 +99,7 @@ The **GitHub Actions workflow builds and publishes** the installer + `latest.yml
 
 Users will see the update automatically within minutes of the release being published.
 
-The workflow's guard job skips the build whenever a release for the current `package.json` version already exists, so a re-dispatch or an accidental extra tag can never clobber or duplicate a release. You can also trigger it by hand from another machine: **Actions → Build & Release → Run workflow**.
+The workflow's guard job skips the build only when the release for the current `package.json` version is **complete** — installer *and* `latest.yml` both published. A half-finished release is rebuilt and repaired rather than skipped, because an installed app that finds no `latest.yml` on the latest release cannot update at all: the updater raises a 404 error instead of offering the new version. The publish step retries three times, and the run fails loudly if the release ends up missing the installer or the feed. You can also trigger it by hand from another machine: **Actions → Build & Release → Run workflow**.
 
 ### Option B: Manual
 
@@ -161,6 +161,7 @@ Users can also check manually from **Settings → About & Updates → Check for 
 | CI release not auto-triggering | Tag did not match `v*`, or was already pushed | Tags must look like `v1.0.45`; check `git ls-remote --tags origin` |
 | Duplicate release / auto-update broken | Both CI and a local publish uploaded the same version | Pick one path — see Option A / Option B |
 | App shows "Update Error" | No internet or wrong repo | Check network; verify publish config |
+| App shows `Cannot find latest.yml in the latest release artifacts` | The release was published without its update feed — the installer uploaded but `latest.yml` did not | Re-push the version tag to rebuild the release; the guard job rebuilds any release that has no `latest.yml` and the workflow verifies both are present before it passes |
 
 ---
 
