@@ -8,7 +8,7 @@
  * what the user is about to do: pcs, KG equivalent, est. bill, what happens to
  * this dispatch at receive time, and how much is left where.
  */
-import { AlertTriangle, ArrowLeft, ArrowRight, Check, ChevronDown, Layers } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, Check, ChevronDown, Layers, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -26,6 +26,20 @@ import { StageProgressStepper } from '../../components/processing/StageProgressS
 const control =
   'w-full min-w-0 rounded-xl border border-border bg-card px-3 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none';
 const label = 'mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70';
+
+/** One material on a dispatch: its own stage, batch, quantity and rate. */
+interface DispatchLine {
+  key: string;
+  materialId: string;
+  materialName: string;
+  stageId: string;
+  stageName: string;
+  batchId?: string;
+  batchNo: string;
+  pcs: number;
+  rate: number;
+  estBill: number;
+}
 
 const fmtNum = (n: number) => n.toLocaleString('en-PK');
 
@@ -48,6 +62,8 @@ export default function SendFormPage() {
   const [addProcessorOpen, setAddProcessorOpen] = useState(false);
   const [addMaterialOpen, setAddMaterialOpen] = useState(false);
   const [batchTrailOpen, setBatchTrailOpen] = useState(false);
+  /** Materials already captured for this dispatch — each one goes out on its own. */
+  const [dispatchLines, setDispatchLines] = useState<DispatchLine[]>([]);
 
   const editingSend = useMemo(
     () => (editId ? (processingSends || []).find(s => s.id === editId) || null : null),
@@ -252,32 +268,112 @@ export default function SendFormPage() {
     ? (perKg ? (weightKg * rateNum) : (qty * rateNum))
     : 0;
   const overRequested = qty > 0 && qty > totalAvailable + 1e-9;
-  const canSend = Boolean(processorId && materialId && qty > 0 && rateNum > 0 && date && !overRequested && !stageMismatch && !effectiveStageIllegal);
+  const canSend = Boolean(
+    processorId && date
+    && (dispatchLines.length > 0 || (materialId && qty > 0 && rateNum > 0))
+    && !overRequested && !stageMismatch && !effectiveStageIllegal,
+  );
+
+  // ── Multiple materials in one dispatch ────────────────────────────────────
+  // The line editor above stays exactly as it was — all the stage gating and
+  // batch availability still resolve for the material in it. "Add to dispatch"
+  // captures that material as a line and clears the editor for the next one,
+  // so several materials can go out together. Every line is dispatched on its
+  // own, with its own stage, batch, quantity and rate.
+  const linesEstBill = dispatchLines.reduce((sum, l) => sum + l.estBill, 0);
+  const totalDispatchEstBill = linesEstBill + estBill;
+
+  /** Validate the material currently in the editor and capture it as a line. */
+  const captureCurrentLine = (): DispatchLine | null => {
+    if (!materialId || !pcs || !rate) {
+      setError('Material, quantity and rate are required before adding a line.');
+      return null;
+    }
+    if (!qty || qty <= 0) {
+      setError('Quantity must be a positive whole number of PCS.');
+      return null;
+    }
+    if (qty > totalAvailable) {
+      setError(`Only ${formatNumber(totalAvailable)} PCS are available${effectiveStage ? ` for ${effectiveStage.name}` : ''}.`);
+      return null;
+    }
+    if (!rateNum || rateNum <= 0) {
+      setError('Rate must be greater than zero.');
+      return null;
+    }
+    if (stageMismatch) {
+      setError(`This processor does not work the ${effectiveStage?.name || 'selected'} stage.`);
+      return null;
+    }
+    if (effectiveStageIllegal) {
+      setError(`"${selectedMaterial?.name || 'This material'}" only processes at: ${allowedOrderedStages.map(s => s.name).join(', ') || 'its selected stages'}.`);
+      return null;
+    }
+    const batch = (batches || []).find(b => b.id === batchId);
+    return {
+      key: `line-${Date.now()}-${dispatchLines.length}`,
+      materialId,
+      materialName: selectedMaterial?.name ?? 'Material',
+      stageId: effectiveStageId,
+      stageName: effectiveStage?.name ?? '',
+      batchId: batchId || undefined,
+      batchNo: batch?.batchNo || '',
+      pcs: qty,
+      rate: rateNum,
+      estBill,
+    };
+  };
+
+  const addCurrentLine = () => {
+    setError(null);
+    const line = captureCurrentLine();
+    if (!line) return;
+    setDispatchLines(prev => [...prev, line]);
+    // Clear the editor for the next material.
+    setMaterialId('');
+    setStageId('');
+    setBatchId('');
+    setPcs('');
+    setRate('');
+  };
+
+  const removeDispatchLine = (key: string) => {
+    setError(null);
+    setDispatchLines(prev => prev.filter(l => l.key !== key));
+  };
 
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
     setError(null);
-    if (!processorId || !materialId || !pcs || !rate || !date) {
-      setError('Processor, material, quantity, rate and date are required.');
+    if (!processorId || !date) {
+      setError('Processor and date are required.');
       return;
     }
-    if (stageMismatch) {
+    // The editor may be empty when every material was already added as a line.
+    const hasCurrentLine = Boolean(materialId);
+    if (!hasCurrentLine && dispatchLines.length === 0) {
+      setError('Add at least one material to the dispatch.');
+      return;
+    }
+    if (hasCurrentLine && (!pcs || !rate)) {
+      setError('Quantity and rate are required.');
+      return;
+    }
+    if (!hasCurrentLine) {
+      // Only the captured lines are going out — validate them by saving.
+    } else if (stageMismatch) {
       setError(`This processor does not work the ${effectiveStage?.name || 'selected'} stage.`);
       return;
-    }
-    if (effectiveStageIllegal) {
+    } else if (effectiveStageIllegal) {
       setError(`"${selectedMaterial?.name || 'This material'}" only processes at: ${allowedOrderedStages.map(s => s.name).join(', ') || 'its selected stages'}.`);
       return;
-    }
-    if (!qty || qty <= 0) {
+    } else if (!qty || qty <= 0) {
       setError('Quantity must be a positive whole number of PCS.');
       return;
-    }
-    if (qty > totalAvailable) {
+    } else if (qty > totalAvailable) {
       setError(`Only ${formatNumber(totalAvailable)} PCS are available${effectiveStage ? ` for ${effectiveStage.name}` : ''}.`);
       return;
-    }
-    if (!rateNum || rateNum <= 0) {
+    } else if (!rateNum || rateNum <= 0) {
       setError('Rate must be greater than zero.');
       return;
     }
@@ -296,17 +392,43 @@ export default function SendFormPage() {
         });
         toast.success(`${editingSend.dispatchNo} updated.`);
       } else {
-        ProcessingService.dispatch({
-          processorId,
-          materialId,
-          stageId: effectiveStageId || undefined,
-          batchId: batchId || undefined,
-          pcsSent: qty,
-          ratePerPiece: rateNum,
-          date,
-          remarks: note || undefined,
-        });
-        toast.success('Dispatch saved — the stock ledger and WIP board are updated.');
+        // Every material on the dispatch goes out as its own dispatch line —
+        // its own stage, batch, quantity and rate — so each one is tracked and
+        // billed separately.
+        const lines = dispatchLines.map(l => ({
+          materialId: l.materialId,
+          stageId: l.stageId || undefined,
+          batchId: l.batchId,
+          pcsSent: l.pcs,
+          ratePerPiece: l.rate,
+        }));
+        const current = captureCurrentLine();
+        if (current) {
+          lines.push({
+            materialId: current.materialId,
+            stageId: current.stageId || undefined,
+            batchId: current.batchId,
+            pcsSent: current.pcs,
+            ratePerPiece: current.rate,
+          });
+        }
+        for (const line of lines) {
+          ProcessingService.dispatch({
+            processorId,
+            materialId: line.materialId,
+            stageId: line.stageId,
+            batchId: line.batchId,
+            pcsSent: line.pcsSent,
+            ratePerPiece: line.ratePerPiece,
+            date,
+            remarks: note || undefined,
+          });
+        }
+        toast.success(
+          lines.length === 1
+            ? 'Dispatch saved — the stock ledger and WIP board are updated.'
+            : `Dispatch saved — ${lines.length} materials sent, each tracked on its own.`,
+        );
       }
       navigate('/processing', { replace: true });
     } catch (err: any) {
@@ -334,7 +456,7 @@ export default function SendFormPage() {
           <div className="ml-auto flex items-center gap-4">
             <div className="hidden flex-col items-end sm:flex">
               <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/60">Est. bill</span>
-              <span className="text-base font-semibold tabular-nums text-foreground">{formatCurrency(estBill)}</span>
+              <span className="text-base font-semibold tabular-nums text-foreground">{formatCurrency(totalDispatchEstBill)}</span>
             </div>
             <span className="rounded-md border border-border bg-card px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               {isEdit ? 'Editing' : 'Draft'}
@@ -612,6 +734,61 @@ export default function SendFormPage() {
                 />
               </div>
             </div>
+
+            {/* ── Materials on this dispatch ── */}
+            {!editId && (
+              <div className="border-t border-border/60 px-4 py-3 sm:px-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                      Materials on this dispatch
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Add the material above, then add another — each line goes out on its own.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addCurrentLine}
+                    disabled={!materialId}
+                    className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground/80 transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add to dispatch
+                  </button>
+                </div>
+
+                {dispatchLines.length > 0 && (
+                  <ul className="mt-3 space-y-2">
+                    {dispatchLines.map((l, index) => (
+                      <li
+                        key={l.key}
+                        className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-border/60 bg-background/60 px-3 py-2"
+                      >
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                          {index + 1}
+                        </span>
+                        <span className="text-sm font-medium text-foreground">{l.materialName}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {l.stageName || 'Initial Processor'}{l.batchNo ? ` · ${l.batchNo}` : ''}
+                        </span>
+                        <span className="ml-auto text-xs tabular-nums text-muted-foreground">
+                          {formatNumber(l.pcs)} PCS @ {formatNumber(l.rate)} = {formatCurrency(l.estBill)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeDispatchLine(l.key)}
+                          aria-label={`Remove ${l.materialName} from the dispatch`}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </section>
 
           {error && (
@@ -684,7 +861,9 @@ export default function SendFormPage() {
       <div className="sticky bottom-0 z-20 -mx-4 border-t border-border/60 bg-background/90 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">
-            {qty > 0 && !overRequested ? `${fmtNum(qty)} pcs ready · ${formatCurrency(estBill)}` : 'Complete the required fields to send.'}
+            {dispatchLines.length > 0
+              ? `${dispatchLines.length + (materialId && qty > 0 && !overRequested ? 1 : 0)} materials ready - ${formatCurrency(totalDispatchEstBill)}`
+              : qty > 0 && !overRequested ? `${fmtNum(qty)} pcs ready - ${formatCurrency(estBill)}` : 'Complete the required fields to send.'}
           </p>
           <div className="flex items-center gap-2">
             <button
