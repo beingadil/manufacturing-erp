@@ -48,34 +48,51 @@ export class FinancialReportService {
   static getGeneralLedger(dateRange: { start: string; end: string }, searchQuery: string) {
     const { journalEntries, vouchers, accounts, customers, suppliers, processors } = useERPStore.getState();
 
-    const mappedEntries = journalEntries.map(entry => {
+    const mappedEntries = journalEntries.flatMap(entry => {
       const voucher = vouchers.find(v => v.id === entry.voucherId);
+      // Cancelled/deleted vouchers never affect a ledger (spec §14). Skip the
+      // row entirely instead of printing an entry with an empty date.
+      if (!voucher || voucher.status === 'Cancelled' || voucher.status === 'Deleted') return [];
+
       const account = accounts.find(a => a.id === entry.accountId);
-      
+
+      // Party accounts are linked to their party through `linkedEntityId`;
+      // the legacy `accountId` field on the party is only a fallback.
       let partyName = '-';
-      if (account?.type === 'Assets') {
-        const customer = customers.find(c => c.accountId === account.id);
+      if (account?.linkedEntityId) {
+        const customer = customers.find(c => c.id === account.linkedEntityId);
+        const supplier = suppliers.find(s => s.id === account.linkedEntityId);
+        const processor = processors.find(p => p.id === account.linkedEntityId);
         if (customer) partyName = customer.name;
-      } else if (account?.type === 'Liabilities') {
-        const supplier = suppliers.find(s => s.accountId === account.id);
-        const processor = processors.find(p => p.accountId === account.id);
-        if (supplier) partyName = supplier.name;
-        if (processor) partyName = processor.name;
+        else if (supplier) partyName = supplier.name;
+        else if (processor) partyName = processor.name;
+      }
+      if (partyName === '-') {
+        if (account?.type === 'Assets') {
+          const customer = customers.find(c => c.accountId === account.id);
+          if (customer) partyName = customer.name;
+        } else if (account?.type === 'Liabilities') {
+          const supplier = suppliers.find(s => s.accountId === account.id);
+          const processor = processors.find(p => p.accountId === account.id);
+          if (supplier) partyName = supplier.name;
+          else if (processor) partyName = processor.name;
+        }
       }
 
-      return {
+      return [{
         id: entry.id,
-        voucherId: voucher?.id || '',
-        date: voucher?.date || '',
-        voucherNo: voucher?.voucherNo || '',
-        createdAt: voucher?.createdAt,
+        voucherId: voucher.id,
+        date: voucher.date,
+        voucherNo: voucher.voucherNo,
+        voucherType: voucher.type,
+        createdAt: voucher.createdAt,
         accountCode: account?.code || '',
         accountName: account?.name || '',
         partyName,
         type: entry.debit > 0 ? 'Debit' : 'Credit',
         amount: entry.debit > 0 ? entry.debit : entry.credit,
-        description: voucher?.narration || '-'
-      };
+        description: voucher.narration || '-'
+      }];
     });
 
     const filteredEntries = ReportEngine.filterByDateRange(mappedEntries, 'date', dateRange);

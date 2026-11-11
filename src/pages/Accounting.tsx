@@ -4,6 +4,9 @@ import { useLocation, useSearchParams } from "react-router-dom";
 import { toast } from 'sonner';
 import { AddAccountModal } from "../components/AddAccountModal";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
+import { LedgerPeriodFilter, type LedgerPeriod } from '../components/ledger/LedgerPeriodFilter';
+import { LedgerStatement, ledgerBalanceSide, type LedgerStatementRow } from '../components/ledger/LedgerStatement';
+import { VoucherDetailModal } from '../components/VoucherDetailModal';
 import { BalanceSheetStatement } from "../components/reports/financial/BalanceSheetStatement";
 import { ProfitLossStatement } from "../components/reports/financial/ProfitLossStatement";
 import { PnlPositionStrip } from "../components/reports/financial/PnlPositionStrip";
@@ -11,11 +14,11 @@ import { SearchableSelect } from "../components/SearchableSelect";
 import { DatePicker } from "../components/ui/date-picker";
 import { SearchInput } from "../components/ui/SearchInput";
 import { AccountingEngine } from "../lib/accounting/AccountingEngine";
-import { getBankAccounts, getCashBankAccounts } from "../lib/accounting/accountClassification";
+import { getBankAccounts, getCashBankAccounts, isDebitNormalAccount } from "../lib/accounting/accountClassification";
 import { accountMatchesSearch, filterAccountsWithAncestors } from "../lib/accounting/accountHierarchy";
 import { generateLedgerStatementPDF } from "../lib/documentGenerators";
 import { FinancialReportService } from "../lib/reporting/FinancialReportService";
-import { cn, formatCurrency } from "../lib/utils";
+import { cn, formatCurrency, formatDate, formatDateISO } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
 import { Account, AccountType, JournalEntry, Voucher } from "../types/erp";
 
@@ -66,8 +69,8 @@ function GeneralLedger() {
   const { accounts, vouchers, journalEntries, suppliers, customers, processors, accountSubtypes } = useERPStore();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedAccountId, setSelectedAccountId] = useState<string>(() => searchParams.get('id') || "");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [period, setPeriod] = useState<LedgerPeriod>({ start: '', end: '', label: 'All Time' });
+  const [selectedVoucherId, setSelectedVoucherId] = useState<string | null>(null);
 
   // Resolve the displayed account: explicit selection → ?id= deep link → first
   // Bank account → first account. Deep-link support lets the Dashboard Bank
@@ -90,120 +93,173 @@ function GeneralLedger() {
   }, [resolvedAccountId]);
 
   const account = accounts.find(a => a.id === resolvedAccountId);
+  const dateFrom = period.start ? formatDateISO(period.start) : undefined;
+  const dateTo = period.end ? formatDateISO(period.end) : undefined;
 
-  // Single engine source for ledger rows + running balance (spec §24, §14)
-  const { rows: processedEntries, openingBalance } = AccountingEngine.getLedger(
-    resolvedAccountId,
-    accounts,
-    journalEntries,
-    vouchers,
-    dateFrom || undefined,
-    dateTo || undefined
+  // Single engine source for ledger rows + running balance (spec §24, §14).
+  // getLedger sorts date → voucherNo → createdAt → id, so same-day rows keep
+  // issuance order and the closing balance matches the chronological stream.
+  const { rows: processedEntries, openingBalance } = useMemo(
+    () => AccountingEngine.getLedger(
+      resolvedAccountId,
+      accounts,
+      journalEntries,
+      vouchers,
+      dateFrom,
+      dateTo
+    ),
+    [resolvedAccountId, accounts, journalEntries, vouchers, dateFrom, dateTo]
+  );
+
+  const isDebitNormal = account ? isDebitNormalAccount(account) : true;
+  const closingBalance = processedEntries.length > 0
+    ? processedEntries[processedEntries.length - 1].runningBalance
+    : openingBalance;
+  const showOpeningRow = processedEntries.length > 0 || Math.abs(openingBalance) > 0.005;
+
+  const statementRows: LedgerStatementRow[] = useMemo(
+    () => processedEntries.map(entry => ({
+      id: entry.id,
+      date: entry.voucher?.date || "",
+      reference: entry.voucher ? (
+        <button
+          type="button"
+          onClick={() => setSelectedVoucherId(entry.voucher!.id)}
+          className="text-primary transition-colors hover:text-primary/80 hover:underline"
+        >
+          {entry.voucher.voucherNo}
+        </button>
+      ) : "—",
+      description: entry.narration || entry.voucher?.narration || "—",
+      badges: entry.voucher?.type ? [{ label: entry.voucher.type, tone: "neutral" as const }] : [],
+      debit: entry.debit,
+      credit: entry.credit,
+      balance: entry.runningBalance,
+    })),
+    [processedEntries]
   );
 
   const handlePrintLedger = () => {
     if (!account) return;
-    const transactions = processedEntries.map(e => ({
-      date: new Date(e.voucher?.date || new Date().toISOString()).toLocaleDateString(),
-      referenceNo: e.voucher?.voucherNo || '-',
-      description: e.narration || '-',
-      debit: e.debit,
-      credit: e.credit,
-      balance: e.runningBalance
-    }));
-    generateLedgerStatementPDF(account.name, 'Account', transactions, processedEntries[processedEntries.length - 1]?.runningBalance ?? openingBalance);
+    const transactions = [
+      ...(showOpeningRow
+        ? [{
+            date: "",
+            referenceNo: "OPENING",
+            description: "Balance brought forward",
+            debit: 0,
+            credit: 0,
+            balance: openingBalance,
+          }]
+        : []),
+      ...processedEntries.map(entry => ({
+        date: entry.voucher?.date ? formatDate(entry.voucher.date) : "-",
+        referenceNo: entry.voucher?.voucherNo || "-",
+        description: entry.narration || entry.voucher?.narration || "-",
+        debit: entry.debit,
+        credit: entry.credit,
+        balance: entry.runningBalance,
+      })),
+    ];
+    generateLedgerStatementPDF(account.name, "Account", transactions, closingBalance, {
+      title: "GENERAL LEDGER STATEMENT",
+      periodLabel: period.label,
+      accountCode: account.code,
+    });
   };
 
   return (
     <div className="flex flex-col">
-      <div className="p-6 border-b border-border/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="p-6 border-b border-border/50 flex flex-col xl:flex-row justify-between items-start xl:items-end gap-4">
         <div>
           <h2 className="text-lg font-semibold text-foreground">General Ledger</h2>
-          <p className="text-sm text-muted-foreground">View detailed account transactions</p>
+          <p className="text-sm text-muted-foreground">
+            Account statement with opening balance, period totals and a running closing balance.
+          </p>
         </div>
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <button 
-            onClick={handlePrintLedger}
-            disabled={!account}
-            className="flex items-center gap-2 bg-secondary text-secondary-foreground px-4 py-2 rounded-lg hover:bg-secondary/80 transition-colors text-sm font-medium whitespace-nowrap disabled:opacity-50"
-          >
-            <Printer className="h-4 w-4" />
-            Print Ledger
-          </button>
-          <DatePicker value={dateFrom} onChange={setDateFrom} size="sm" className="w-40" placeholder="From" />
-          <span className="text-muted-foreground text-sm">to</span>
-          <DatePicker value={dateTo} onChange={setDateTo} size="sm" className="w-40" placeholder="To" />
-          <div className="w-full sm:w-80">
-            <SearchableSelect 
+        <div className="flex flex-col sm:flex-row sm:items-end gap-3 w-full xl:w-auto">
+          <div className="flex flex-col gap-1 w-full sm:w-80">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Account</label>
+            <SearchableSelect
               options={accounts.map(a => {
-              let relatedParty = '';
-              if (a.linkedEntityId) {
-                const sup = suppliers?.find(s => s.id === a.linkedEntityId);
-                const cus = customers?.find(c => c.id === a.linkedEntityId);
-                const proc = processors?.find(p => p.id === a.linkedEntityId);
-                if (sup) relatedParty = `(Supplier: ${sup.name})`;
-                else if (cus) relatedParty = `(Customer: ${cus.name})`;
-                else if (proc) relatedParty = `(Processor: ${proc.name})`;
-              }
-              const subtype = accountSubtypes?.find(s => s.id === a.subtypeId)?.name || '';
-              return {
-                id: a.id,
-                label: `${a.code} - ${a.name}`,
-                secondaryLabel: `${a.type} ${subtype ? `• ${subtype}` : ''} ${relatedParty}`.trim(),
-                searchValue: `${a.type} ${subtype} ${relatedParty}`
-              };
-            })}
+                let relatedParty = '';
+                if (a.linkedEntityId) {
+                  const sup = suppliers?.find(s => s.id === a.linkedEntityId);
+                  const cus = customers?.find(c => c.id === a.linkedEntityId);
+                  const proc = processors?.find(p => p.id === a.linkedEntityId);
+                  if (sup) relatedParty = `(Supplier: ${sup.name})`;
+                  else if (cus) relatedParty = `(Customer: ${cus.name})`;
+                  else if (proc) relatedParty = `(Processor: ${proc.name})`;
+                }
+                const subtype = accountSubtypes?.find(s => s.id === a.subtypeId)?.name || '';
+                return {
+                  id: a.id,
+                  label: `${a.code} - ${a.name}`,
+                  secondaryLabel: `${a.type} ${subtype ? `• ${subtype}` : ''} ${relatedParty}`.trim(),
+                  searchValue: `${a.type} ${subtype} ${relatedParty}`
+                };
+              })}
               value={resolvedAccountId}
               onChange={val => setSelectedAccountId(val)}
               placeholder="Search account..."
             />
           </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Period</label>
+            <LedgerPeriodFilter onChange={setPeriod} defaultLabel="All Time" />
+          </div>
+          <button
+            onClick={handlePrintLedger}
+            disabled={!account}
+            className="flex items-center justify-center gap-2 bg-secondary text-secondary-foreground px-4 py-2 rounded-lg hover:bg-secondary/80 transition-colors text-sm font-medium whitespace-nowrap disabled:opacity-50"
+          >
+            <Printer className="h-4 w-4" />
+            Print Ledger
+          </button>
         </div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="border-b border-border/50 bg-muted/30">
-              <th className="py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Date</th>
-              <th className="py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Voucher</th>
-              <th className="py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Narration</th>
-              <th className="py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Debit</th>
-              <th className="py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Credit</th>
-              <th className="py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Balance</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/50">
-            {account && (
-              <tr className="bg-muted/10">
-                <td className="py-3 px-6 text-sm text-foreground" colSpan={3}>Opening Balance</td>
-                <td className="py-3 px-6 text-sm text-right text-foreground">{openingBalance >= 0 ? openingBalance.toLocaleString() : ''}</td>
-                <td className="py-3 px-6 text-sm text-right text-foreground">{openingBalance < 0 ? Math.abs(openingBalance).toLocaleString() : ''}</td>
-                <td className="py-3 px-6 text-sm text-right font-medium text-foreground">{Math.abs(openingBalance).toLocaleString()} {openingBalance >= 0 ? (account.type === 'Assets' || account.type === 'Expenses' || account.type === 'Cost of Goods Sold' || account.type === 'Other Expenses' ? 'Dr' : 'Cr') : (account.type === 'Assets' || account.type === 'Expenses' || account.type === 'Cost of Goods Sold' || account.type === 'Other Expenses' ? 'Cr' : 'Dr')}</td>
-              </tr>
-            )}
-            {/* Newest entry at the top (spec §24). Each row's running balance is
-                computed over the FULL ascending ledger, so the top row shows the
-                closing balance — never the latest entry's amount. */}
-            {[...processedEntries].reverse().map((entry) => (
-              <tr key={entry.id} className="hover:bg-muted/20 transition-colors">
-                <td className="py-3 px-6 text-sm text-foreground whitespace-nowrap">{new Date(entry.voucher?.date || new Date().toISOString()).toLocaleDateString()}</td>
-                <td className="py-3 px-6 text-sm font-medium text-foreground">{entry.voucher?.voucherNo}</td>
-                <td className="py-3 px-6 text-sm text-muted-foreground max-w-[280px] truncate" title={entry.narration || entry.voucher?.narration}>{entry.narration || entry.voucher?.narration || '-'}</td>
-                <td className="py-3 px-6 text-sm text-right text-foreground">{entry.debit > 0 ? entry.debit.toLocaleString() : ''}</td>
-                <td className="py-3 px-6 text-sm text-right text-foreground">{entry.credit > 0 ? entry.credit.toLocaleString() : ''}</td>
-                <td className="py-3 px-6 text-sm text-right font-medium text-foreground">{Math.abs(entry.runningBalance).toLocaleString()} {entry.runningBalance >= 0 ? (account?.type === 'Assets' || account?.type === 'Expenses' || account?.type === 'Cost of Goods Sold' || account?.type === 'Other Expenses' ? 'Dr' : 'Cr') : (account?.type === 'Assets' || account?.type === 'Expenses' || account?.type === 'Cost of Goods Sold' || account?.type === 'Other Expenses' ? 'Cr' : 'Dr')}</td>
-              </tr>
-            ))}
-            {processedEntries.length === 0 && (
-              <tr>
-                <td colSpan={6} className="py-8 text-center text-muted-foreground text-sm">
-                  No transactions found for this account.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+
+      {account ? (
+        <>
+          <div className="px-6 pt-5 pb-3 flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h3 className="text-base font-semibold text-foreground">
+                {account.code} — {account.name}
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                {account.type} · {period.label}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                {isDebitNormal ? 'Debit-normal account' : 'Credit-normal account'}
+              </span>
+              <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold tabular-nums text-primary">
+                {formatCurrency(Math.abs(closingBalance))} {ledgerBalanceSide(closingBalance, isDebitNormal)}
+              </span>
+            </div>
+          </div>
+          <LedgerStatement
+            embedded
+            rows={statementRows}
+            openingBalance={showOpeningRow ? openingBalance : undefined}
+            closingBalance={closingBalance}
+            isDebitNormal={isDebitNormal}
+            emptyMessage="No posted entries for this account in the selected period."
+          />
+        </>
+      ) : (
+        <div className="px-6 py-12 text-center text-sm text-muted-foreground">
+          Select an account to view its ledger statement.
+        </div>
+      )}
+
+      {selectedVoucherId && (
+        <VoucherDetailModal
+          voucherId={selectedVoucherId}
+          onClose={() => setSelectedVoucherId(null)}
+        />
+      )}
     </div>
   );
 }

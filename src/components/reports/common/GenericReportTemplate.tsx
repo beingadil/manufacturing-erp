@@ -33,6 +33,10 @@ export interface GenericReportTemplateProps<T extends Record<string, any>> {
   searchKeys?: (keyof T)[];
   /** Placeholder for the in-table search box. */
   searchPlaceholder?: string;
+  /** Extra controls rendered inside the filter bar (e.g. an account picker). */
+  customFilters?: React.ReactNode;
+  /** Replace the default table card with a custom body (e.g. a ledger statement). */
+  renderBody?: React.ReactNode;
 }
 
 export function GenericReportTemplate<T extends Record<string, any>>({
@@ -49,7 +53,9 @@ export function GenericReportTemplate<T extends Record<string, any>>({
   tableTitle = 'Detailed Report',
   tableSummaryRow,
   searchKeys,
-  searchPlaceholder
+  searchPlaceholder,
+  customFilters,
+  renderBody
 }: GenericReportTemplateProps<T>) {
   const [dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });
 
@@ -96,6 +102,7 @@ export function GenericReportTemplate<T extends Record<string, any>>({
         onDateRangeChange={handleDateChange}
         showDateRange={showDateRange}
         onExportPDF={handleExportPDF}
+        customFilters={customFilters}
         onPrint={() => {
           try {
             generateEnterpriseDocument({
@@ -138,12 +145,14 @@ export function GenericReportTemplate<T extends Record<string, any>>({
         ))}
       </div>
 
-      <div className="bg-card border border-border/50 rounded-xl shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-border/50 bg-muted/10">
-          <h3 className="text-base font-semibold text-foreground">{tableTitle}</h3>
+      {renderBody ?? (
+        <div className="bg-card border border-border/50 rounded-xl shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-border/50 bg-muted/10">
+            <h3 className="text-base font-semibold text-foreground">{tableTitle}</h3>
+          </div>
+          <DataTable data={data} columns={columns} embedded summaryRow={tableSummaryRow} searchKeys={searchKeys} searchPlaceholder={searchPlaceholder} />
         </div>
-        <DataTable data={data} columns={columns} embedded summaryRow={tableSummaryRow} searchKeys={searchKeys} searchPlaceholder={searchPlaceholder} />
-      </div>
+      )}
     </div>
   );
 }

@@ -25,8 +25,16 @@ export function sumInRange<T extends DatedRow>(
   return total;
 }
 
-export const saleTotal = (s: { totalAmount?: number }) => s.totalAmount || 0;
-export const purchaseTotal = (p: { weight?: number; ratePerUnit?: number }) =>
+/**
+ * Amount accessors.
+ *
+ * The parameter types carry `date` on purpose: `sumInRange` infers its row
+ * type from the accessor, and a candidate without `date` fails the
+ * `DatedRow` constraint, which makes TypeScript fall back to the bare
+ * constraint and reject the accessor as a weak type.
+ */
+export const saleTotal = (s: { date: string; totalAmount?: number }) => s.totalAmount || 0;
+export const purchaseTotal = (p: { date: string; weight?: number; ratePerUnit?: number }) =>
   (p.weight || 0) * (p.ratePerUnit || 0);
 
 /** Delta of `current` vs `prior`, as a fraction (0.25 = +25%). Null when prior is 0. */

@@ -2,10 +2,24 @@ import { format } from 'date-fns';
 import { generateEnterpriseDocument } from './pdfEngine';
 import { formatCurrency, formatNumber } from './utils';
 
-export function generateLedgerStatementPDF(partyName: string, partyType: string, transactions: any[], balance: number) {
+export function generateLedgerStatementPDF(
+  partyName: string,
+  partyType: string,
+  transactions: any[],
+  balance: number,
+  options?: { title?: string; periodLabel?: string; accountCode?: string },
+) {
+  const totalDebit = transactions.reduce((sum, t) => sum + (Number(t.debit) || 0), 0);
+  const totalCredit = transactions.reduce((sum, t) => sum + (Number(t.credit) || 0), 0);
+  const filters = [
+    ...(options?.accountCode ? [{ label: 'Account Code', value: options.accountCode }] : []),
+    ...(options?.periodLabel ? [{ label: 'Period', value: options.periodLabel }] : []),
+  ];
+
   generateEnterpriseDocument({
-    title: `${partyType.toUpperCase()} LEDGER STATEMENT`,
+    title: options?.title || `${partyType.toUpperCase()} LEDGER STATEMENT`,
     subtitle: `Statement for: ${partyName}`,
+    filters,
     tables: [{
       columns: [
         { header: 'Date', dataKey: 'date' },
@@ -19,11 +33,12 @@ export function generateLedgerStatementPDF(partyName: string, partyType: string,
         ...t,
         debit: t.debit > 0 ? formatCurrency(t.debit) : '-',
         credit: t.credit > 0 ? formatCurrency(t.credit) : '-',
-        balance: formatCurrency(t.balance)
+        balance: t.balance === undefined || t.balance === null ? '-' : formatCurrency(t.balance)
       })),
-      summaryRows: [[
-        { description: 'CLOSING BALANCE', balance: formatCurrency(balance) }
-      ]]
+      summaryRows: [
+        [{ description: 'TOTAL PERIOD ACTIVITY', debit: totalDebit, credit: totalCredit }],
+        [{ description: 'CLOSING BALANCE', balance }]
+      ]
     }]
   });
 }

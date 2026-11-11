@@ -81,6 +81,9 @@ export const DATE_RANGE_OPTIONS = [
       return { start: new Date(startYear, 6, 1).toISOString(), end: new Date(startYear + 1, 5, 30).toISOString() }; 
     } 
   },
+  // Empty start/end means "no window": ReportEngine returns the full history and
+  // ledgers show the account's opening balance plus everything posted after it.
+  { label: 'All Time', getValue: () => ({ start: '', end: '' }) },
   { label: 'Custom Date Range', getValue: () => ({ start: '', end: '' }) }
 ];
 
