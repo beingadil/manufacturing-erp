@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, Edit, Eye, Factory, Printer, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, Check, CheckCircle2, Edit, Eye, Factory, Printer, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -96,6 +96,60 @@ export function JobWork() {
     if (sendDateTo && (s.date || '') > sendDateTo) return false;
     return true;
   }), [enrichedSends, sendStageFilter, sendDateFrom, sendDateTo]);
+
+  // ── Receive all ──────────────────────────────────────────────────────────
+  // Everything a processor still owes us, grouped by that processor: one click
+  // receives every pending dispatch of theirs, each as its own receipt.
+  const [receiveAllProcessorId, setReceiveAllProcessorId] = useState('');
+  const processorsWithPending = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; dispatches: number; pcs: number }>();
+    for (const s of enrichedSends) {
+      if (s.pendingPcs <= 0) continue;
+      const entry = map.get(s.processorId) || {
+        id: s.processorId,
+        name: s.processorName,
+        dispatches: 0,
+        pcs: 0,
+      };
+      entry.dispatches += 1;
+      entry.pcs += s.pendingPcs;
+      map.set(s.processorId, entry);
+    }
+    return [...map.values()].sort((a, b) => b.pcs - a.pcs);
+  }, [enrichedSends]);
+
+  const handleReceiveAll = () => {
+    const target = receiveAllProcessorId || processorsWithPending[0]?.id;
+    if (!target) {
+      toast.error('Nothing is pending to receive.');
+      return;
+    }
+    const sends = enrichedSends.filter(s => s.processorId === target && s.pendingPcs > 0);
+    if (sends.length === 0) {
+      toast.error('Nothing is pending to receive.');
+      return;
+    }
+    const date = new Date().toISOString().split('T')[0];
+    try {
+      ErrorManagement.safeExecuteSync(() => {
+        for (const s of sends) {
+          ProcessingService.receive({
+            sendId: s.id,
+            processorId: s.processorId,
+            materialId: s.materialId,
+            date,
+            pcsReceived: s.pendingPcs,
+            dispatchedPcs: s.pcsSent,
+            previouslyReceivedPcs: s.pcsReceived,
+          });
+        }
+      }, 'Receive all');
+      const pcs = sends.reduce((sum, s) => sum + s.pendingPcs, 0);
+      toast.success(`Received ${pcs} PCS from ${sends[0].processorName} — ${sends.length} dispatch${sends.length === 1 ? '' : 'es'} closed out.`);
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Could not receive the pending dispatches.');
+    }
+  };
 
   // Record totals for the stats strip (mirrors the tables below).
   const jobStats = useMemo(() => ({
@@ -463,6 +517,29 @@ export function JobWork() {
                 placeholder="Filter by stage…"
                 size="sm"
               />
+              {processorsWithPending.length > 0 && (
+                <>
+                  <SearchableSelect
+                    options={processorsWithPending.map(p => ({
+                      id: p.id,
+                      label: p.name,
+                      secondaryLabel: `${p.dispatches} dispatch${p.dispatches === 1 ? '' : 'es'} · ${p.pcs} PCS pending`,
+                    }))}
+                    value={receiveAllProcessorId}
+                    onChange={(val) => setReceiveAllProcessorId(val)}
+                    placeholder="Processor to receive all…"
+                    size="sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleReceiveAll}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    Receive all
+                  </button>
+                </>
+              )}
             </div>
           </div>
           <DataTable

@@ -110,6 +110,27 @@ export default function ReceiveFormPage() {
     setLines(prev => [...prev, newLine()]);
   };
 
+  /**
+   * Fill every line with what this processor still owes us — one line per
+   * pending dispatch, at its full pending quantity. The user reviews it and
+   * presses Save; nothing is received until they do.
+   */
+  const receiveAllPending = () => {
+    setError(null);
+    if (!processorId) {
+      setError('Pick a processor first.');
+      return;
+    }
+    const pending = openSends
+      .map(s => ({ sendId: s.id, pcs: String(pendingFor(s.id)) }))
+      .filter(l => Number(l.pcs) > 0);
+    if (pending.length === 0) {
+      setError('Nothing is pending with this processor.');
+      return;
+    }
+    setLines(pending.map((l, i) => ({ key: `line-all-${i}`, ...l })));
+  };
+
   const removeLine = (key: string) => {
     setError(null);
     setLines(prev => (prev.length === 1 ? prev : prev.filter(l => l.key !== key)));
@@ -257,9 +278,20 @@ export default function ReceiveFormPage() {
                   One line per material — receive several in one go. Each line is accrued and billed on its own.
                 </p>
               </div>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                {lines.length} line{lines.length === 1 ? '' : 's'}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {lines.length} line{lines.length === 1 ? '' : 's'}
+                </span>
+                <button
+                  type="button"
+                  onClick={receiveAllPending}
+                  disabled={!processorId}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-semibold text-foreground/80 transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  Receive all pending
+                </button>
+              </div>
             </div>
 
             <div className="space-y-3 p-4 sm:p-5">
