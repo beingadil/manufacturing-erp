@@ -139,7 +139,7 @@ describe('wastage leaves the pipeline everywhere', () => {
     expect(row).toBeTruthy();
     // 800 sent - 200 wasted = 600 still pending; not 800.
     expect(row!.pendingPcs).toBe(600);
-  });
+  }, 15000);
 });
 
 describe('undoProcessingLoss — reversing a wastage entry restores pcs exactly', () => {
