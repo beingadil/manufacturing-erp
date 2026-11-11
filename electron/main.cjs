@@ -53,10 +53,48 @@ const createWindow = () => {
 
   // Chromium persists accidental page zoom per origin (Ctrl+Scroll / Ctrl+-),
   // and once persisted it appears on EVERY page — looking exactly like the
-  // whole app "shrinking after clicking". Pin zoom to 100% and clamp the
-  // limits so the window can never open at, or drop to, a scaled size again.
-  mainWindow.webContents.setZoomLevelLimits([1, 1]);
-  mainWindow.webContents.setZoomFactor(1);
+  // whole app "shrinking after clicking". Pin zoom to 100%.
+  //
+  // IMPORTANT: webContents.setZoomLevelLimits() does NOT exist in Electron 44.
+  // Calling it threw a TypeError here during startup, which aborted window
+  // creation entirely: the main process kept running with no window, so the
+  // installed app looked like it "never opened". Only use APIs this Electron
+  // build actually has, and never let a zoom tweak take the window down.
+  const pinZoom = () => {
+    if (mainWindow.isDestroyed()) return;
+    try {
+      mainWindow.webContents.setZoomFactor(1);
+    } catch (e) {
+      console.warn('[Main] Could not reset zoom factor:', e.message);
+    }
+  };
+
+  // Block the keyboard zoom shortcuts (Ctrl/Cmd +/-/0) entirely.
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return;
+    const modifier = process.platform === 'darwin' ? input.meta : input.control;
+    if (!modifier) return;
+    if (['+', '=', '-', '_', '0'].includes(input.key)) event.preventDefault();
+  });
+
+  // Ctrl+wheel and pinch emit zoom-changed: cancel the change, then snap back.
+  mainWindow.webContents.on('zoom-changed', (event) => {
+    if (event && typeof event.preventDefault === 'function') event.preventDefault();
+    pinZoom();
+  });
+
+  // A persisted zoom level is re-applied on navigation, so reset after load.
+  mainWindow.webContents.on('did-finish-load', pinZoom);
+
+  try {
+    const visualLimits = mainWindow.webContents.setVisualZoomLevelLimits(1, 1);
+    if (visualLimits && typeof visualLimits.catch === 'function') {
+      visualLimits.catch(() => {});
+    }
+  } catch (e) {
+    console.warn('[Main] Could not pin visual zoom:', e.message);
+  }
+  pinZoom();
 
   // Show the window as soon as the first frame is painted so the user never
   // sees a loading spinner or blank white screen.
@@ -77,6 +115,22 @@ const createWindow = () => {
   mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   if (!app.isPackaged) {
     mainWindow.webContents.openDevTools();
+  }
+};
+
+// A startup exception in createWindow() used to leave the app alive with no
+// window at all (only background processes in Task Manager). Never fail
+// silently again: surface the error instead of becoming an invisible process.
+const createWindowSafe = () => {
+  try {
+    createWindow();
+  } catch (error) {
+    console.error('[Main] Failed to create the main window:', error);
+    dialog.showErrorBox(
+      'Application failed to start',
+      'The main window could not be created.\n\n' +
+      (error && (error.stack || error.message) ? (error.stack || error.message) : String(error))
+    );
   }
 };
 
@@ -574,7 +628,7 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     }
   });
 
-  createWindow();
+  createWindowSafe();
 
   // First check runs shortly after launch, then the schedule owns every
   // subsequent attempt (retry backoff or the periodic re-check).
@@ -587,7 +641,7 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      createWindowSafe();
     }
   });
 
