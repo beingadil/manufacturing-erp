@@ -13,6 +13,7 @@ import {
   buildReceiptAccrual,
 } from '../lib/accounting/manufacturingPosting';
 import { previewProcessingCostReclassification } from '../lib/accounting/processingCostReclassification';
+import { billLineDetails } from '../lib/processing/billLineDetails';
 import { DocumentNumberingService } from '../lib/business/DocumentNumberingService';
 import { createVoucher } from './erpVoucher';
 import { batchAvailableAtSource, batchTotalPcs, InsufficientStockError, InventoryCalculationService } from '../lib/business/InventoryCalculationService';
@@ -1954,33 +1955,49 @@ export const useERPStore = create<ERPState>()(
           // into inventory when each receipt came back (Dr Raw Material /
           // Cr Accrued Expenses). This bill therefore CLEARS the accrual and
           // only the true-up difference hits Processing Expense.
-          const accruedTotal = receiptsToBill.reduce(
-            (sum, r) => sum + Math.max(0, Number(r.accruedProcessingCost) || 0),
-            0,
-          );
-          const posting = buildProcessorBill(
-            state.accounts,
-            state.accountSubtypes,
-            payableAccount,
-            totalAmount,
-            accruedTotal,
-            `Processing Bill for ${receiptsToBill.length} receipts`,
-          );
-          const built = posting.length > 0
-            ? createVoucher(state.vouchers, {
-                date: data.date,
-                type: 'Journal Voucher',
-                referenceNo: billNo,
-                sourceModule: 'Processing',
-                sourceId: billId,
-                narration: `Processing Bill for ${receiptsToBill.length} receipts`,
-                lines: posting,
-                createdBy: state.currentUser?.name,
-              })
-            : null;
-          if (built) {
-            updatedVouchers = [built.voucher, ...state.vouchers];
-            updatedJournalEntries = [...built.entries, ...state.journalEntries];
+          // One voucher per receipt. Each receipt clears its OWN accrual, carries
+          // its OWN rate difference and posts its OWN payable line, so the
+          // ledger shows the bills separately with their own weight and rate —
+          // not one combined entry for the whole bill.
+          for (const receipt of receiptsToBill) {
+            const amount = lineAmounts?.[receipt.id] ?? receipt.billAmount;
+            const accrued = Math.max(0, Number(receipt.accruedProcessingCost) || 0);
+            const send = state.processingSends.find(s => s.id === receipt.sendId);
+            const batch = send?.batchId ? state.batches.find(b => b.id === send.batchId) : undefined;
+            const material = state.materials.find(m => m.id === receipt.materialId);
+            const narration = billLineDetails({
+              receiveNo: receipt.receiveNo,
+              materialName: material?.name,
+              pcsReceived: receipt.pcsReceived,
+              rateMethod: receipt.rateMethod,
+              billingUnit: receipt.billingUnit,
+              rate: send?.ratePerPiece,
+              weightPerPiece: batch?.weightPerPiece,
+            });
+            const posting = buildProcessorBill(
+              state.accounts,
+              state.accountSubtypes,
+              payableAccount,
+              amount,
+              accrued,
+              narration,
+            );
+            const built = posting.length > 0
+              ? createVoucher(updatedVouchers, {
+                  date: data.date,
+                  type: 'Journal Voucher',
+                  referenceNo: billNo,
+                  sourceModule: 'Processing',
+                  sourceId: billId,
+                  narration,
+                  lines: posting,
+                  createdBy: state.currentUser?.name,
+                })
+              : null;
+            if (built) {
+              updatedVouchers = [built.voucher, ...updatedVouchers];
+              updatedJournalEntries = [...built.entries, ...updatedJournalEntries];
+            }
           }
         } else {
           // Legacy policy: stage bills post DR Processing Expense /
@@ -1988,48 +2005,64 @@ export const useERPStore = create<ERPState>()(
           const processingExpenseAccount = getSystemAccountBySubtype(state.accounts, state.accountSubtypes, 'Processing Expense');
 
           if (processingExpenseAccount && payableAccount) {
-            const voucherId = uuidv4();
-            const voucherNo = DocumentNumberingService.nextVoucherNumber(state.vouchers, 'Journal Voucher', data.date);
+            for (const receipt of receiptsToBill) {
+              const amount = lineAmounts?.[receipt.id] ?? receipt.billAmount;
+              const send = state.processingSends.find(s => s.id === receipt.sendId);
+              const material = state.materials.find(m => m.id === receipt.materialId);
+              const narration = billLineDetails({
+                receiveNo: receipt.receiveNo,
+                materialName: material?.name,
+                pcsReceived: receipt.pcsReceived,
+                rateMethod: receipt.rateMethod,
+                billingUnit: receipt.billingUnit,
+                rate: send?.ratePerPiece,
+              });
 
-            const newVoucher: Voucher = {
-              id: voucherId,
-              voucherNo,
-              date: data.date,
-              type: 'Journal Voucher',
-              referenceNo: billNo,
-              sourceModule: 'Processing',
-              sourceId: billId,
-              narration: `Processing Bill for ${receiptsToBill.length} receipts`,
-              totalDebit: totalAmount,
-              totalCredit: totalAmount,
-              createdAt: new Date().toISOString(),
-              status: 'Posted',
-              versionHistory: [{
+              const voucherId = uuidv4();
+              const voucherNo = DocumentNumberingService.nextVoucherNumber(updatedVouchers, 'Journal Voucher', data.date);
+
+              const newVoucher: Voucher = {
+                id: voucherId,
+                voucherNo,
+                date: data.date,
+                type: 'Journal Voucher',
+                referenceNo: billNo,
+                sourceModule: 'Processing',
+                sourceId: billId,
+                narration,
+                totalDebit: amount,
+                totalCredit: amount,
+                createdAt: new Date().toISOString(),
+                status: 'Posted',
+                versionHistory: [{
+                  id: uuidv4(),
+                  modifiedAt: new Date().toISOString(),
+                  action: 'Created',
+                  reason: 'Auto-generated from Processing Bill'
+                }]
+              };
+
+              const debitEntry: JournalEntry = {
                 id: uuidv4(),
-                modifiedAt: new Date().toISOString(),
-                action: 'Created',
-                reason: 'Auto-generated from Processing Bill'
-              }]
-            };
+                voucherId,
+                accountId: processingExpenseAccount.id,
+                debit: amount,
+                credit: 0,
+                narration,
+              };
 
-            const debitEntry: JournalEntry = {
-              id: uuidv4(),
-              voucherId,
-              accountId: processingExpenseAccount.id,
-              debit: totalAmount,
-              credit: 0
-            };
+              const creditEntry: JournalEntry = {
+                id: uuidv4(),
+                voucherId,
+                accountId: payableAccount.id,
+                debit: 0,
+                credit: amount,
+                narration,
+              };
 
-            const creditEntry: JournalEntry = {
-              id: uuidv4(),
-              voucherId,
-              accountId: payableAccount.id,
-              debit: 0,
-              credit: totalAmount
-            };
-
-            updatedVouchers = [newVoucher, ...state.vouchers];
-            updatedJournalEntries = [debitEntry, creditEntry, ...state.journalEntries];
+              updatedVouchers = [newVoucher, ...updatedVouchers];
+              updatedJournalEntries = [debitEntry, creditEntry, ...updatedJournalEntries];
+            }
           }
         }
 

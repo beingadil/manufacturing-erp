@@ -11,6 +11,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { adaptiveAmountClass, cn, formatCurrency, formatNumber } from '../../lib/utils';
+import { billLineQuantity } from '../../lib/processing/billLineDetails';
 import { ProcessingService } from '../../services/ProcessingService';
 import { useERPStore } from '../../store/useERPStore';
 import { QuickAddProcessor } from '../../components/QuickAddModals';
@@ -25,7 +26,7 @@ export default function BillFormPage() {
   const navigate = useNavigate();
   const isEdit = Boolean(editId);
 
-  const { materials, processors, processingReceipts, processorBills, processingStages } = useERPStore();
+  const { materials, processors, processingReceipts, processorBills, processingStages, processingSends, batches } = useERPStore();
 
   const [processorId, setProcessorId] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -73,6 +74,27 @@ export default function BillFormPage() {
   const accruedToClear = selectedReceipts.reduce((sum, r) => sum + (r.accruedProcessingCost || 0), 0);
   const rateDifference = billSubtotal - accruedToClear;
   const selectedStage = processingStages?.find(s => s.id === selectedReceipts[0]?.stageId);
+
+  /** The billing detail of one receipt: pieces, weight and rate. */
+  const quantityFor = (r: typeof processingReceipts[number]) => {
+    const send = processingSends.find(s => s.id === r.sendId);
+    const batch = send?.batchId ? batches.find(b => b.id === send.batchId) : undefined;
+    return billLineQuantity({
+      receiveNo: r.receiveNo,
+      pcsReceived: r.pcsReceived,
+      rateMethod: r.rateMethod,
+      billingUnit: r.billingUnit,
+      rate: send?.ratePerPiece,
+      weightPerPiece: batch?.weightPerPiece,
+    });
+  };
+
+  /** What each receipt posts on its own — one group per receipt, never combined. */
+  const postingFor = (r: typeof processingReceipts[number]) => {
+    const amount = parseFloat(lineAmounts[r.id] ?? '') || r.billAmount;
+    const accrued = Math.max(0, Number(r.accruedProcessingCost) || 0);
+    return { amount, accrued, difference: amount - accrued };
+  };
 
   const toggle = (id: string) => {
     setError(null);
@@ -235,6 +257,7 @@ export default function BillFormPage() {
                       <th className="w-10 px-3 py-2.5 text-left"></th>
                       <th className={cn(headCell, 'px-3 py-2.5 text-left')}>Receipt</th>
                       <th className={cn(headCell, 'px-3 py-2.5 text-left')}>Material</th>
+                      <th className={cn(headCell, 'px-3 py-2.5 text-left')}>Billing</th>
                       <th className={cn(headCell, 'px-3 py-2.5 text-right')}>PCS</th>
                       <th className={cn(headCell, 'px-3 py-2.5 text-right')}>Amount</th>
                     </tr>
@@ -269,6 +292,7 @@ export default function BillFormPage() {
                             <div className="text-[10px] text-muted-foreground">{new Date(r.date).toLocaleDateString()}</div>
                           </td>
                           <td className="px-3 py-2.5 font-medium text-foreground">{m?.name}</td>
+                          <td className="px-3 py-2.5 text-xs tabular-nums text-muted-foreground">{quantityFor(r)}</td>
                           <td className="px-3 py-2.5 text-right tabular-nums">{formatNumber(r.pcsReceived)}</td>
                           <td className="px-3 py-2.5 text-right" onClick={e => e.stopPropagation()}>
                             {isSelected ? (
@@ -341,11 +365,32 @@ export default function BillFormPage() {
 
             <div className="border-t border-border/60 bg-muted/20 px-4 py-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">What posts at create</p>
-              <ul className="mt-1.5 space-y-1 text-[11px] font-medium leading-snug text-foreground/85">
-                {accruedToClear > 0 && <li>Dr Accrued Expenses — {formatCurrency(accruedToClear)} (clears at this bill)</li>}
-                {Math.abs(rateDifference) > 0 && <li>{rateDifference >= 0 ? 'Dr' : 'Cr'} Processing Expense — {formatCurrency(Math.abs(rateDifference))}</li>}
-                <li>Cr Accounts Payable — {formatCurrency(billSubtotal)}</li>
-              </ul>
+              {selectedReceipts.length === 0 ? (
+                <p className="mt-1.5 text-[11px] font-medium leading-snug text-muted-foreground">
+                  Each receipt you select posts on its own — its own accrual clear, its own rate difference and its own payable line.
+                </p>
+              ) : (
+                <div className="mt-1.5 space-y-2">
+                  {selectedReceipts.map(r => {
+                    const { amount, accrued, difference } = postingFor(r);
+                    return (
+                      <div key={r.id} className="rounded-lg border border-border/60 bg-card px-2.5 py-1.5">
+                        <div className="text-[11px] font-semibold leading-snug text-foreground">
+                          {r.receiveNo} · {materials.find(m => m.id === r.materialId)?.name ?? 'material'}
+                        </div>
+                        <div className="text-[10px] tabular-nums text-muted-foreground">{quantityFor(r)}</div>
+                        <ul className="mt-1 space-y-0.5 text-[11px] font-medium leading-snug text-foreground/85">
+                          {accrued > 0 && <li>Dr Accrued Expenses — {formatCurrency(accrued)}</li>}
+                          {Math.abs(difference) > 0 && (
+                            <li>{difference >= 0 ? 'Dr' : 'Cr'} Processing Expense — {formatCurrency(Math.abs(difference))}</li>
+                          )}
+                          <li>Cr Accounts Payable — {formatCurrency(amount)}</li>
+                        </ul>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
           <p className="mt-3 px-1 text-xs leading-relaxed text-muted-foreground">
