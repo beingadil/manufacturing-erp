@@ -126,6 +126,8 @@ every installed app** — the updater 404s instead of offering the new version.
 | A release with no `latest.yml` | Every installed app 404s on the update feed and cannot update | The guard job rebuilds such a release; the run fails loudly. Fix it, do not skip it |
 | An account code from a count | `generateAccountCode` used to count accounts per type, so deleting one and adding another reissued the freed code (two accounts on 1015, two on 6015) | Codes are **max-based** now (`nextAccountCode`) and a duplicate code is refused. Never go back to counting |
 | `gh release edit` on an electron-builder release | It tries to CREATE the release and fails with "tag_name already exists" | PATCH the release through the REST API, or let the workflow's notes step do it |
+| A stale tool process left running | A `tsgo` from a killed probe kept running for 30+ minutes at 1.8 GB and starved every later run. "The lint is slow" was really "three lints are fighting" | Before measuring anything, check `Get-Process node,tsgo,biome` and kill what is not yours. One tool at a time |
+| `tsgo` on this Windows machine | The same type check CI does in seconds on Linux has run for **25+ minutes locally at ~10% CPU** — it is I/O-bound, not compute-bound. A stale `tsgo` was partly to blame, but the slowness survived with the machine idle | Config fixes applied (see §6). If it is still slow, measure a one-file check before blaming the config: a slow one-file check means the machine, not the program |
 
 ---
 
@@ -176,3 +178,40 @@ every installed app** — the updater 404s instead of offering the new version.
 - Commit messages are conventional commits (`feat`, `fix`, `test`, `docs`,
   `ci`, `chore`, `refactor`, `perf`) — the GitHub release notes are
   generated from them.
+
+---
+
+## 6. Where we left off (2026-11-11)
+
+Work in progress, committed and pushed as `b41a399`:
+
+**Done — the master-data form polish.**
+The four create forms (Customer, Supplier, Processor, Raw Material) were built
+from three different control languages. Now one system, in
+`src/components/ui/formStyles.ts`:
+
+| Token | Value |
+|---|---|
+| Control height | 46px (input, textarea, dropdown, searchable select, buttons) |
+| Control radius | 12px |
+| Focus | one soft halo — `ring-4 ring-primary/10` — no hard 1px ring |
+| Label | 14px / `font-medium`, one required mark (red asterisk) |
+| Close button | 32×32 hit area (was 28×28) |
+
+- `Dropdown` was 42px tall next to 46px inputs → now 46px.
+- The Raw Material usage question is now two option cards (icon, choice, the
+  consequence of choosing it) instead of bare radio pills.
+- Materials and Suppliers moved to the modal's **footer slot** like the other
+  three — the save action is outside the scroll area on all of them now.
+  `MaterialForm` / `SupplierForm` take `formId` + `showFooter` for this.
+
+**Still to do:**
+1. `npm run lint` + `npm test` must pass (the master-data Save-button suite
+   `src/pages/masterDataForms.test.tsx` covers the footer move).
+2. Build and check the forms in the preview at `http://localhost:4181`.
+3. `tsgo` is still pathologically slow locally — see the trap table. The config
+   fixes are in `tsconfig.check.json`: `"types": []` (no auto-inclusion of
+   every `@types` package — `@types/jsdom` alone drags in a large DOM graph),
+   `*.test.tsx` excluded (the old pattern only excluded `*.test.ts`), and
+   `incremental: true`. `tsconfig.app.json` lost a `typeRoots` glob that walked
+   all of `node_modules`.
