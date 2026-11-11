@@ -236,34 +236,55 @@ jobs:
           # trusting the exit code.
           VERSION=$(node -e "console.log(require('./package.json').version)")
           TAG="v${VERSION}"
+          # Each asset line is "<state> <name>". GitHub lists an asset as
+          # state "new" while it is still uploading and flips it to "uploaded"
+          # when the bytes have landed.
           release_assets() {
-            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null || true
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets \
+              --jq '.assets[] | "\(.state) \(.name)"' 2>/dev/null || true
+          }
+          asset_state() {
+            local wanted="$1" line
+            line=$(release_assets | grep -F " $wanted" | head -1 | cut -d' ' -f1)
+            echo "${line:-missing}"
           }
           assets_complete() {
-            local names
-            names=$(release_assets)
-            echo "$names" | grep -qx "Manufacturing-ERP-Setup-${VERSION}.exe" \
-              && echo "$names" | grep -qx "latest.yml"
+            [ "$(asset_state "Manufacturing-ERP-Setup-${VERSION}.exe")" = "uploaded" ] \
+              && [ "$(asset_state "latest.yml")" = "uploaded" ]
+          }
+          assets_in_flight() {
+            [ "$(asset_state "Manufacturing-ERP-Setup-${VERSION}.exe")" = "new" ] \
+              || [ "$(asset_state "latest.yml")" = "new" ]
           }
           for attempt in 1 2 3; do
             echo "Publish attempt ${attempt}/3 ..."
-            if npx electron-builder "${ARGS[@]}"; then
-              for wait in $(seq 1 24); do
-                if assets_complete; then
-                  echo "✓ Published on attempt ${attempt}."
-                  break
-                fi
-                if [ "$wait" = "24" ]; then
-                  echo "Attempt ${attempt} returned success but the assets are not all there yet."
-                fi
-                sleep 10
-              done
+            npx electron-builder "${ARGS[@]}" || true
+            # Wait for the upload to LAND rather than trusting the exit code:
+            # v1.3.3 published "successfully" and the release ended up with only
+            # the blockmap on it. An asset that is still uploading must NOT be
+            # re-published - electron-builder deletes and re-uploads it, which
+            # restarts the 122MB transfer and can never finish in time.
+            for wait in $(seq 1 60); do
               if assets_complete; then
+                echo "✓ Published on attempt ${attempt}."
                 break
               fi
+              if assets_in_flight; then
+                if [ "$wait" = "1" ]; then
+                  echo "Upload in flight — waiting for it to land …"
+                fi
+              elif [ "$wait" = "60" ]; then
+                echo "::error::the assets did not land within ten minutes:"
+                release_assets | sed '/^$/d;s/^/  - /'
+                exit 1
+              fi
+              sleep 10
+            done
+            if assets_complete; then
+              break
             fi
             if [ "$attempt" = "3" ]; then
-              echo "::error::the release is still incomplete after three attempts — the installer and latest.yml are not both on it."
+              echo "::error::the release is still incomplete after three attempts."
               exit 1
             fi
             echo "Publish incomplete — waiting 30s before retrying."
@@ -283,29 +304,40 @@ jobs:
           set -euo pipefail
           VERSION=$(node -e "console.log(require('./package.json').version)")
           TAG="v${VERSION}"
-          # A 122MB upload takes a while to appear in the release API, so a
-          # release that is still uploading reads as incomplete. Wait for it
-          # before calling it broken — but never wait forever.
-          for wait in $(seq 1 12); do
-            NAMES=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null || true)
+          # A 122MB upload takes a while to land, so a release that is still
+          # uploading reads as incomplete. Wait for it before calling it
+          # broken — but never wait forever, and an asset that is present with
+          # state "new" is uploading, not missing.
+          for wait in $(seq 1 24); do
+            NAMES=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets \
+              --jq '.assets[] | "\(.state) \(.name)"' 2>/dev/null || true)
             MISSING=""
+            INFLIGHT=""
             for expected in "Manufacturing-ERP-Setup-${VERSION}.exe" "latest.yml"; do
-              echo "$NAMES" | grep -qx "$expected" || MISSING="${MISSING} ${expected}"
+              state=$(echo "$NAMES" | grep -F " $expected" | head -1 | cut -d' ' -f1)
+              case "$state" in
+                uploaded) ;;
+                new) INFLIGHT="${INFLIGHT} ${expected}" ;;
+                *) MISSING="${MISSING} ${expected}" ;;
+              esac
             done
-            if [ -z "$MISSING" ]; then
+            if [ -z "$MISSING" ] && [ -z "$INFLIGHT" ]; then
               echo "Assets on ${TAG}:"
               echo "$NAMES" | sed '/^$/d;s/^/  - /'
               echo "✓ Release ${TAG} carries the installer and its update feed."
               exit 0
             fi
-            if [ "$wait" = "12" ]; then
+            if [ "$wait" = "24" ]; then
               echo "Assets on ${TAG}:"
               echo "$NAMES" | sed '/^$/d;s/^/  - /'
               echo "::error::Release ${TAG} is missing:${MISSING}"
+              if [ -n "$INFLIGHT" ]; then
+                echo "::error::Still uploading after six minutes:${INFLIGHT}"
+              fi
               echo "::error::Installed apps read latest.yml from this release — without it they cannot update."
               exit 1
             fi
-            echo "Waiting for the upload to land (${MISSING}) …"
+            echo "Waiting for the upload to land${INFLIGHT:+ (in flight:${INFLIGHT})} …"
             sleep 15
           done
 
