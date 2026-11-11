@@ -1,5 +1,5 @@
-﻿/**
- * The raw-material form â€” the exact same fields the Raw Materials module
+/**
+ * The raw-material form — the exact same fields the Raw Materials module
  * renders. Used inside the module's modal and, inline, on the purchase entry
  * page so a buyer can create a material without losing the document.
  */
@@ -32,7 +32,7 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
   const { materials, categories, processingStages } = useERPStore();
 
   const [name, setName] = useState(material?.name ?? '');
-  // The "No." a person reads out with the name â€” "Circle 12Â½ Inch, No. 4 No".
+  // The "No." a person reads out with the name — "Circle 12½ Inch, No. 4 No".
   const [code, setCode] = useState(material?.code ?? '');
   const [usageType, setUsageType] = useState<MaterialUsageType>(material?.usageType === 'component' ? 'component' : 'sellable');
   const [categoryId, setCategoryId] = useState(material?.categoryId ?? '');
@@ -47,7 +47,7 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
     [processingStages]
   );
 
-  // A category with a defaultProcessingPath seeds the selector â€” but never for a
+  // A category with a defaultProcessingPath seeds the selector — but never for a
   // part. Parts are bought ready-made, and the path selector is hidden for them,
   // so a category default arriving after the usage choice would silently save
   // the part on a processor chain the user can neither see nor change.
@@ -118,10 +118,10 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
               onChange={e => setName(e.target.value)}
               autoComplete="off"
               className={formInputClass}
-              placeholder="e.g. Circle 12Â½ Inch"
+              placeholder="e.g. Circle 12½ Inch"
             />
           </FormField>
-          <FormField id="material-code" label="No." hint="Shown next to the name everywhere, and searchable." className="sm:col-span-1">
+          <FormField id="material-code" label="No." hint="Shown next to the name" className="sm:col-span-1">
             <input
               id="material-code"
               name="material-code"
@@ -134,12 +134,12 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
             />
           </FormField>
           <fieldset className="space-y-2 sm:col-span-2">
-            <legend className="text-sm font-semibold text-foreground">This material is used asâ€¦</legend>
+            <legend className="text-sm font-semibold text-foreground">This material is used as…</legend>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Material usage">
               {(
                 [
-                  { v: 'sellable', t: 'A product on its own', d: 'Processing makes it saleable; the Products form links it directly.' },
-                  { v: 'component', t: 'A part of another product', d: 'A steel dhakkan on a steel jug, a handle. Never sold on its own.' },
+                  { v: 'sellable', t: 'A product on its own' },
+                  { v: 'component', t: 'A part of another product' },
                 ] as const
               ).map(o => {
                 const selected = usageType === o.v;
@@ -157,7 +157,7 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
                       setAllowedStageIds([]);
                     }}
                     className={cn(
-                      'group flex w-full cursor-pointer items-start gap-3 rounded-xl border p-4 text-left transition-all duration-200',
+                      'group flex h-12 w-full cursor-pointer items-center gap-3 rounded-xl border px-4 text-left transition-all duration-200',
                       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background',
                       selected
                         ? 'border-primary bg-primary/[0.04] shadow-sm'
@@ -167,23 +167,19 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
                     <span
                       aria-hidden="true"
                       className={cn(
-                        'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
+                        'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
                         selected ? 'border-primary' : 'border-border group-hover:border-primary/50'
                       )}
                     >
                       {selected && <span className="h-2 w-2 rounded-full bg-primary" />}
                     </span>
-                    <span className="min-w-0">
-                      <span className={cn('block text-sm font-semibold', selected ? 'text-primary' : 'text-foreground')}>
-                        {o.t}
-                      </span>
-                      <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{o.d}</span>
+                    <span className={cn('text-sm font-semibold', selected ? 'text-primary' : 'text-foreground')}>
+                      {o.t}
                     </span>
                   </button>
                 );
               })}
             </div>
-            <p className="text-xs text-muted-foreground">Only materials marked as a part can be picked in the Products form.</p>
           </fieldset>
         </FormGrid>
       </FormSection>
@@ -197,7 +193,7 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
               onChange={e => setDescription(e.target.value)}
               className={formInputClass}
               placeholder="Optional notes"
-              rows={2}
+              rows={3}
             />
           </FormField>
           <FormField id="material-status" label="Status" className="sm:col-span-1">
@@ -240,10 +236,10 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
               required
             />
             <p className="text-xs text-muted-foreground">
-              {processingPath === 'full_chain' && 'Material goes through every processor in sequence before becoming a final product.'}
-              {processingPath === 'single_stage' && 'Material is sent to exactly one processor below; what comes back is the final product.'}
-              {processingPath === 'custom_stages' && 'Tick the processors this material passes through (in chain order). What comes back from the LAST ticked processor is the final product.'}
-              {processingPath === 'ready_made' && 'Purchased already finished (e.g. lids, handles) - enters sellable stock directly, never dispatched.'}
+              {processingPath === 'full_chain' && 'Through every processor, in order.'}
+              {processingPath === 'single_stage' && 'One processor only.'}
+              {processingPath === 'custom_stages' && 'The processors you tick below.'}
+              {processingPath === 'ready_made' && 'No processing. Straight into stock.'}
             </p>
           </FormField>
           )}
