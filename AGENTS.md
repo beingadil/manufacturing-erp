@@ -127,7 +127,7 @@ every installed app** — the updater 404s instead of offering the new version.
 | An account code from a count | `generateAccountCode` used to count accounts per type, so deleting one and adding another reissued the freed code (two accounts on 1015, two on 6015) | Codes are **max-based** now (`nextAccountCode`) and a duplicate code is refused. Never go back to counting |
 | `gh release edit` on an electron-builder release | It tries to CREATE the release and fails with "tag_name already exists" | PATCH the release through the REST API, or let the workflow's notes step do it |
 | A stale tool process left running | A `tsgo` from a killed probe kept running for 30+ minutes at 1.8 GB and starved every later run. "The lint is slow" was really "three lints are fighting" | Before measuring anything, check `Get-Process node,tsgo,biome` and kill what is not yours. One tool at a time |
-| `tsgo` on this Windows machine | The same type check CI does in seconds on Linux has run for **25+ minutes locally at ~10% CPU** — it is I/O-bound, not compute-bound. A stale `tsgo` was partly to blame, but the slowness survived with the machine idle | Config fixes applied (see §6). If it is still slow, measure a one-file check before blaming the config: a slow one-file check means the machine, not the program |
+| `tsgo` on this Windows machine | The same type check CI does in **10 seconds** on Linux has taken **25+ minutes** locally. Ruled out: program size (one trivial file still took 85s), path length (a `subst R:` short drive was just as slow), the registry (the binary is local, `getExePath` never calls out) | It is the **machine**, not the config: Windows was compressing ~1 GB of pages with Brave, two OpenCode instances and Electron all resident. **Reboot, then measure once on a clean machine** before touching anything else. The config fixes in §6 are correct anyway — keep them |
 
 ---
 
@@ -209,9 +209,12 @@ from three different control languages. Now one system, in
 1. `npm run lint` + `npm test` must pass (the master-data Save-button suite
    `src/pages/masterDataForms.test.tsx` covers the footer move).
 2. Build and check the forms in the preview at `http://localhost:4181`.
-3. `tsgo` is still pathologically slow locally — see the trap table. The config
-   fixes are in `tsconfig.check.json`: `"types": []` (no auto-inclusion of
-   every `@types` package — `@types/jsdom` alone drags in a large DOM graph),
-   `*.test.tsx` excluded (the old pattern only excluded `*.test.ts`), and
-   `incremental: true`. `tsconfig.app.json` lost a `typeRoots` glob that walked
-   all of `node_modules`.
+3. `tsgo` is still pathologically slow locally — **it is the machine, not the
+   config** (see the trap table: one trivial file takes 85s, and a short
+   `subst` drive is no faster). Reboot, then measure once. The config fixes
+   are in `tsconfig.check.json` and are correct regardless: `"types": []`
+   (no auto-inclusion of every `@types` package — `@types/jsdom` alone drags
+   in a large DOM graph), `*.test.tsx` excluded (the old pattern only
+   excluded `*.test.ts`, so 9 test files were being type-checked), and
+   `incremental: true`. `tsconfig.app.json` lost a `typeRoots` glob that
+   walked all of `node_modules`.
