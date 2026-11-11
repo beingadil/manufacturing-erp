@@ -10,7 +10,6 @@ import { toast } from 'sonner';
 import { aiClient, FALLBACK_MODELS } from '../../lib/ai/aiClient';
 import { cn } from '../../lib/utils';
 import { useSettingsStore } from '../../store/useSettingsStore';
-import { formInputClass } from '../form/formStyles';
 import { Dropdown } from '../Dropdown';
 import { ToggleSwitch } from '../ui/toggle-switch';
 
