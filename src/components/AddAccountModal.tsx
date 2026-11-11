@@ -1,8 +1,8 @@
 import { X } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
-import { formInputClass } from '../components/form/formStyles';
 import { useERPStore } from '../store/useERPStore';
 import { AccountType, } from '../types/erp';
+import { Dropdown } from './Dropdown';
 import { SearchableSelect } from './SearchableSelect';
 import { ModalOverlay } from './ui/ModalOverlay';
 
@@ -126,16 +126,25 @@ export function AddAccountModal({ isOpen, onClose, onSave, editAccountId, quickA
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-muted-foreground mb-1">Account Type</label>
-              <select required value={type} onChange={e => { setType(e.target.value as AccountType); setSubtypeId(''); }} className={formInputClass}>
-                {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
+              <Dropdown
+                ariaLabel="Account type"
+                value={type}
+                onChange={(next) => { setType(next as AccountType); setSubtypeId(''); }}
+                options={TYPES.map(t => ({ value: t, label: t }))}
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-muted-foreground mb-1">Sub-Type</label>
-              <select required value={subtypeId} onChange={e => setSubtypeId(e.target.value)} className={formInputClass}>
-                <option value="">Select Subtype...</option>
-                {validSubtypes.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
-              </select>
+              <Dropdown
+                ariaLabel="Account sub-type"
+                placeholder="Select Subtype..."
+                value={subtypeId}
+                onChange={setSubtypeId}
+                options={[
+                  { value: '', label: 'Select Subtype...' },
+                  ...validSubtypes.map(st => ({ value: st.id, label: st.name })),
+                ]}
+              />
             </div>
           </div>
 
@@ -163,10 +172,15 @@ export function AddAccountModal({ isOpen, onClose, onSave, editAccountId, quickA
             </div>
             <div>
               <label className="block text-sm font-medium text-muted-foreground mb-1">Balance Type</label>
-              <select value={openingBalanceType} onChange={e => setOpeningBalanceType(e.target.value as 'Debit' | 'Credit')} className={formInputClass}>
-                <option value="Debit">Debit (Dr)</option>
-                <option value="Credit">Credit (Cr)</option>
-              </select>
+              <Dropdown
+                ariaLabel="Opening balance type"
+                value={openingBalanceType}
+                onChange={(next) => setOpeningBalanceType(next as 'Debit' | 'Credit')}
+                options={[
+                  { value: 'Debit', label: 'Debit (Dr)' },
+                  { value: 'Credit', label: 'Credit (Cr)' },
+                ]}
+              />
             </div>
           </div>
           

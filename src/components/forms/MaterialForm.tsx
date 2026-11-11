@@ -15,6 +15,7 @@ import { FormFooter } from '../form/FormFooter';
 import { FormGrid } from '../form/FormGrid';
 import { FormSection } from '../form/FormSection';
 import { formInputClass } from '../form/formStyles';
+import { Dropdown } from '../Dropdown';
 import { SearchableSelect } from '../SearchableSelect';
 
 export interface MaterialFormProps {
@@ -225,21 +226,20 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
               <label htmlFor="material-fixed-stage" className="text-sm font-semibold text-foreground">
                 The One Processor *
               </label>
-              <select
+              <Dropdown
                 id="material-fixed-stage"
-                required
+                ariaLabel="The One Processor"
+                placeholder="Select the processor stage..."
                 value={fixedStageId}
-                onChange={e => setFixedStageId(e.target.value)}
-                className={formInputClass}
-              >
-                <option value="">Select the processor stage...</option>
-                {sortedStagesForForm.map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                    {s.isFinalStage ? ' (Final)' : ''}
-                  </option>
-                ))}
-              </select>
+                onChange={setFixedStageId}
+                options={[
+                  { value: '', label: 'Select the processor stage...' },
+                  ...sortedStagesForForm.map(s => ({
+                    value: s.id,
+                    label: s.isFinalStage ? `${s.name} (Final)` : s.name,
+                  })),
+                ]}
+              />
             </div>
           )}
 

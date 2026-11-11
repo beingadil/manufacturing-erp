@@ -16,6 +16,7 @@ import {
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { BatchRegister, batchPathLabel } from '../components/materials/BatchRegister';
+import { Dropdown } from '../components/Dropdown';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { FormModal } from '../components/form/FormModal';
 import { MaterialForm } from '../components/forms/MaterialForm';
@@ -447,25 +448,29 @@ export function MaterialDetail() {
           <section>
             <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground"><ArrowRightLeft className="h-4 w-4" /> Movement ledger</h3>
             <div className="flex flex-wrap items-center gap-2 border-b border-border/50 pb-3">
-              <select
-                aria-label="Filter by module"
+              <Dropdown
+                size="sm"
+                ariaLabel="Filter by module"
                 value={movementModuleFilter}
-                onChange={e => { setMovementModuleFilter(e.target.value); setMovementVisible(200); }}
-                className="h-9 rounded-lg border border-border bg-muted/40 px-3 text-xs text-foreground"
-              >
-                <option value="">All modules</option>
-                {movementModules.map(mod => <option key={mod} value={mod}>{mod}</option>)}
-              </select>
-              <select
-                aria-label="Filter by type"
+                onChange={(next) => { setMovementModuleFilter(next); setMovementVisible(200); }}
+                triggerClassName="w-44"
+                options={[
+                  { value: '', label: 'All modules' },
+                  ...movementModules.map(mod => ({ value: mod, label: mod })),
+                ]}
+              />
+              <Dropdown
+                size="sm"
+                ariaLabel="Filter by type"
                 value={movementTypeFilter}
-                onChange={e => { setMovementTypeFilter(e.target.value as '' | 'IN' | 'OUT'); setMovementVisible(200); }}
-                className="h-9 rounded-lg border border-border bg-muted/40 px-3 text-xs text-foreground"
-              >
-                <option value="">IN &amp; OUT</option>
-                <option value="IN">IN</option>
-                <option value="OUT">OUT</option>
-              </select>
+                onChange={(next) => { setMovementTypeFilter(next as '' | 'IN' | 'OUT'); setMovementVisible(200); }}
+                triggerClassName="w-32"
+                options={[
+                  { value: '', label: 'IN & OUT' },
+                  { value: 'IN', label: 'IN' },
+                  { value: 'OUT', label: 'OUT' },
+                ]}
+              />
               <input
                 type="text"
                 value={movementQuery}

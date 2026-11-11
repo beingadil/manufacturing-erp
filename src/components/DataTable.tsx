@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import React, { memo, useEffect, useMemo, useState } from "react";
 import { cn } from "../lib/utils";
-import { formInputClass } from "./form/formStyles";
+import { Dropdown } from "./Dropdown";
 
 export interface Column<T> {
   key: string;
@@ -192,16 +192,14 @@ function DataTableInner<T extends Record<string, any>>({
           {showPageSize && (
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Show</span>
-            <select
-              aria-label="Rows per page"
-              value={itemsPerPage}
-              onChange={(e) => setItemsPerPage(Number(e.target.value))}
-              className={formInputClass}
-            >
-              {itemsPerPageOptions.map(opt => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
+            <Dropdown
+              size="sm"
+              ariaLabel="Rows per page"
+              triggerClassName="w-20"
+              value={String(itemsPerPage)}
+              onChange={(next) => setItemsPerPage(Number(next))}
+              options={itemsPerPageOptions.map(opt => ({ value: String(opt), label: String(opt) }))}
+            />
           </div>
           )}
         </div>

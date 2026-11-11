@@ -11,6 +11,7 @@ import { aiClient, FALLBACK_MODELS } from '../../lib/ai/aiClient';
 import { cn } from '../../lib/utils';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { formInputClass } from '../form/formStyles';
+import { Dropdown } from '../Dropdown';
 import { ToggleSwitch } from '../ui/toggle-switch';
 
 function SettingsCard({ title, subtitle, icon: Icon, children }: {
@@ -167,22 +168,20 @@ export function AiAssistantTab({ showSavedToast }: { showSavedToast: boolean }) 
               {hasKey && (
                 <>
                   <span className="ml-2 text-[10px] font-mono text-muted-foreground">model: {model}</span>
-                  <select
+                  <Dropdown
+                    size="sm"
+                    ariaLabel="AI model"
                     value={model}
-                    onChange={(e) => {
-                      const next = e.target.value;
+                    onChange={(next) => {
                       setModel(next);
                       void aiClient.setConfig({ model: next });
                     }}
-                    className={formInputClass}
-                    aria-label="AI model"
-                  >
-                    {FALLBACK_MODELS.map((m) => (
-                      <option key={m} value={m}>
-                        {m.replace('openai/gpt-oss-', 'gpt-oss-').replace('qwen/qwen3.8-27b', 'qwen3.8-27b')}
-                      </option>
-                    ))}
-                  </select>
+                    triggerClassName="w-64"
+                    options={FALLBACK_MODELS.map(m => ({
+                      value: m,
+                      label: m.replace('openai/gpt-oss-', 'gpt-oss-').replace('qwen/qwen3.8-27b', 'qwen3.8-27b'),
+                    }))}
+                  />
                 </>
               )}
               </p>

@@ -1,10 +1,10 @@
 import { Loader2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Column, DataTable } from '@/components/DataTable';
+import { Dropdown } from '@/components/Dropdown';
 import { Badge } from '@/components/ui/badge';
 import { useAccessStore } from '@/store/useAccessStore';
 import { AuditLog } from '@/types/access';
-import { formInputClass } from '../../components/form/formStyles';
 import { SearchInput } from '../ui/SearchInput';
 
 export function AuditLogsTab() {
@@ -93,26 +93,24 @@ export function AuditLogsTab() {
           placeholder="Search by user, module, action, record ID..."
           className="flex-1 max-w-md"
         />
-        <select
+        <Dropdown
+          ariaLabel="Module"
           value={moduleFilter}
-          onChange={(e) => setModuleFilter(e.target.value)}
-          className={formInputClass}
-        >
-          <option value="">All Modules</option>
-          {modules.map((m) => (
-            <option key={m} value={m}>{m}</option>
-          ))}
-        </select>
-        <select
+          onChange={setModuleFilter}
+          options={[
+            { value: '', label: 'All Modules' },
+            ...modules.map(m => ({ value: m, label: m })),
+          ]}
+        />
+        <Dropdown
+          ariaLabel="Action"
           value={actionFilter}
-          onChange={(e) => setActionFilter(e.target.value)}
-          className="h-10 px-3 rounded-md border border-input bg-background text-sm"
-        >
-          <option value="">All Actions</option>
-          {actions.map((a) => (
-            <option key={a} value={a}>{a}</option>
-          ))}
-        </select>
+          onChange={setActionFilter}
+          options={[
+            { value: '', label: 'All Actions' },
+            ...actions.map(a => ({ value: a, label: a })),
+          ]}
+        />
       </div>
 
       {isLoading ? (

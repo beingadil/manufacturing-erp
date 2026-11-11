@@ -11,6 +11,7 @@ import { ErrorManagement } from '../lib/validation';
 import { SearchableAccountTree } from '../pages/finance/SearchableAccountTree';
 import { useERPStore } from '../store/useERPStore';
 import type { SourceModule, VoucherType } from '../types/erp';
+import { Dropdown } from './Dropdown';
 import { SearchableSelect } from './SearchableSelect';
 import { DatePicker } from './ui/date-picker';
 
@@ -629,15 +630,12 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
                 {counterpartyRows.map((row, idx) => (
                   <div key={row.uid} className="px-5 py-4 grid grid-cols-12 gap-3 items-start group">
                     <div className="col-span-12 sm:col-span-2">
-                      <select
+                      <Dropdown
+                        ariaLabel="Counterparty type"
                         value={row.type}
-                        onChange={e => updateCounterparty(row.uid, { type: e.target.value as RowType, counterpartyId: '', parentAccountId: undefined })}
-                        className={formInputClass}
-                      >
-                        {ROW_TYPES[direction].map(t => (
-                          <option key={t.value} value={t.value}>{t.label}</option>
-                        ))}
-                      </select>
+                        onChange={(next) => updateCounterparty(row.uid, { type: next as RowType, counterpartyId: '', parentAccountId: undefined })}
+                        options={ROW_TYPES[direction].map(t => ({ value: t.value, label: t.label }))}
+                      />
                     </div>
                     <div className="col-span-12 sm:col-span-5">
                       {row.type === 'supplier' || row.type === 'customer' || row.type === 'processor' ? (

@@ -2,12 +2,12 @@ import { Loader2, Lock, Pencil, Plus, Trash2, } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Column, DataTable } from '@/components/DataTable';
+import { Dropdown } from '@/components/Dropdown';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { hashPassword, useAccessStore } from '@/store/useAccessStore';
 import { Role, UserRow } from '@/types/access';
-import { formInputClass } from '../../components/form/formStyles';
 import { SearchInput } from '../ui/SearchInput';
 import { ConfirmDialog } from './ConfirmDialog';
 import { PasswordDialog, PasswordFormValues } from './PasswordDialog';
@@ -273,26 +273,26 @@ export function UsersTab() {
             placeholder="Search users..."
             className="w-full md:w-64"
           />
-          <select
+          <Dropdown
+            ariaLabel="Role"
             value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
-            className={formInputClass}
-          >
-            <option value="">All Roles</option>
-            {roles.map((r) => (
-              <option key={r.id} value={r.id}>{r.name}</option>
-            ))}
-          </select>
-          <select
+            onChange={setRoleFilter}
+            options={[
+              { value: '', label: 'All Roles' },
+              ...roles.map(r => ({ value: r.id, label: r.name })),
+            ]}
+          />
+          <Dropdown
+            ariaLabel="Status"
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-10 px-3 rounded-md border border-input bg-background text-sm"
-          >
-            <option value="">All Statuses</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="suspended">Suspended</option>
-          </select>
+            onChange={setStatusFilter}
+            options={[
+              { value: '', label: 'All Statuses' },
+              { value: 'active', label: 'Active' },
+              { value: 'inactive', label: 'Inactive' },
+              { value: 'suspended', label: 'Suspended' },
+            ]}
+          />
         </div>
         <Button
           onClick={() => { setEditingUser(null); setFormOpen(true); }}

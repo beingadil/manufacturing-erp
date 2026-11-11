@@ -1,8 +1,9 @@
-import { Calendar as CalendarIcon, SlidersHorizontal, X } from 'lucide-react';
+import { SlidersHorizontal, X } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
-import { formInputClass } from '../../form/formStyles';
+import { formatDate } from '../../../lib/utils';
 import { DatePicker } from '../../ui/date-picker';
 import { SearchInput } from '../../ui/SearchInput';
+import { Dropdown } from '../../Dropdown';
 import { ReportExportBar } from './ReportExportBar';
 
 interface ReportFilterBarProps {
@@ -17,8 +18,7 @@ interface ReportFilterBarProps {
   customFilters?: React.ReactNode;
 }
 
-export const DATE_RANGE_OPTIONS = [
-  { label: 'Today', getValue: () => { const d = new Date(); return { start: d.toISOString(), end: d.toISOString() }; } },
+export const DATE_RANGE_OPTIONS = [  { label: 'Today', getValue: () => { const d = new Date(); return { start: d.toISOString(), end: d.toISOString() }; } },
   { label: 'Yesterday', getValue: () => { const d = new Date(); d.setDate(d.getDate() - 1); return { start: d.toISOString(), end: d.toISOString() }; } },
   { label: 'This Week', getValue: () => { 
       const d = new Date(); 
@@ -86,6 +86,39 @@ export const DATE_RANGE_OPTIONS = [
   { label: 'All Time', getValue: () => ({ start: '', end: '' }) },
   { label: 'Custom Date Range', getValue: () => ({ start: '', end: '' }) }
 ];
+
+/** Local calendar day of an ISO instant — the presets are ISO, reports are date-only. */
+export function formatPeriodDay(value: string): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return formatDate(date);
+}
+
+/**
+ * "01 Nov – 30 Nov 2026" — the year is dropped from the first day when both
+ * ends sit in the same year, so the range stays readable in a narrow column.
+ * A one-day window prints the day once.
+ */
+export function formatPeriodRange(start: string, end: string): string {
+  if (!start && !end) return 'Full history';
+  if (!start) return `Until ${formatPeriodDay(end)}`;
+  if (!end) return `From ${formatPeriodDay(start)}`;
+  const from = formatPeriodDay(start);
+  const to = formatPeriodDay(end);
+  if (!from || !to) return `${from} – ${to}`;
+  if (from === to) return to;
+  return from.slice(-4) === to.slice(-4) ? `${from.slice(0, -5)} – ${to}` : `${from} – ${to}`;
+}
+
+/** The window a preset actually covers — "This Month" alone never says WHICH month. */
+export function describePeriodOption(label: string): string {
+  if (label === 'Custom Date Range') return 'Pick a start and end date';
+  const option = DATE_RANGE_OPTIONS.find(o => o.label === label);
+  if (!option) return '';
+  const { start, end } = option.getValue();
+  return formatPeriodRange(start, end);
+}
 
 export function ReportFilterBar({ 
   onSearch, 
@@ -166,18 +199,18 @@ export function ReportFilterBar({
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto flex-wrap">
           {showDateRange && (
             <div className="flex items-center gap-2 w-full sm:w-auto">
-              <div className="relative w-full sm:w-48">
-                <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                <select 
-                  aria-label="Date range"
-                  className={formInputClass}
-                  value={selectedRangeIndex}
-                  onChange={(e) => setSelectedRangeIndex(Number(e.target.value))}
-                >
-                  {DATE_RANGE_OPTIONS.map((opt, i) => (
-                    <option key={i} value={i}>{opt.label}</option>
-                  ))}
-                </select>
+              <div className="w-full sm:w-48">
+                <Dropdown
+                  size="sm"
+                  ariaLabel="Date range"
+                  value={String(selectedRangeIndex)}
+                  onChange={(next) => setSelectedRangeIndex(Number(next))}
+                  options={DATE_RANGE_OPTIONS.map((opt, i) => ({
+                    value: String(i),
+                    label: opt.label,
+                    secondaryLabel: describePeriodOption(opt.label),
+                  }))}
+                />
               </div>
               
               {DATE_RANGE_OPTIONS[selectedRangeIndex].label === 'Custom Date Range' && (

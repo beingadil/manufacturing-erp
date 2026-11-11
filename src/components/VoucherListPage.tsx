@@ -8,6 +8,7 @@ import { formatCurrency } from '../lib/utils';
 import { useERPStore } from '../store/useERPStore';
 import { Voucher } from '../types/erp';
 import { formInputClass } from './form/formStyles';
+import { Dropdown } from './Dropdown';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import { DatePicker } from './ui/date-picker';
 import { KpiCard } from './ui/KpiCard';
@@ -162,15 +163,17 @@ export function VoucherListPage({ kind, title, subtitle }: VoucherListPageProps)
           placeholder="Search voucher, narration, party..."
           className="flex-1 min-w-[200px] max-w-xs"
         />
-        <select
+        <Dropdown
+          size="sm"
+          ariaLabel="Filter by account"
           value={accountFilter}
-          onChange={e => setAccountFilter(e.target.value)}
-          className={formInputClass}
-          title="Filter by account"
-        >
-          <option value="all">All Accounts</option>
-          {accounts.map(a => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
-        </select>
+          onChange={setAccountFilter}
+          triggerClassName="w-64"
+          options={[
+            { value: 'all', label: 'All Accounts' },
+            ...accounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` })),
+          ]}
+        />
         <span className="ml-auto text-xs text-muted-foreground">
           {filteredVouchers.length} voucher{filteredVouchers.length !== 1 ? 's' : ''}
         </span>

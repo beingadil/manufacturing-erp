@@ -2,6 +2,7 @@ import { Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { cn, formatCurrency, formatNumber } from '../../lib/utils';
+import { Dropdown } from '../Dropdown';
 
 type BatchRowSort = 'newest' | 'value' | 'onHand';
 
@@ -92,16 +93,19 @@ export function BatchRegister({
         </div>
         <div className="flex items-center gap-3">
           <label htmlFor="batch-sort" className="sr-only">Sort batches</label>
-          <select
+          <Dropdown
             id="batch-sort"
+            size="sm"
+            ariaLabel="Sort batches"
             value={sort}
-            onChange={e => setSort(e.target.value as BatchRowSort)}
-            className="h-9 rounded-lg border border-border bg-muted/40 px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-          >
-            <option value="newest">Newest first</option>
-            <option value="value">Highest value</option>
-            <option value="onHand">Most on hand</option>
-          </select>
+            onChange={(next) => setSort(next as BatchRowSort)}
+            triggerClassName="w-44"
+            options={[
+              { value: 'newest', label: 'Newest first' },
+              { value: 'value', label: 'Highest value' },
+              { value: 'onHand', label: 'Most on hand' },
+            ]}
+          />
           <span className="text-xs tabular-nums text-muted-foreground">
             {visible.length} / {rows.length}
           </span>

@@ -1,6 +1,7 @@
 import { FileText, Package, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { Dropdown } from '../Dropdown';
 import { FormField } from './FormField';
 import { FormFooter } from './FormFooter';
 import { FormGrid } from './FormGrid';
@@ -15,6 +16,7 @@ import { formInputClass } from './formStyles';
  */
 export function FormDemo() {
   const [isOpen, setIsOpen] = useState(false);
+  const [category, setCategory] = useState('');
 
   return (
     <div className="flex items-center gap-3">
@@ -47,12 +49,18 @@ export function FormDemo() {
                 <input id="name" className={formInputClass} defaultValue="" required />
               </FormField>
               <FormField id="category" label="Category" hint="Pre-selected on new materials in this category.">
-                <select id="category" className={formInputClass} defaultValue="">
-                  <option value="">None</option>
-                  <option value="metals">Metals</option>
-                  <option value="plastics">Plastics</option>
-                  <option value="chemicals">Chemicals</option>
-                </select>
+                <Dropdown
+                  id="category"
+                  ariaLabel="Category"
+                  value={category}
+                  onChange={setCategory}
+                  options={[
+                    { value: '', label: 'None' },
+                    { value: 'metals', label: 'Metals' },
+                    { value: 'plastics', label: 'Plastics' },
+                    { value: 'chemicals', label: 'Chemicals' },
+                  ]}
+                />
               </FormField>
             </FormGrid>
           </FormSection>

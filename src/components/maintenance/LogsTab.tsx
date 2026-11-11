@@ -3,7 +3,7 @@ import { Download, Filter, Terminal } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dropdown } from '../Dropdown';
 import { useLogStore } from '@/store/useLogStore';
 import { SearchInput } from '../ui/SearchInput';
 
@@ -49,18 +49,20 @@ export function LogsTab() {
             placeholder="Search logs..."
             className="flex-1"
           />
-          <Select value={filterLevel} onValueChange={setFilterLevel}>
-            <SelectTrigger className="w-[150px]">
-              <Filter className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Level" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Levels</SelectItem>
-              <SelectItem value="info">Info</SelectItem>
-              <SelectItem value="warning">Warning</SelectItem>
-              <SelectItem value="error">Error</SelectItem>
-            </SelectContent>
-          </Select>
+          <Dropdown
+            size="sm"
+            ariaLabel="Log level"
+            leadingIcon={<Filter className="h-4 w-4" />}
+            triggerClassName="w-[150px]"
+            value={filterLevel}
+            onChange={setFilterLevel}
+            options={[
+              { value: 'all', label: 'All Levels' },
+              { value: 'info', label: 'Info' },
+              { value: 'warning', label: 'Warning' },
+              { value: 'error', label: 'Error' },
+            ]}
+          />
           <Button variant="outline" onClick={exportLogs}>
             <Download className="h-4 w-4 mr-2" />
             Export

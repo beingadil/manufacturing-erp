@@ -1,10 +1,10 @@
 import { Loader2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Column, DataTable } from '@/components/DataTable';
+import { Dropdown } from '@/components/Dropdown';
 import { Badge } from '@/components/ui/badge';
 import { useAccessStore } from '@/store/useAccessStore';
 import { LoginHistory } from '@/types/access';
-import { formInputClass } from '../../components/form/formStyles';
 import { SearchInput } from '../ui/SearchInput';
 
 export function LoginHistoryTab() {
@@ -76,16 +76,17 @@ export function LoginHistoryTab() {
           placeholder="Search by user..."
           className="flex-1 max-w-md"
         />
-        <select
+        <Dropdown
+          ariaLabel="Login status"
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className={formInputClass}
-        >
-          <option value="">All Statuses</option>
-          <option value="Active">Active</option>
-          <option value="Logged Out">Logged Out</option>
-          <option value="Session Expired">Session Expired</option>
-        </select>
+          onChange={setStatusFilter}
+          options={[
+            { value: '', label: 'All Statuses' },
+            { value: 'Active', label: 'Active' },
+            { value: 'Logged Out', label: 'Logged Out' },
+            { value: 'Session Expired', label: 'Session Expired' },
+          ]}
+        />
       </div>
 
       {isLoading ? (

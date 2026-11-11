@@ -10,6 +10,7 @@ import { FormGrid } from "../components/form/FormGrid";
 import { FormModal } from "../components/form/FormModal";
 import { FormSection } from "../components/form/FormSection";
 import { formInputClass } from "../components/form/formStyles";
+import { Dropdown } from "../components/Dropdown";
 import { PartyLedgerModal } from "../components/PartyLedgerModal";
 import { cn, formatCurrency, formatNumber } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
@@ -326,20 +327,21 @@ export function Processors() {
                 label="Processing Stage"
                 hint="The stage this processor works at. Job Work only lists processors that match the selected stage."
               >
-                <select
+                <Dropdown
                   id="processor-worker-stage"
                   name="processor-worker-stage"
+                  ariaLabel="Processing stage"
+                  placeholder="Any stage"
                   value={workerStageId}
-                  onChange={e => setWorkerStageId(e.target.value)}
-                  className={formInputClass}
-                >
-                  <option value="">Any stage</option>
-                  {sortedStages.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}{s.isFinalStage ? ' (Final)' : ''}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setWorkerStageId}
+                  options={[
+                    { value: '', label: 'Any stage' },
+                    ...sortedStages.map(s => ({
+                      value: s.id,
+                      label: s.isFinalStage ? `${s.name} (Final)` : s.name,
+                    })),
+                  ]}
+                />
               </FormField>
             </FormGrid>
           </FormSection>

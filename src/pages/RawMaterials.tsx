@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { InlineEditInput } from '../components/common/InlineEditInput';
 import { RawMaterialPreview } from '../components/materials/RawMaterialPreview';
 import { SafeDeleteDialog } from '../components/common/SafeDeleteDialog';
+import { Dropdown } from '../components/Dropdown';
 import { FormModal } from '../components/form/FormModal';
 import { MaterialForm } from '../components/forms/MaterialForm';
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
@@ -298,16 +299,19 @@ export function RawMaterials() {
             </div>
             <div className="flex items-center justify-between gap-3 sm:justify-end">
               <label htmlFor="material-sort" className="sr-only">Sort materials</label>
-              <select
+              <Dropdown
                 id="material-sort"
+                size="sm"
+                ariaLabel="Sort materials"
                 value={sortKey}
-                onChange={e => setSortKey(e.target.value as SortKey)}
-                className="h-10 rounded-lg border border-border bg-muted/40 px-3 text-sm text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="name">Name A–Z</option>
-                <option value="value">Highest value</option>
-                <option value="stock">Most stock</option>
-              </select>
+                onChange={(next) => setSortKey(next as SortKey)}
+                triggerClassName="w-44"
+                options={[
+                  { value: 'name', label: 'Name A–Z' },
+                  { value: 'value', label: 'Highest value' },
+                  { value: 'stock', label: 'Most stock' },
+                ]}
+              />
               <span className="hidden items-center rounded-full bg-muted/60 px-2.5 py-1 text-xs font-medium tabular-nums text-muted-foreground sm:inline-flex">
                 {formatNumber(visibleMaterials.length)} / {formatNumber(enrichedMaterials.length)}
               </span>
