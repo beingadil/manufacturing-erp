@@ -71,7 +71,7 @@ export function LogsTab() {
         </div>
 
         <div className="flex-1 border rounded-md overflow-hidden flex flex-col bg-muted/30">
-          <div className="overflow-y-auto flex-1 p-0">
+          <div className="scroll-thin overflow-y-auto flex-1 p-0">
             <table className="w-full text-sm text-left">
               <thead className="text-xs text-muted-foreground uppercase bg-muted/50 sticky top-0">
                 <tr>

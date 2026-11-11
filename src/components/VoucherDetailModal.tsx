@@ -123,7 +123,7 @@ export function VoucherDetailModal({ voucherId, onClose }: { voucherId: string, 
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-6 bg-muted/10">
+        <div className="scroll-thin flex-1 overflow-y-auto p-6 bg-muted/10">
           
           {/* Metadata Bar */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 bg-card p-4 rounded-xl border border-border/50 shadow-sm">

@@ -218,7 +218,7 @@ export function VoucherListPage({ kind, title, subtitle }: VoucherListPageProps)
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-auto">
+      <div className="scroll-thin flex-1 overflow-auto">
         <table className="w-full text-left border-collapse">
           <thead className="sticky top-0 bg-card z-10">
             <tr className="border-b border-border/50 bg-muted/30">

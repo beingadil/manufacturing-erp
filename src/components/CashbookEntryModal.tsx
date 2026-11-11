@@ -52,7 +52,7 @@ export function CashbookEntryModal({ isOpen, onClose, onSave, defaultAccountId, 
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="scroll-thin flex-1 overflow-y-auto p-6">
           <CashbookVoucherForm
             key={`${mode}-${editVoucherId || 'new'}`}
             mode={mode}

@@ -245,7 +245,7 @@ export function RolesTab() {
             <Loader2 className="h-5 w-5 animate-spin mx-auto" />
           </div>
         ) : (
-          <div className="flex-1 min-h-0 overflow-y-auto -mx-4 px-4">
+          <div className="scroll-thin flex-1 min-h-0 overflow-y-auto -mx-4 px-4">
             <DataTable
               data={roles}
               columns={columns}

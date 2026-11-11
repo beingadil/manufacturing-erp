@@ -115,7 +115,7 @@ export function RawMaterialPreview({ open, onOpenChange, materialId, onEdit }: R
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-3/4 overflow-y-auto sm:max-w-md" side="right">
+      <SheetContent className="scroll-thin w-3/4 overflow-y-auto sm:max-w-md" side="right">
         <SheetHeader>
           <SheetTitle className="pr-6">
             {material ? material.name : 'Material preview'}

@@ -133,7 +133,7 @@ export function PageModal({ isOpen, onClose, title, children, maxWidth = 'max-w-
             2rem gutter), so the body flexes inside it and scrolls — capping the
             BODY at 80vh instead let header + body + footer overflow a short
             laptop screen. */}
-        <div className="p-5 space-y-3 flex-1 min-h-0 overflow-y-auto" style={{ overscrollBehavior: 'contain' }}>
+        <div className="scroll-thin p-5 space-y-3 flex-1 min-h-0 overflow-y-auto" style={{ overscrollBehavior: 'contain' }}>
           {children}
         </div>
         {footer}

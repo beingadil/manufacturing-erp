@@ -184,8 +184,8 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
         </FormGrid>
       </FormSection>
           <FormSection icon={<FileText />} eyebrow="Details">
-        <FormGrid cols={2}>
-          <FormField id="material-description" label="Description" className="sm:col-span-2">
+        <FormGrid cols={1}>
+          <FormField id="material-description" label="Description">
             <textarea
               id="material-description"
               name="material-description"
@@ -196,7 +196,7 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
               rows={3}
             />
           </FormField>
-          <FormField id="material-status" label="Status" className="sm:col-span-1">
+          <FormField id="material-status" label="Status">
             <SearchableSelect
               options={[
                 { id: 'Active', label: 'Active' },
@@ -211,8 +211,8 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
           </FormSection>
         </div>
         <FormSection icon={<Layers />} eyebrow="Classification" first>
-        <FormGrid cols={2}>
-          <FormField id="material-category" label="Category" required className="sm:col-span-1">
+        <FormGrid cols={1}>
+          <FormField id="material-category" label="Category" required>
             <SearchableSelect
               options={categories.map(c => ({ id: c.id, label: c.name }))}
               value={categoryId}
@@ -222,7 +222,7 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
             />
           </FormField>
 {usageType !== 'component' && (
-          <FormField id="material-path" label="Processing Path" required className="sm:col-span-1">
+          <FormField id="material-path" label="Processing Path" required>
             <SearchableSelect
               options={[
                 { id: 'full_chain', label: `Through all processors (${sortedStagesForForm.length || 5} stages)` },

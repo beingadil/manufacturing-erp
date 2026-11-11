@@ -303,7 +303,7 @@ export function UsersTab() {
         </Button>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="scroll-thin flex-1 min-h-0 overflow-y-auto">
         {isLoading ? (
           <div className="py-12 text-center text-muted-foreground">
             <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
