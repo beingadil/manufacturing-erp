@@ -25,6 +25,8 @@ interface SearchableSelectProps {
   hint?: string;
   /** Visual density: 'sm' (compact) or 'md' (comfortable, default). */
   size?: SearchableSelectSize;
+  /** Extra classes for the trigger itself (e.g. a fixed height). */
+  triggerClassName?: string;
   /** Additional className for the outer wrapper. */
   className?: string;
 }
@@ -53,6 +55,7 @@ export function SearchableSelect({
   label,
   hint,
   size = 'md',
+  triggerClassName,
   className,
 }: SearchableSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -69,6 +72,7 @@ export function SearchableSelect({
   const triggerClass = cn(
     isSm ? selectBaseSm : selectBase,
     "flex-1 flex items-center justify-between rounded-xl border border-border bg-card cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+    triggerClassName,
     !selectedOption && "text-muted-foreground",
     isOpen && "ring-2 ring-primary border-transparent"
   );

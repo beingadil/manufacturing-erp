@@ -20,6 +20,8 @@ interface LedgerPeriodFilterProps {
   /** Preset selected on mount. Defaults to "All Time" so no history is hidden. */
   defaultLabel?: string;
   className?: string;
+  /** Extra classes for the trigger (e.g. a fixed control height). */
+  triggerClassName?: string;
 }
 
 const CUSTOM_LABEL = 'Custom Date Range';
@@ -36,6 +38,7 @@ export function LedgerPeriodFilter({
   onChange,
   defaultLabel = 'All Time',
   className,
+  triggerClassName,
 }: LedgerPeriodFilterProps) {
   const [selectedIndex, setSelectedIndex] = useState(() => {
     const index = DATE_RANGE_OPTIONS.findIndex(option => option.label === defaultLabel);
@@ -129,15 +132,16 @@ export function LedgerPeriodFilter({
           setIsOpen(open => !open);
         }}
         className={cn(
-          'flex w-full cursor-pointer items-center gap-3 rounded-xl border border-border bg-card px-4 py-2.5 text-sm text-foreground transition-colors',
+          'flex h-11 w-full cursor-pointer items-center gap-3 rounded-xl border border-border bg-card px-4 text-sm text-foreground transition-colors',
           'hover:border-primary/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+          triggerClassName,
           isOpen && 'border-primary/60 ring-1 ring-primary'
         )}
       >
         <CalendarIcon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <div className="flex min-w-0 flex-1 flex-col leading-tight">
+        <div className="flex min-w-0 flex-1 flex-col justify-center leading-tight">
           <span className="truncate font-medium">{selectedOption?.label ?? 'Select period'}</span>
-          <span className="truncate text-[11px] text-muted-foreground">{selectedRange}</span>
+          <span className="truncate text-[11px] leading-tight text-muted-foreground">{selectedRange}</span>
         </div>
         <ChevronDown
           className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', isOpen && 'rotate-180')}

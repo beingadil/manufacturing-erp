@@ -131,8 +131,6 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
 
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [ledgerAccountId, setLedgerAccountId] = useState(defaultAccountId || '');
-  const [referenceNo, setReferenceNo] = useState('');
-  const [narration, setNarration] = useState('');
   const [counterpartyRows, setCounterpartyRows] = useState<CounterpartyRow[]>([newCounterpartyRow(direction === 'payment' ? 'supplier' : 'customer')]);
   const [journalRows, setJournalRows] = useState<JournalRow[]>([newJournalRow()]);
 
@@ -182,8 +180,6 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
     const jes = journalEntries.filter(je => je.voucherId === editVoucherId);
 
     setDate(v.date);
-    setNarration(v.narration || '');
-    setReferenceNo(v.referenceNo || '');
 
     if (isJournal) {
       setJournalRows(jes.map(je => ({
@@ -336,7 +332,7 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
     if (!isValid) return;
 
     if (isJournal) {
-      const derivedNarration = narration.trim() || journalRows.map(r => r.narration?.trim() || '').find(Boolean) || '';
+      const derivedNarration = journalRows.map(r => r.narration?.trim() || '').find(Boolean) || '';
       const entries = filledJournal.map(r => ({
         accountId: r.accountId,
         debit: Number(r.debit) || 0,
@@ -345,10 +341,10 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
       }));
       ErrorManagement.safeExecuteSync(() => {
         if (isEditing) {
-          AccountingEngine.updateVoucher(editVoucherId, { date, referenceNo: referenceNo || undefined, narration: derivedNarration }, entries as any);
+          AccountingEngine.updateVoucher(editVoucherId, { date, narration: derivedNarration }, entries as any);
         } else {
           AccountingEngine.createVoucher({
-            date, type: meta.voucherType, referenceNo: referenceNo || undefined, sourceModule: sourceModule || 'Manual', narration: derivedNarration,
+            date, type: meta.voucherType, sourceModule: sourceModule || 'Manual', narration: derivedNarration,
           }, entries as any);
         }
         toast.success("Journal Voucher posted!", { description: voucherNo });
@@ -390,6 +386,10 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
       }
     }
 
+    // The voucher's own narration comes from the first line that carries one —
+    // the line narrations are the only place a description is typed.
+    const voucherNarration = counterpartyRows.map(r => r.narration?.trim() || '').find(Boolean) || '';
+
     const entries: { accountId: string; debit: number; credit: number; narration: string }[] = [];
     for (const row of counterpartyRows) {
       const amt = Number(row.amount) || 0;
@@ -405,7 +405,7 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
         accountId: accId,
         debit: rowsAreDebit ? amt : 0,
         credit: rowsAreDebit ? 0 : amt,
-        narration: row.narration?.trim() || narration,
+        narration: row.narration?.trim() || voucherNarration,
       });
     }
 
@@ -414,15 +414,15 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
       accountId: ledgerAccountId,
       debit: rowsAreDebit ? 0 : total,
       credit: rowsAreDebit ? total : 0,
-      narration,
+      narration: voucherNarration,
     });
 
     ErrorManagement.safeExecuteSync(() => {
       if (isEditing) {
-        AccountingEngine.updateVoucher(editVoucherId, { date, referenceNo: referenceNo || undefined, narration }, entries as any);
+        AccountingEngine.updateVoucher(editVoucherId, { date, narration: voucherNarration }, entries as any);
       } else {
         AccountingEngine.createVoucher({
-          date, type: meta.voucherType, referenceNo: referenceNo || undefined, sourceModule: sourceModule || 'Cashbook', narration,
+          date, type: meta.voucherType, sourceModule: sourceModule || 'Cashbook', narration: voucherNarration,
         }, entries as any);
       }
 
@@ -438,8 +438,6 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
   const resetForm = () => {
     setCounterpartyRows([newCounterpartyRow(direction === 'payment' ? 'supplier' : 'customer')]);
     setJournalRows([newJournalRow()]);
-    setNarration('');
-    setReferenceNo('');
     setLedgerAccountId('');
     setDate(new Date().toISOString().split('T')[0]);
   };
@@ -454,24 +452,24 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
         <div className="grid grid-cols-12 gap-4 mb-6">
           <div className="col-span-12 lg:col-span-8 bg-card border border-border/50 rounded-xl p-5 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">Date</label>
-              <DatePicker value={date} onChange={setDate} className="h-11 rounded-lg" />
+              <label className="flex h-4 items-center whitespace-nowrap text-xs font-medium uppercase tracking-wider text-muted-foreground">Date</label>
+              <DatePicker value={date} onChange={setDate} className="h-11 rounded-lg px-3" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">Voucher No</label>
+              <label className="flex h-4 items-center whitespace-nowrap text-xs font-medium uppercase tracking-wider text-muted-foreground">Voucher No</label>
               <input
                 type="text"
                 readOnly
                 value={voucherNo}
-                className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm font-mono font-bold text-foreground"
+                className="w-full h-11 rounded-lg border border-border bg-muted/30 px-3 text-sm font-mono font-bold text-foreground"
               />
             </div>
             {!isJournal && (
               <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">{ledgerLabel}</label>
+                <div className="flex h-4 items-center gap-2">
+                  <label className="shrink-0 whitespace-nowrap text-xs font-medium uppercase tracking-wider text-muted-foreground">{ledgerLabel}</label>
                   {isCashMode ? (
-                    <span className="text-[10px] text-muted-foreground/70 font-medium">Cash in Hand default</span>
+                    <span className="truncate text-[10px] text-muted-foreground/70 font-medium">Cash in Hand default</span>
                   ) : null}
                 </div>
                 <SearchableSelect
@@ -483,6 +481,7 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
                   value={ledgerAccountId}
                   onChange={setLedgerAccountId}
                   placeholder={isCashMode ? 'Select cash account...' : 'Select bank account...'}
+                  triggerClassName="h-11 px-3"
                   required
                 />
               </div>
@@ -724,30 +723,6 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
                     )}
                   </div>
                 ))}
-              </div>
-            </div>
-
-            {/* Reference + Narration */}
-            <div className="mt-4 grid grid-cols-12 gap-4">
-              <div className="col-span-12 sm:col-span-4 bg-card border border-border/50 rounded-xl p-5 shadow-sm">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-2">Invoice / Reference</label>
-                <input
-                  type="text"
-                  value={referenceNo}
-                  onChange={e => setReferenceNo(e.target.value)}
-                  placeholder="INV-001 (optional)"
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm font-mono text-foreground focus:border-primary focus:ring-1 focus:ring-primary"
-                />
-              </div>
-              <div className="col-span-12 sm:col-span-8 bg-card border border-border/50 rounded-xl p-5 shadow-sm">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-2">Description / Narration</label>
-                <textarea
-                  value={narration}
-                  onChange={e => setNarration(e.target.value)}
-                  rows={2}
-                  placeholder={rowsAreDebit ? 'e.g. Payment against invoice #104' : 'e.g. Cash received against invoice #104'}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary resize-none"
-                />
               </div>
             </div>
 

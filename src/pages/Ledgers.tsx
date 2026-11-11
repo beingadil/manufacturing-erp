@@ -1,4 +1,4 @@
-import { Wallet } from "lucide-react";
+import { Eye, Wallet } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Column, DataTable } from "../components/DataTable";
@@ -8,8 +8,8 @@ import { SearchableSelect } from "../components/SearchableSelect";
 import { VoucherDetailModal } from "../components/VoucherDetailModal";
 import { AccountingEngine } from "../lib/accounting/AccountingEngine";
 import { isDebitNormalAccount } from "../lib/accounting/accountClassification";
-import { generateLedgerStatementPDF } from "../lib/documentGenerators";
-import { cn, formatCurrency, formatDate, formatDateISO } from "../lib/utils";
+import { exportLedgerStatementPdf } from "../components/ledger/exportLedgerStatement";
+import { cn, formatCurrency, formatDateISO } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
 
 export function Ledgers() {
@@ -25,20 +25,23 @@ export function Ledgers() {
   // If navigating from legacy links with tab and id:
   const initialEntityId = searchParams.get("id") || "";
 
-  // Find the initial account: prefer a direct account id (?id=<accountId>, used
-  // by the Dashboard AR/AP cards to open the control account's ledger), then
-  // fall back to the legacy linked-entity lookup (?id=<partyId>), then the
-  // first account.
-  const initialAccount = initialEntityId
-    ? (accounts.find(a => a.id === initialEntityId) || accounts.find(a => a.linkedEntityId === initialEntityId))
-    : accounts[0];
+  // A deep link (the Dashboard AR/AP cards) names the account up front. With no
+  // deep link the user picks an account and presses Preview — the ledger must
+  // not open by itself on the first account in the chart.
+  const deepLinkAccountId = initialEntityId
+    ? (accounts.find(a => a.id === initialEntityId) || accounts.find(a => a.linkedEntityId === initialEntityId))?.id ?? null
+    : null;
 
-  const [selectedAccountId, setSelectedAccountId] = useState(initialAccount?.id || "");
+  const [selectedAccountId, setSelectedAccountId] = useState(deepLinkAccountId || accounts[0]?.id || "");
+  const [previewAccountId, setPreviewAccountId] = useState<string | null>(deepLinkAccountId);
   const [viewMode, setViewMode] = useState<"Financial" | "Goods">("Financial");
   const [period, setPeriod] = useState<LedgerPeriod>({ start: "", end: "", label: "All Time" });
   const [selectedVoucherId, setSelectedVoucherId] = useState<string | null>(null);
 
-  const activeAccount = accounts.find(a => a.id === selectedAccountId);
+  const selectedAccount = accounts.find(a => a.id === selectedAccountId);
+  // The account whose ledger is on screen — only set once Preview is pressed.
+  const activeAccount = accounts.find(a => a.id === previewAccountId) || null;
+  const isPreviewing = !!activeAccount;
   const isProcessorAccount = activeAccount?.linkedEntityId && processors.some(p => p.id === activeAccount.linkedEntityId);
   const processorId = isProcessorAccount && activeAccount ? activeAccount.linkedEntityId : null;
 
@@ -152,30 +155,20 @@ export function Ledgers() {
 
   const handleExportPDF = () => {
     if (!activeAccount) return;
-    const transactions = [
-      ...(showOpeningRow
-        ? [{
-            date: "",
-            referenceNo: "OPENING",
-            description: "Balance brought forward",
-            debit: 0,
-            credit: 0,
-            balance: ledger.openingBalance,
-          }]
-        : []),
-      ...ledger.rows.map(row => ({
-        date: row.voucher?.date ? formatDate(row.voucher.date) : "-",
-        referenceNo: row.voucher?.voucherNo || "-",
-        description: row.narration || row.voucher?.narration || "-",
+    exportLedgerStatementPdf({
+      accountName: activeAccount.name,
+      accountCode: activeAccount.code,
+      periodLabel: period.label,
+      openingBalance: showOpeningRow ? ledger.openingBalance : undefined,
+      closingBalance,
+      rows: ledger.rows.map(row => ({
+        date: row.voucher?.date || '',
+        voucherNo: row.voucher?.voucherNo || '-',
+        narration: row.narration || row.voucher?.narration || '-',
         debit: row.debit,
         credit: row.credit,
-        balance: row.runningBalance,
+        runningBalance: row.runningBalance,
       })),
-    ];
-    generateLedgerStatementPDF(activeAccount.name, "Account", transactions, closingBalance, {
-      title: "GENERAL LEDGER STATEMENT",
-      periodLabel: period.label,
-      accountCode: activeAccount.code,
     });
   };
 
@@ -216,11 +209,11 @@ export function Ledgers() {
           <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-4">
             <div className="flex flex-col sm:flex-row sm:items-end gap-4 flex-1">
               <div className="flex items-center gap-3 flex-1 max-w-md">
-                <div className="h-10 w-10 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                <div className="h-11 w-11 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-primary">
                   <Wallet className="h-5 w-5" />
                 </div>
                 <div className="flex flex-col flex-1">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Select Account</label>
+                  <label className="flex h-4 items-center mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Select Account</label>
                   <SearchableSelect
                     options={accounts.map(a => {
                       let relatedParty = '';
@@ -242,14 +235,15 @@ export function Ledgers() {
                     })}
                     value={selectedAccountId}
                     onChange={setSelectedAccountId}
+                    triggerClassName="h-11 px-4"
                     placeholder="Search account..."
                   />
                 </div>
               </div>
 
               <div className="flex flex-col">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Statement Period</label>
-                <LedgerPeriodFilter onChange={setPeriod} defaultLabel="All Time" />
+                <label className="flex h-4 items-center mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Statement Period</label>
+                <LedgerPeriodFilter onChange={setPeriod} defaultLabel="All Time" triggerClassName="h-11 px-4" />
               </div>
             </div>
 
@@ -268,6 +262,24 @@ export function Ledgers() {
                 </div>
                 <span className="mt-0.5 text-[11px] text-muted-foreground">{period.label}</span>
               </div>
+            )}
+          </div>
+
+          {/* Preview — the ledger opens only when the user asks for it. */}
+          <div className="flex flex-wrap items-end gap-3">
+            <button
+              type="button"
+              onClick={() => setPreviewAccountId(selectedAccountId || null)}
+              disabled={!selectedAccount || selectedAccountId === previewAccountId}
+              className="inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Eye className="h-4 w-4" />
+              {isPreviewing && selectedAccountId === previewAccountId ? 'Previewing' : 'Preview Ledger'}
+            </button>
+            {isPreviewing && selectedAccountId !== previewAccountId && (
+              <span className="text-xs text-muted-foreground">
+                Press Preview to switch to {selectedAccount?.code} — {selectedAccount?.name}
+              </span>
             )}
           </div>
 
@@ -307,7 +319,10 @@ export function Ledgers() {
                 return (
                   <button
                     key={child.account.id}
-                    onClick={() => setSelectedAccountId(child.account.id)}
+                    onClick={() => {
+                      setSelectedAccountId(child.account.id);
+                      setPreviewAccountId(child.account.id);
+                    }}
                     className="text-left rounded-xl border border-border bg-background p-3 hover:border-primary/40 hover:shadow-sm transition-all"
                   >
                     <div className="flex items-center justify-between gap-2">
@@ -376,8 +391,14 @@ export function Ledgers() {
             />
           </div>
         ) : (
-          <div className="px-6 py-12 text-center text-sm text-muted-foreground">
-            Select an account to view its ledger statement.
+          <div className="px-6 py-16 text-center">
+            <Eye className="mx-auto h-8 w-8 text-muted-foreground/50" aria-hidden="true" />
+            <p className="mt-3 text-sm font-medium text-foreground">No ledger open</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {selectedAccount
+                ? `Press "Preview Ledger" to open ${selectedAccount.code} — ${selectedAccount.name}.`
+                : 'Choose an account above, then press "Preview Ledger".'}
+            </p>
           </div>
         )}
       </div>

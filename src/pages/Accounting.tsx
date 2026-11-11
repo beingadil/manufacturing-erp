@@ -1,9 +1,10 @@
-import { Calculator, Edit, Folder, FolderOpen, Plus, Printer, Trash2 } from "lucide-react";
+import { Calculator, Download, Edit, Eye, Folder, FolderOpen, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { toast } from 'sonner';
 import { AddAccountModal } from "../components/AddAccountModal";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
+import { exportLedgerStatementPdf } from '../components/ledger/exportLedgerStatement';
 import { LedgerPeriodFilter, type LedgerPeriod } from '../components/ledger/LedgerPeriodFilter';
 import { LedgerStatement, ledgerBalanceSide, type LedgerStatementRow } from '../components/ledger/LedgerStatement';
 import { VoucherDetailModal } from '../components/VoucherDetailModal';
@@ -16,9 +17,8 @@ import { SearchInput } from "../components/ui/SearchInput";
 import { AccountingEngine } from "../lib/accounting/AccountingEngine";
 import { getBankAccounts, getCashBankAccounts, isDebitNormalAccount } from "../lib/accounting/accountClassification";
 import { accountMatchesSearch, filterAccountsWithAncestors } from "../lib/accounting/accountHierarchy";
-import { generateLedgerStatementPDF } from "../lib/documentGenerators";
 import { FinancialReportService } from "../lib/reporting/FinancialReportService";
-import { cn, formatCurrency, formatDate, formatDateISO } from "../lib/utils";
+import { cn, formatCurrency, formatDateISO } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
 import { Account, AccountType, JournalEntry, Voucher } from "../types/erp";
 
@@ -69,13 +69,16 @@ function GeneralLedger() {
   const { accounts, vouchers, journalEntries, suppliers, customers, processors, accountSubtypes } = useERPStore();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedAccountId, setSelectedAccountId] = useState<string>(() => searchParams.get('id') || "");
+  // The ledger opens only when Preview is pressed; a deep link (?id=) counts
+  // as an explicit request and opens straight away.
+  const [previewAccountId, setPreviewAccountId] = useState<string | null>(() => searchParams.get('id') || null);
   const [period, setPeriod] = useState<LedgerPeriod>({ start: '', end: '', label: 'All Time' });
   const [selectedVoucherId, setSelectedVoucherId] = useState<string | null>(null);
 
-  // Resolve the displayed account: explicit selection → ?id= deep link → first
-  // Bank account → first account. Deep-link support lets the Dashboard Bank
-  // Balance KPI land on a real bank ledger instead of falling back to
-  // accounts[0] (Cash in Hand).
+  // Resolve the account shown in the picker: explicit selection → ?id= deep
+  // link → first Bank account → first account. Deep-link support lets the
+  // Dashboard Bank Balance KPI land on a real bank ledger instead of falling
+  // back to accounts[0] (Cash in Hand).
   const resolvedAccountId = useMemo(() => {
     if (selectedAccountId && accounts.some(a => a.id === selectedAccountId)) return selectedAccountId;
     const fromUrl = searchParams.get('id');
@@ -83,16 +86,17 @@ function GeneralLedger() {
     return getBankAccounts(accounts, accountSubtypes)[0]?.id || accounts[0]?.id || "";
   }, [selectedAccountId, accounts, accountSubtypes, searchParams]);
 
-  // Keep the URL in sync so refresh / share preserves the account (?id=).
+  // Keep the URL in sync with the OPENED ledger so refresh / share preserves
+  // the account (?id=) — not the account that is merely selected in the picker.
   useEffect(() => {
-    if (!resolvedAccountId || searchParams.get('id') === resolvedAccountId) return;
+    if (!previewAccountId || searchParams.get('id') === previewAccountId) return;
     const params = new URLSearchParams(searchParams);
-    params.set('id', resolvedAccountId);
+    params.set('id', previewAccountId);
     setSearchParams(params, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resolvedAccountId]);
+  }, [previewAccountId]);
 
-  const account = accounts.find(a => a.id === resolvedAccountId);
+  const account = accounts.find(a => a.id === previewAccountId) || null;
   const dateFrom = period.start ? formatDateISO(period.start) : undefined;
   const dateTo = period.end ? formatDateISO(period.end) : undefined;
 
@@ -101,14 +105,14 @@ function GeneralLedger() {
   // issuance order and the closing balance matches the chronological stream.
   const { rows: processedEntries, openingBalance } = useMemo(
     () => AccountingEngine.getLedger(
-      resolvedAccountId,
+      previewAccountId || '',
       accounts,
       journalEntries,
       vouchers,
       dateFrom,
       dateTo
     ),
-    [resolvedAccountId, accounts, journalEntries, vouchers, dateFrom, dateTo]
+    [previewAccountId, accounts, journalEntries, vouchers, dateFrom, dateTo]
   );
 
   const isDebitNormal = account ? isDebitNormalAccount(account) : true;
@@ -139,32 +143,22 @@ function GeneralLedger() {
     [processedEntries]
   );
 
-  const handlePrintLedger = () => {
+  const handleExportPDF = () => {
     if (!account) return;
-    const transactions = [
-      ...(showOpeningRow
-        ? [{
-            date: "",
-            referenceNo: "OPENING",
-            description: "Balance brought forward",
-            debit: 0,
-            credit: 0,
-            balance: openingBalance,
-          }]
-        : []),
-      ...processedEntries.map(entry => ({
-        date: entry.voucher?.date ? formatDate(entry.voucher.date) : "-",
-        referenceNo: entry.voucher?.voucherNo || "-",
-        description: entry.narration || entry.voucher?.narration || "-",
+    exportLedgerStatementPdf({
+      accountName: account.name,
+      accountCode: account.code,
+      periodLabel: period.label,
+      openingBalance: showOpeningRow ? openingBalance : undefined,
+      closingBalance,
+      rows: processedEntries.map(entry => ({
+        date: entry.voucher?.date || '',
+        voucherNo: entry.voucher?.voucherNo || '-',
+        narration: entry.narration || entry.voucher?.narration || '-',
         debit: entry.debit,
         credit: entry.credit,
-        balance: entry.runningBalance,
+        runningBalance: entry.runningBalance,
       })),
-    ];
-    generateLedgerStatementPDF(account.name, "Account", transactions, closingBalance, {
-      title: "GENERAL LEDGER STATEMENT",
-      periodLabel: period.label,
-      accountCode: account.code,
     });
   };
 
@@ -178,8 +172,8 @@ function GeneralLedger() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-end gap-3 w-full xl:w-auto">
-          <div className="flex flex-col gap-1 w-full sm:w-80">
-            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Account</label>
+          <div className="flex flex-col gap-1.5 w-full sm:w-80">
+            <label className="flex h-4 items-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Account</label>
             <SearchableSelect
               options={accounts.map(a => {
                 let relatedParty = '';
@@ -201,20 +195,31 @@ function GeneralLedger() {
               })}
               value={resolvedAccountId}
               onChange={val => setSelectedAccountId(val)}
+              triggerClassName="h-11 px-4"
               placeholder="Search account..."
             />
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Period</label>
-            <LedgerPeriodFilter onChange={setPeriod} defaultLabel="All Time" />
+          <div className="flex flex-col gap-1.5">
+            <label className="flex h-4 items-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Period</label>
+            <LedgerPeriodFilter onChange={setPeriod} defaultLabel="All Time" triggerClassName="h-11 px-4" />
           </div>
           <button
-            onClick={handlePrintLedger}
+            type="button"
+            onClick={handleExportPDF}
             disabled={!account}
-            className="flex items-center justify-center gap-2 bg-secondary text-secondary-foreground px-4 py-2 rounded-lg hover:bg-secondary/80 transition-colors text-sm font-medium whitespace-nowrap disabled:opacity-50"
+            className="flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <Printer className="h-4 w-4" />
-            Print Ledger
+            <Download className="h-4 w-4" />
+            Export PDF
+          </button>
+          <button
+            type="button"
+            onClick={() => setPreviewAccountId(resolvedAccountId || null)}
+            disabled={!resolvedAccountId || resolvedAccountId === previewAccountId}
+            className="flex h-11 items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Eye className="h-4 w-4" />
+            {account ? 'Previewing' : 'Preview Ledger'}
           </button>
         </div>
       </div>
@@ -249,8 +254,12 @@ function GeneralLedger() {
           />
         </>
       ) : (
-        <div className="px-6 py-12 text-center text-sm text-muted-foreground">
-          Select an account to view its ledger statement.
+        <div className="px-6 py-16 text-center">
+          <Eye className="mx-auto h-8 w-8 text-muted-foreground/50" aria-hidden="true" />
+          <p className="mt-3 text-sm font-medium text-foreground">No ledger open</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Choose an account above, then press "Preview Ledger".
+          </p>
         </div>
       )}
 
