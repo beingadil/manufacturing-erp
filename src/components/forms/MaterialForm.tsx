@@ -1,5 +1,5 @@
-/**
- * The raw-material form — the exact same fields the Raw Materials module
+﻿/**
+ * The raw-material form â€” the exact same fields the Raw Materials module
  * renders. Used inside the module's modal and, inline, on the purchase entry
  * page so a buyer can create a material without losing the document.
  */
@@ -7,9 +7,11 @@ import { FileText, Layers, PackageSearch } from 'lucide-react';
 import { type FormEvent, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { findMaterialCodeConflict } from '../../lib/business/ProductAssemblyService';
+import { cn } from '../../lib/utils';
 import { MaterialService } from '../../services/MaterialService';
 import { useERPStore } from '../../store/useERPStore';
 import type { MaterialUsageType, ProcessingPath, RawMaterial } from '../../types/erp';
+import { FormColumns } from '../form/FormColumns';
 import { FormField } from '../form/FormField';
 import { FormFooter } from '../form/FormFooter';
 import { FormGrid } from '../form/FormGrid';
@@ -30,7 +32,7 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
   const { materials, categories, processingStages } = useERPStore();
 
   const [name, setName] = useState(material?.name ?? '');
-  // The "No." a person reads out with the name — "Circle 12½ Inch, No. 4 No".
+  // The "No." a person reads out with the name â€” "Circle 12Â½ Inch, No. 4 No".
   const [code, setCode] = useState(material?.code ?? '');
   const [usageType, setUsageType] = useState<MaterialUsageType>(material?.usageType === 'component' ? 'component' : 'sellable');
   const [categoryId, setCategoryId] = useState(material?.categoryId ?? '');
@@ -45,7 +47,7 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
     [processingStages]
   );
 
-  // A category with a defaultProcessingPath seeds the selector — but never for a
+  // A category with a defaultProcessingPath seeds the selector â€” but never for a
   // part. Parts are bought ready-made, and the path selector is hidden for them,
   // so a category default arriving after the usage choice would silently save
   // the part on a processor chain the user can neither see nor change.
@@ -101,7 +103,9 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <FormColumns>
+        <div>
       <FormSection icon={<PackageSearch />} eyebrow="Identity & usage" first>
         <FormGrid cols={2}>
           <FormField id="material-name" label="Material Name" required className="sm:col-span-1">
@@ -114,7 +118,7 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
               onChange={e => setName(e.target.value)}
               autoComplete="off"
               className={formInputClass}
-              placeholder="e.g. Circle 12½ Inch"
+              placeholder="e.g. Circle 12Â½ Inch"
             />
           </FormField>
           <FormField id="material-code" label="No." hint="Shown next to the name everywhere, and searchable." className="sm:col-span-1">
@@ -130,38 +134,87 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
             />
           </FormField>
           <fieldset className="space-y-2 sm:col-span-2">
-            <legend className="text-sm font-semibold text-foreground">This material is used as…</legend>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <legend className="text-sm font-semibold text-foreground">This material is used asâ€¦</legend>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Material usage">
               {(
                 [
                   { v: 'sellable', t: 'A product on its own', d: 'Processing makes it saleable; the Products form links it directly.' },
                   { v: 'component', t: 'A part of another product', d: 'A steel dhakkan on a steel jug, a handle. Never sold on its own.' },
                 ] as const
-              ).map(o => (
-                <button
-                  key={o.v}
-                  type="button"
-                  onClick={() => {
-                    setUsageType(o.v);
-                    if (o.v === 'component') setProcessingPath('ready_made');
-                    else setProcessingPath('full_chain');
-                    setFixedStageId('');
-                    setAllowedStageIds([]);
-                  }}
-                  aria-pressed={usageType === o.v}
-                  className={`rounded-xl border px-4 py-4 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring ${usageType === o.v ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:bg-muted/40'}`}
-                >
-                  <span className={`block text-sm font-medium ${usageType === o.v ? 'text-primary' : 'text-foreground'}`}>{o.t}</span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">{o.d}</span>
-                </button>
-              ))}
+              ).map(o => {
+                const selected = usageType === o.v;
+                return (
+                  <button
+                    key={o.v}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => {
+                      setUsageType(o.v);
+                      if (o.v === 'component') setProcessingPath('ready_made');
+                      else setProcessingPath('full_chain');
+                      setFixedStageId('');
+                      setAllowedStageIds([]);
+                    }}
+                    className={cn(
+                      'group flex w-full cursor-pointer items-start gap-3 rounded-xl border p-4 text-left transition-all duration-200',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background',
+                      selected
+                        ? 'border-primary bg-primary/[0.04] shadow-sm'
+                        : 'border-border bg-card hover:border-primary/40 hover:bg-muted/40'
+                    )}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
+                        selected ? 'border-primary' : 'border-border group-hover:border-primary/50'
+                      )}
+                    >
+                      {selected && <span className="h-2 w-2 rounded-full bg-primary" />}
+                    </span>
+                    <span className="min-w-0">
+                      <span className={cn('block text-sm font-semibold', selected ? 'text-primary' : 'text-foreground')}>
+                        {o.t}
+                      </span>
+                      <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{o.d}</span>
+                    </span>
+                  </button>
+                );
+              })}
             </div>
             <p className="text-xs text-muted-foreground">Only materials marked as a part can be picked in the Products form.</p>
           </fieldset>
         </FormGrid>
       </FormSection>
-
-      <FormSection icon={<Layers />} eyebrow="Classification">
+          <FormSection icon={<FileText />} eyebrow="Details">
+        <FormGrid cols={2}>
+          <FormField id="material-description" label="Description" className="sm:col-span-2">
+            <textarea
+              id="material-description"
+              name="material-description"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              className={formInputClass}
+              placeholder="Optional notes"
+              rows={2}
+            />
+          </FormField>
+          <FormField id="material-status" label="Status" className="sm:col-span-1">
+            <SearchableSelect
+              options={[
+                { id: 'Active', label: 'Active' },
+                { id: 'Inactive', label: 'Inactive' },
+              ]}
+              value={status}
+              onChange={(v) => setStatus(v as 'Active' | 'Inactive')}
+              placeholder="Select status..."
+            />
+          </FormField>
+        </FormGrid>
+          </FormSection>
+        </div>
+        <FormSection icon={<Layers />} eyebrow="Classification" first>
         <FormGrid cols={2}>
           <FormField id="material-category" label="Category" required className="sm:col-span-1">
             <SearchableSelect
@@ -244,36 +297,13 @@ export function MaterialForm({ material, onSaved, onCancel }: MaterialFormProps)
           )}
 
         </FormGrid>
-      </FormSection>
-
-      <FormSection icon={<FileText />} eyebrow="Details">
-        <FormGrid cols={2}>
-          <FormField id="material-description" label="Description" className="sm:col-span-2">
-            <textarea
-              id="material-description"
-              name="material-description"
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              className={formInputClass}
-              placeholder="Optional notes"
-              rows={2}
-            />
-          </FormField>
-          <FormField id="material-status" label="Status" className="sm:col-span-1">
-            <SearchableSelect
-              options={[
-                { id: 'Active', label: 'Active' },
-                { id: 'Inactive', label: 'Inactive' },
-              ]}
-              value={status}
-              onChange={(v) => setStatus(v as 'Active' | 'Inactive')}
-              placeholder="Select status..."
-            />
-          </FormField>
-        </FormGrid>
-      </FormSection>
-
-      <FormFooter onCancel={onCancel} submitLabel={material ? 'Save Changes' : 'Save Material'} />
+        </FormSection>
+      </FormColumns>
+      <FormFooter
+        className="sticky bottom-0 -mb-5"
+        onCancel={onCancel}
+        submitLabel={material ? 'Save Changes' : 'Save Material'}
+      />
     </form>
   );
 }

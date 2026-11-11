@@ -22,7 +22,7 @@ export interface FormSectionProps {
  */
 export function FormSection({ icon, eyebrow, description, first = false, className, children }: FormSectionProps) {
   return (
-    <section className={cn('flex flex-col gap-3 py-4', first ? 'border-0' : 'border-t border-border/50', className)}>
+    <section className={cn('flex flex-col gap-3 py-3', first ? 'border-0' : 'border-t border-border/50', className)}>
       <div className="flex items-center gap-2">
         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
           {icon}

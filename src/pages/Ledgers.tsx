@@ -126,11 +126,6 @@ export function Ledgers() {
     : ledger.openingBalance;
   const showOpeningRow = ledger.rows.length > 0 || Math.abs(ledger.openingBalance) > 0.005;
 
-  // Control accounts (AR/AP) show the aggregate of their sub-ledger children;
-  // other accounts show their own closing balance.
-  const subLedgerTotal = subLedger?.children.reduce((s, c) => s + c.balance, 0) ?? 0;
-  const currentFinancialBalance = hasSubLedger ? subLedgerTotal : closingBalance;
-
   const statementRows: LedgerStatementRow[] = useMemo(
     () => ledger.rows.map(row => ({
       id: row.id,
@@ -260,20 +255,6 @@ export function Ledgers() {
                 {isPreviewing && selectedAccountId === previewAccountId ? 'Previewing' : 'Preview Ledger'}
               </button>
             </div>
-
-            {activeAccount && (
-              <div className="flex shrink-0 items-center gap-2 rounded-xl border border-border/50 bg-background px-3 py-2">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {hasSubLedger ? 'Sub-ledger' : 'Closing'}
-                </span>
-                <span className={cn("text-base font-bold tracking-tight tabular-nums", currentFinancialBalance !== 0 ? "text-primary" : "text-foreground")}>
-                  {formatCurrency(Math.abs(currentFinancialBalance))}
-                </span>
-                <span className="text-xs font-medium text-muted-foreground">
-                  {ledgerBalanceSide(currentFinancialBalance, isDebitNormal)}
-                </span>
-              </div>
-            )}
           </div>
 
           {isPreviewing && selectedAccountId !== previewAccountId && (

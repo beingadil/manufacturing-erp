@@ -593,7 +593,7 @@ export function MaterialDetail() {
         description="Raw material identity, how it's used, and how it moves through processors."
         icon={<Pencil />}
         accent="from-emerald-500 to-teal-600"
-        size="lg">
+        size="xl">
         <MaterialForm material={material} onSaved={() => setEditOpen(false)} onCancel={() => setEditOpen(false)} />
       </FormModal>
     </div>

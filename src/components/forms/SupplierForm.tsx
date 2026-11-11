@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { useERPStore } from '../../store/useERPStore';
 import type { Supplier } from '../../types/erp';
 import { FormField } from '../form/FormField';
+import { FormColumns } from '../form/FormColumns';
 import { FormFooter } from '../form/FormFooter';
 import { FormGrid } from '../form/FormGrid';
 import { FormSection } from '../form/FormSection';
@@ -56,6 +57,7 @@ export function SupplierForm({ supplier, onSaved, onCancel }: SupplierFormProps)
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+      <FormColumns>
       <FormSection icon={<Truck className="h-5 w-5" />} eyebrow="Details" first>
         <FormGrid cols={2}>
           <FormField id="supplier-name" label="Supplier Name" required className="sm:col-span-2">
@@ -120,33 +122,38 @@ export function SupplierForm({ supplier, onSaved, onCancel }: SupplierFormProps)
           </FormField>
         </FormGrid>
       </FormSection>
-      <FormSection icon={<MapPin className="h-5 w-5" />} eyebrow="Address & notes">
-        <FormGrid cols={2}>
-          <FormField id="supplier-address" label="Address" className="sm:col-span-2">
+      <FormSection icon={<MapPin className="h-5 w-5" />} eyebrow="Address & notes" first>
+        <FormGrid cols={1}>
+          <FormField id="supplier-address" label="Address">
             <textarea
               id="supplier-address"
               name="supplier-address"
               value={address}
               onChange={e => setAddress(e.target.value)}
-              rows={2}
+              rows={3}
               autoComplete="off"
               className={formInputClass}
             />
           </FormField>
-          <FormField id="supplier-notes" label="Notes" className="sm:col-span-2">
+          <FormField id="supplier-notes" label="Notes">
             <textarea
               id="supplier-notes"
               name="supplier-notes"
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              rows={2}
+              rows={3}
               autoComplete="off"
               className={formInputClass}
             />
           </FormField>
         </FormGrid>
       </FormSection>
-      <FormFooter onCancel={onCancel} submitLabel={supplier ? 'Save Changes' : 'Add Supplier'} />
+      </FormColumns>
+      <FormFooter
+        className="sticky bottom-0 -mb-5"
+        onCancel={onCancel}
+        submitLabel={supplier ? 'Save Changes' : 'Add Supplier'}
+      />
     </form>
   );
 }

@@ -492,7 +492,7 @@ export function RawMaterials() {
         description="Raw material identity, how it's used, and how it moves through processors."
         icon={editingMaterial ? <Pencil /> : <PackageSearch />}
         accent="from-emerald-500 to-teal-600"
-        size="lg">
+        size="xl">
         <MaterialForm material={editingMaterial} onSaved={closeModal} onCancel={closeModal} />
       </FormModal>
 

@@ -120,7 +120,7 @@ export function Suppliers() {
         title={editingSupplier ? 'Edit Supplier' : 'Add Supplier'}
         description="Someone you buy from, with contact details, NTN, address and notes."
         icon={editingSupplier ? <Pencil /> : <Truck />}
-        size="md">
+        size="xl">
         <SupplierForm supplier={editingSupplier} onSaved={closeModal} onCancel={closeModal} />
       </FormModal>
 

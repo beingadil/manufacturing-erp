@@ -73,7 +73,9 @@ describe('MaterialForm usage type', () => {
     render(<MaterialForm onSaved={() => {}} onCancel={() => {}} />);
 
     // Usage first, then category — the order that used to lose the choice.
-    fireEvent.click(screen.getByRole('button', { name: /a part of another product/i }));
+    // The usage cards are a radiogroup (one choice), so the options expose the
+    // `radio` role rather than `button`.
+    fireEvent.click(screen.getByRole('radio', { name: /a part of another product/i }));
     fireEvent.change(document.querySelector('#material-name')!, { target: { value: 'Steel Handle' } });
     chooseFromSelect('Select Category...', 'Kitchenware');
 
@@ -90,7 +92,7 @@ describe('MaterialForm usage type', () => {
 
     fireEvent.change(document.querySelector('#material-name')!, { target: { value: 'Brass Rivet' } });
     chooseFromSelect('Select Category...', 'Kitchenware');
-    fireEvent.click(screen.getByRole('button', { name: /a part of another product/i }));
+    fireEvent.click(screen.getByRole('radio', { name: /a part of another product/i }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Save Material' }));
 

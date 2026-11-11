@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { SafeDeleteDialog } from "../components/common/SafeDeleteDialog";
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
+import { FormColumns } from "../components/form/FormColumns";
 import { FormField } from "../components/form/FormField";
 import { FormFooter } from "../components/form/FormFooter";
 import { FormGrid } from "../components/form/FormGrid";
@@ -264,7 +265,7 @@ export function Processors() {
         title={editingProcessor ? 'Edit Processor' : 'Add Processor'}
         description="Someone you send material to for processing, with contact details and the stage they work at."
         icon={editingProcessor ? <Pencil /> : <UserCog />}
-        size="md"
+        size="xl"
         footer={
           <FormFooter
             onCancel={closeModal}
@@ -273,6 +274,7 @@ export function Processors() {
           />
         }>
         <form id="processor-form" onSubmit={handleSubmit} className="space-y-5">
+          <FormColumns>
           <FormSection icon={<UserCog />} eyebrow="Details" first>
             <FormGrid cols={2}>
               <FormField id="processor-name" label="Processor Name" required className="col-span-2">
@@ -345,32 +347,33 @@ export function Processors() {
               </FormField>
             </FormGrid>
           </FormSection>
-          <FormSection icon={<MapPin />} eyebrow="Address & notes">
-            <FormGrid cols={2}>
-              <FormField id="processor-address" label="Address" className="col-span-2">
+          <FormSection icon={<MapPin />} eyebrow="Address & notes" first>
+            <FormGrid cols={1}>
+              <FormField id="processor-address" label="Address">
                 <textarea
                   id="processor-address"
                   name="processor-address"
                   value={address}
                   onChange={e => setAddress(e.target.value)}
-                  rows={2}
+                  rows={3}
                   autoComplete="off"
                   className={formInputClass}
                 />
               </FormField>
-              <FormField id="processor-notes" label="Notes" className="col-span-2">
+              <FormField id="processor-notes" label="Notes">
                 <textarea
                   id="processor-notes"
                   name="processor-notes"
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
-                  rows={2}
+                  rows={3}
                   autoComplete="off"
                   className={formInputClass}
                 />
               </FormField>
             </FormGrid>
           </FormSection>
+          </FormColumns>
         </form>
       </FormModal>
 

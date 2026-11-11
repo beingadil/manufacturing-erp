@@ -13,8 +13,9 @@ export interface FormModalProps {
   /** Gradient classes for the header icon chip (e.g. `from-emerald-500 to-teal-600`).
    *  The header background uses a softened copy of the same stops. Defaults to `from-primary to-secondary`. */
   accent?: string;
-  /** 'md' → max-w-2xl, 'lg' → max-w-3xl (widened from the old max-w-lg default). */
-  size?: 'md' | 'lg';
+  /** 'md' → max-w-2xl, 'lg' → max-w-3xl, 'xl' → max-w-5xl (wide master-data
+   *  forms that must fit without a scrollbar). */
+  size?: 'md' | 'lg' | 'xl';
   children: React.ReactNode;
   /** Footer bar rendered below the scroll area (e.g. <FormFooter />). */
   footer?: React.ReactNode;
@@ -23,8 +24,9 @@ export interface FormModalProps {
 /**
  * Master-data modal shell: PageModal with a generalized Categories-style
  * gradient icon-chip header (title + optional description), a sticky footer
- * bar outside the scroll area, and widened sizes (md = max-w-2xl,
- * lg = max-w-3xl). Layout/typography/spacing only — no state or handlers.
+ * bar outside the scroll area, and three widths (md = max-w-2xl,
+ * lg = max-w-3xl, xl = max-w-5xl for forms that must not scroll).
+ * Layout/typography/spacing only — no state or handlers.
  */
 export function FormModal({ isOpen, onClose, title, description, icon, size = 'lg', accent = 'from-primary to-secondary', children, footer }: FormModalProps) {
   // Soften the accent stops for the header background tint (color-stop opacity).
@@ -37,7 +39,7 @@ export function FormModal({ isOpen, onClose, title, description, icon, size = 'l
       isOpen={isOpen}
       onClose={onClose}
       title={title}
-      maxWidth={size === 'lg' ? 'max-w-3xl' : 'max-w-2xl'}
+      maxWidth={size === 'xl' ? 'max-w-5xl' : size === 'lg' ? 'max-w-3xl' : 'max-w-2xl'}
       header={
         <div className={`px-6 py-4 border-b border-border/50 shrink-0 bg-gradient-to-r ${headerGradient}`}>
           <div className="flex justify-between items-start gap-4">

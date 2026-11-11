@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
+import { FormColumns } from "../components/form/FormColumns";
 import { FormField } from "../components/form/FormField";
 import { FormFooter } from "../components/form/FormFooter";
 import { FormGrid } from "../components/form/FormGrid";
@@ -184,9 +185,10 @@ export function Customers() {
         title={editingCustomer ? 'Edit Customer' : 'Add Customer'}
         description="Someone you sell to, with contact details, NTN, address and notes."
         icon={editingCustomer ? <Pencil /> : <Users />}
-        size="md"
+        size="xl"
         footer={<FormFooter onCancel={closeModal} formId="customer-form" submitLabel={editingCustomer ? 'Save Changes' : 'Add Customer'} />}>
         <form id="customer-form" onSubmit={handleSubmit} className="space-y-5">
+          <FormColumns>
           <FormSection icon={<Users />} eyebrow="Details" first>
             <FormGrid cols={2}>
               <FormField id="customer-name" label="Customer Name" required className="col-span-2">
@@ -250,32 +252,33 @@ export function Customers() {
               </FormField>
             </FormGrid>
           </FormSection>
-          <FormSection icon={<MapPin />} eyebrow="Address & notes">
-            <FormGrid cols={2}>
-              <FormField id="customer-address" label="Address" className="col-span-2">
+          <FormSection icon={<MapPin />} eyebrow="Address & notes" first>
+            <FormGrid cols={1}>
+              <FormField id="customer-address" label="Address">
                 <textarea
                   id="customer-address"
                   name="customer-address"
                   value={address}
                   onChange={e => setAddress(e.target.value)}
-                  rows={2}
+                  rows={3}
                   autoComplete="off"
                   className={formInputClass}
                 />
               </FormField>
-              <FormField id="customer-notes" label="Notes" className="col-span-2">
+              <FormField id="customer-notes" label="Notes">
                 <textarea
                   id="customer-notes"
                   name="customer-notes"
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
-                  rows={2}
+                  rows={3}
                   autoComplete="off"
                   className={formInputClass}
                 />
               </FormField>
             </FormGrid>
           </FormSection>
+          </FormColumns>
         </form>
       </FormModal>
 
