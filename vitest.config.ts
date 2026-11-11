@@ -20,5 +20,9 @@ export default defineConfig({
       },
     },
     include: ["src/**/*.test.{ts,tsx}"],
+    // Twelve logical cores on this machine — the default worker count leaves
+    // some idle, and vitest is environment-bound (jsdom per file), so every
+    // worker matters.
+    maxWorkers: 12,
   },
 });
