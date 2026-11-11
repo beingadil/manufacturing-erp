@@ -227,17 +227,46 @@ jobs:
           # auto-update for every installed app. Retrying is safe —
           # electron-builder replaces same-named assets — so a transient
           # failure becomes a normal release instead of a broken one.
+          #
+          # electron-builder can also exit 0 while an upload is still in flight
+          # or was rejected outright: v1.3.3 published "successfully" with only
+          # the blockmap on the release. So an attempt only counts once the
+          # assets actually APPEAR on the release — the API lists them a few
+          # seconds after the upload starts, so wait for them rather than
+          # trusting the exit code.
+          VERSION=$(node -e "console.log(require('./package.json').version)")
+          TAG="v${VERSION}"
+          release_assets() {
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null || true
+          }
+          assets_complete() {
+            local names
+            names=$(release_assets)
+            echo "$names" | grep -qx "Manufacturing-ERP-Setup-${VERSION}.exe" \
+              && echo "$names" | grep -qx "latest.yml"
+          }
           for attempt in 1 2 3; do
             echo "Publish attempt ${attempt}/3 ..."
             if npx electron-builder "${ARGS[@]}"; then
-              echo "✓ Published on attempt ${attempt}."
-              break
+              for wait in $(seq 1 24); do
+                if assets_complete; then
+                  echo "✓ Published on attempt ${attempt}."
+                  break
+                fi
+                if [ "$wait" = "24" ]; then
+                  echo "Attempt ${attempt} returned success but the assets are not all there yet."
+                fi
+                sleep 10
+              done
+              if assets_complete; then
+                break
+              fi
             fi
             if [ "$attempt" = "3" ]; then
-              echo "::error::electron-builder failed on all three attempts — the release is incomplete."
+              echo "::error::the release is still incomplete after three attempts — the installer and latest.yml are not both on it."
               exit 1
             fi
-            echo "Publish failed — waiting 30s before retrying."
+            echo "Publish incomplete — waiting 30s before retrying."
             sleep 30
           done
 
@@ -254,19 +283,32 @@ jobs:
           set -euo pipefail
           VERSION=$(node -e "console.log(require('./package.json').version)")
           TAG="v${VERSION}"
-          NAMES=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null || true)
-          echo "Assets on ${TAG}:"
-          echo "$NAMES" | sed '/^$/d;s/^/  - /'
-          MISSING=""
-          for expected in "Manufacturing-ERP-Setup-${VERSION}.exe" "latest.yml"; do
-            echo "$NAMES" | grep -qx "$expected" || MISSING="${MISSING} ${expected}"
+          # A 122MB upload takes a while to appear in the release API, so a
+          # release that is still uploading reads as incomplete. Wait for it
+          # before calling it broken — but never wait forever.
+          for wait in $(seq 1 12); do
+            NAMES=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null || true)
+            MISSING=""
+            for expected in "Manufacturing-ERP-Setup-${VERSION}.exe" "latest.yml"; do
+              echo "$NAMES" | grep -qx "$expected" || MISSING="${MISSING} ${expected}"
+            done
+            if [ -z "$MISSING" ]; then
+              echo "Assets on ${TAG}:"
+              echo "$NAMES" | sed '/^$/d;s/^/  - /'
+              echo "✓ Release ${TAG} carries the installer and its update feed."
+              exit 0
+            fi
+            if [ "$wait" = "12" ]; then
+              echo "Assets on ${TAG}:"
+              echo "$NAMES" | sed '/^$/d;s/^/  - /'
+              echo "::error::Release ${TAG} is missing:${MISSING}"
+              echo "::error::Installed apps read latest.yml from this release — without it they cannot update."
+              exit 1
+            fi
+            echo "Waiting for the upload to land (${MISSING}) …"
+            sleep 15
           done
-          if [ -n "$MISSING" ]; then
-            echo "::error::Release ${TAG} is missing:${MISSING}"
-            echo "::error::Installed apps read latest.yml from this release — without it they cannot update."
-            exit 1
-          fi
-          echo "✓ Release ${TAG} carries the installer and its update feed."
+
 
       - name: Verify installer signature
         # verify-signature.cjs auto-discovers the newest 'Manufacturing ERP Setup *.exe'
