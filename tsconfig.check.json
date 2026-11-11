@@ -1,6 +1,12 @@
 {
   "include": ["./src"],
-  "exclude": ["./src/**/*.test.ts", "./src/**/*.spec.ts", "./src/components/ui"],
+  "exclude": [
+    "./src/**/*.test.ts",
+    "./src/**/*.test.tsx",
+    "./src/**/*.spec.ts",
+    "./src/**/*.spec.tsx",
+    "./src/components/ui"
+  ],
   "compilerOptions": {
     "jsx": "react-jsx",
     "moduleResolution": "bundler",
@@ -11,10 +17,20 @@
     "skipLibCheck": true,
     "strictNullChecks": true,
     "noEmit": true,
+
+    // No automatic global inclusion of node_modules/@types. Without this,
+    // TypeScript pulls EVERY @types package into the program - @types/jsdom
+    // alone drags in a large DOM type graph the app never references. Types
+    // the app really needs are still loaded: per-import types (react,
+    // better-sqlite3, lodash) resolve normally, and src/vite-env.d.ts carries
+    // an explicit `/// <reference types="vite/client" />`.
+    "types": [],
+
     // Incremental: a second run only re-checks what changed, so the type
     // check is fast on a working tree instead of re-reading every file.
     "incremental": true,
     "tsBuildInfoFile": "./node_modules/.cache/tsconfig.check.tsbuildinfo",
+
     "paths": {
       "@/*": ["./src/*"]
     }

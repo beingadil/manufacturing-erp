@@ -6,6 +6,7 @@ import { InlineEditInput } from '../components/common/InlineEditInput';
 import { RawMaterialPreview } from '../components/materials/RawMaterialPreview';
 import { SafeDeleteDialog } from '../components/common/SafeDeleteDialog';
 import { Dropdown } from '../components/Dropdown';
+import { FormFooter } from '../components/form/FormFooter';
 import { FormModal } from '../components/form/FormModal';
 import { MaterialForm } from '../components/forms/MaterialForm';
 import { InventoryCalculationService } from '../lib/business/InventoryCalculationService';
@@ -492,8 +493,21 @@ export function RawMaterials() {
         description="Raw material identity, how it's used, and how it moves through processors."
         icon={editingMaterial ? <Pencil /> : <PackageSearch />}
         accent="from-emerald-500 to-teal-600"
-        size="xl">
-        <MaterialForm material={editingMaterial} onSaved={closeModal} onCancel={closeModal} />
+        size="xl"
+        footer={
+          <FormFooter
+            onCancel={closeModal}
+            formId="material-form"
+            submitLabel={editingMaterial ? 'Save Changes' : 'Save Material'}
+          />
+        }>
+        <MaterialForm
+          material={editingMaterial}
+          onSaved={closeModal}
+          onCancel={closeModal}
+          formId="material-form"
+          showFooter={false}
+        />
       </FormModal>
 
       <SafeDeleteDialog

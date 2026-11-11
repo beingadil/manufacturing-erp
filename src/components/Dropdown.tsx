@@ -2,6 +2,7 @@ import { Check, ChevronDown } from 'lucide-react';
 import { type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { cn } from '../lib/utils';
 import { AnchoredOverlay } from './ui/AnchoredOverlay';
+import { controlFocusClass, labelClass, requiredMarkClass } from './ui/formStyles';
 
 export interface DropdownOption {
   value: string;
@@ -44,9 +45,20 @@ export interface DropdownProps {
   onBlur?: () => void;
 }
 
-/** Canonical input chrome shared with formInputs — every dropdown looks identical. */
-const triggerBase =
-  "flex w-full items-center justify-between gap-2 rounded-xl border border-border bg-card text-sm text-foreground transition-colors hover:border-primary/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary";
+/**
+ * Canonical input chrome shared with formInputs — every dropdown looks identical.
+ *
+ * Same shell as a text field: 12px radius, hairline border, soft background,
+ * 46px height at `md`, and the same low-opacity focus halo (no hard 1px ring
+ * next to it). A dropdown that is 4px shorter than the input beside it reads
+ * as a mistake, so the padding below is the input's padding, not a guess.
+ */
+const triggerBase = cn(
+  'flex w-full items-center justify-between gap-2 rounded-xl border border-border bg-background/60 text-sm text-foreground',
+  'transition-[border-color,background-color,box-shadow] ease-[cubic-bezier(0.32,0.72,0,1)]',
+  'hover:border-border',
+  controlFocusClass
+);
 
 let listboxSeq = 0;
 function nextListboxId() {
@@ -137,7 +149,14 @@ export function Dropdown({
   return (
     <div className={cn('relative', className)}>
       {label && (
-        <label className="mb-1.5 block text-sm font-semibold text-foreground">{label}</label>
+        <label className={cn('mb-1.5 block', labelClass)}>
+          {label}
+          {required && (
+            <span className={requiredMarkClass} aria-hidden="true">
+              *
+            </span>
+          )}
+        </label>
       )}
 
       <div
@@ -162,11 +181,11 @@ export function Dropdown({
         }}
         className={cn(
           triggerBase,
-          isSm ? 'px-3 py-2' : 'px-4 py-2.5',
+          isSm ? 'px-3 py-2' : 'px-4 py-3',
           triggerClassName,
           !selected && 'text-muted-foreground',
           disabled && 'cursor-not-allowed opacity-60',
-          isOpen && 'border-primary/60 ring-1 ring-primary'
+          isOpen && 'border-primary/60 ring-4 ring-primary/10'
         )}
       >
         {leadingIcon && <span className="shrink-0 text-muted-foreground">{leadingIcon}</span>}

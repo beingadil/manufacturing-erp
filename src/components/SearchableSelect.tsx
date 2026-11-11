@@ -2,6 +2,7 @@ import { Check, ChevronsUpDown, Plus, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../lib/utils";
 import { AnchoredOverlay } from "./ui/AnchoredOverlay";
+import { controlFocusClass, labelClass, requiredMarkClass } from "./ui/formStyles";
 
 export interface Option {
   id: string;
@@ -31,13 +32,26 @@ interface SearchableSelectProps {
   className?: string;
 }
 
-/** Canonical input chrome shared with formInputs — every dropdown looks identical. */
-const selectBase =
-  "w-full rounded-xl border border-border bg-card px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary";
+/**
+ * Canonical input chrome shared with formInputs — every dropdown looks identical.
+ *
+ * Same shell as a text field: 12px radius, hairline border, soft background,
+ * 46px height at `md`, and the same low-opacity focus halo.
+ */
+const selectBase = cn(
+  "w-full rounded-xl border border-border bg-background/60 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground",
+  "transition-[border-color,background-color,box-shadow] ease-[cubic-bezier(0.32,0.72,0,1)]",
+  "hover:border-border",
+  controlFocusClass
+);
 
 /** Compact variant for tight grids. */
-const selectBaseSm =
-  "w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary";
+const selectBaseSm = cn(
+  "w-full rounded-xl border border-border bg-background/60 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground",
+  "transition-[border-color,background-color,box-shadow] ease-[cubic-bezier(0.32,0.72,0,1)]",
+  "hover:border-border",
+  controlFocusClass
+);
 
 /** One per-component-instance id so multiple selects on a page don't collide. */
 let listboxSeq = 0;
@@ -71,10 +85,10 @@ export function SearchableSelect({
   const selectedOption = options.find(o => o.id === value);
   const triggerClass = cn(
     isSm ? selectBaseSm : selectBase,
-    "flex-1 flex items-center justify-between rounded-xl border border-border bg-card cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+    "flex-1 flex items-center justify-between cursor-pointer",
     triggerClassName,
     !selectedOption && "text-muted-foreground",
-    isOpen && "ring-2 ring-primary border-transparent"
+    isOpen && "border-primary/60 ring-4 ring-primary/10"
   );
 
   // Close on outside click or Escape.
@@ -162,9 +176,13 @@ export function SearchableSelect({
   return (
     <div className={cn("relative", className)} ref={containerRef}>
       {label && (
-        <label className="text-sm font-semibold text-foreground mb-1.5 block">
+        <label className={cn(labelClass, "mb-1.5 block")}>
           {label}
-          {required && <span className="text-destructive" aria-hidden="true"> *</span>}
+          {required && (
+            <span className={requiredMarkClass} aria-hidden="true">
+              *
+            </span>
+          )}
         </label>
       )}
       <div className="flex gap-2">

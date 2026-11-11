@@ -26,7 +26,7 @@ export interface FormFooterProps {
  */
 export function FormFooter({ cancelLabel = 'Cancel', submitLabel = 'Save', onCancel, cancelClassName, submitClassName, className, formId }: FormFooterProps) {
   return (
-    <div className={cn('p-4 pt-6 border-t border-border/50 bg-card/50 backdrop-blur-sm flex flex-col-reverse gap-3 sm:flex-row sm:justify-end', className)}>
+    <div className={cn('shrink-0 p-4 pt-6 border-t border-border/50 bg-card/50 backdrop-blur-sm flex flex-col-reverse gap-3 sm:flex-row sm:justify-end', className)}>
       <button
         type="button"
         onClick={onCancel}

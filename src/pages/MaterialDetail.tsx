@@ -18,6 +18,7 @@ import { Link, useParams } from 'react-router-dom';
 import { BatchRegister, batchPathLabel } from '../components/materials/BatchRegister';
 import { Dropdown } from '../components/Dropdown';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { FormFooter } from '../components/form/FormFooter';
 import { FormModal } from '../components/form/FormModal';
 import { MaterialForm } from '../components/forms/MaterialForm';
 import { InventoryCalculationService, stageAvailableEntries } from '../lib/business/InventoryCalculationService';
@@ -593,8 +594,17 @@ export function MaterialDetail() {
         description="Raw material identity, how it's used, and how it moves through processors."
         icon={<Pencil />}
         accent="from-emerald-500 to-teal-600"
-        size="xl">
-        <MaterialForm material={material} onSaved={() => setEditOpen(false)} onCancel={() => setEditOpen(false)} />
+        size="xl"
+        footer={
+          <FormFooter onCancel={() => setEditOpen(false)} formId="material-detail-form" submitLabel="Save Changes" />
+        }>
+        <MaterialForm
+          material={material}
+          onSaved={() => setEditOpen(false)}
+          onCancel={() => setEditOpen(false)}
+          formId="material-detail-form"
+          showFooter={false}
+        />
       </FormModal>
     </div>
   );

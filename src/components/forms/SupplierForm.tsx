@@ -21,9 +21,15 @@ export interface SupplierFormProps {
   /** Called with the saved supplier id so the caller can select it. */
   onSaved: (id: string) => void;
   onCancel: () => void;
+  /** Id of the <form>. Pass it when the save button lives OUTSIDE the form —
+   *  e.g. in a modal's footer slot, which is a sibling of the scroll area.
+   *  The `form` attribute re-associates the button with the form. */
+  formId?: string;
+  /** Set false when the caller supplies its own footer (modal footer slot). */
+  showFooter?: boolean;
 }
 
-export function SupplierForm({ supplier, onSaved, onCancel }: SupplierFormProps) {
+export function SupplierForm({ supplier, onSaved, onCancel, formId, showFooter = true }: SupplierFormProps) {
   const { addSupplier, updateSupplier } = useERPStore();
 
   const [name, setName] = useState(supplier?.name ?? '');
@@ -56,7 +62,7 @@ export function SupplierForm({ supplier, onSaved, onCancel }: SupplierFormProps)
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form id={formId} onSubmit={handleSubmit} className="space-y-5">
       <FormColumns>
       <FormSection icon={<Truck className="h-5 w-5" />} eyebrow="Details" first>
         <FormGrid cols={2}>
@@ -149,11 +155,13 @@ export function SupplierForm({ supplier, onSaved, onCancel }: SupplierFormProps)
         </FormGrid>
       </FormSection>
       </FormColumns>
-      <FormFooter
-        className="sticky bottom-0 -mb-5"
-        onCancel={onCancel}
-        submitLabel={supplier ? 'Save Changes' : 'Add Supplier'}
-      />
+      {showFooter && (
+        <FormFooter
+          className="sticky bottom-0 -mb-5"
+          onCancel={onCancel}
+          submitLabel={supplier ? 'Save Changes' : 'Add Supplier'}
+        />
+      )}
     </form>
   );
 }

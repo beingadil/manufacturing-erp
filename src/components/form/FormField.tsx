@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
+import { requiredMarkClass } from '../ui/formStyles';
 import { formFieldLabelClass, formHintClass } from './formStyles';
 
 export interface FormFieldProps {
@@ -21,7 +22,11 @@ export function FormField({ id, label, required, hint, className, children }: Fo
     <div className={cn('space-y-2', className)}>
       <label htmlFor={id} className={formFieldLabelClass}>
         {label}
-        {required && <span className="ml-1 text-muted-foreground">*</span>}
+        {required && (
+          <span className={requiredMarkClass} aria-hidden="true">
+            *
+          </span>
+        )}
       </label>
       {children}
       {hint && <p className={formHintClass}>{hint}</p>}

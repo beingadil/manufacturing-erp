@@ -2,6 +2,7 @@ import { Pencil, Plus, Truck, } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
+import { FormFooter } from "../components/form/FormFooter";
 import { FormModal } from "../components/form/FormModal";
 import { SupplierForm } from "../components/forms/SupplierForm";
 import { PartyLedgerModal } from "../components/PartyLedgerModal";
@@ -120,8 +121,21 @@ export function Suppliers() {
         title={editingSupplier ? 'Edit Supplier' : 'Add Supplier'}
         description="Someone you buy from, with contact details, NTN, address and notes."
         icon={editingSupplier ? <Pencil /> : <Truck />}
-        size="xl">
-        <SupplierForm supplier={editingSupplier} onSaved={closeModal} onCancel={closeModal} />
+        size="xl"
+        footer={
+          <FormFooter
+            onCancel={closeModal}
+            formId="supplier-form"
+            submitLabel={editingSupplier ? 'Save Changes' : 'Add Supplier'}
+          />
+        }>
+        <SupplierForm
+          supplier={editingSupplier}
+          onSaved={closeModal}
+          onCancel={closeModal}
+          formId="supplier-form"
+          showFooter={false}
+        />
       </FormModal>
 
       {ledgerParty && <PartyLedgerModal party={ledgerParty} onClose={() => setLedgerParty(null)} />}

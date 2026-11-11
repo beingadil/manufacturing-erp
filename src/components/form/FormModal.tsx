@@ -55,9 +55,9 @@ export function FormModal({ isOpen, onClose, title, description, icon, size = 'l
             <button
               onClick={onClose}
               aria-label="Close dialog"
-              className="p-1 rounded-lg hover:bg-muted transition-colors"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground/80 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/10"
             >
-              <X className="h-5 w-5 text-muted-foreground/80" />
+              <X className="h-5 w-5" />
             </button>
           </div>
         </div>

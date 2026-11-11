@@ -14,11 +14,28 @@ export const labelClass = 'text-sm font-medium text-foreground';
 
 export const hintClass = 'text-xs text-muted-foreground';
 
+/**
+ * Focus treatment shared by EVERY control — text input, textarea, dropdown,
+ * searchable select. A wide low-opacity halo rather than a hard 1px focus
+ * ring: it reads as a pressed-in surface instead of an outlined box.
+ *
+ * This is the single place that decides what "focused" looks like. A second
+ * treatment anywhere is how a row ends up with a 1px ring next to a soft halo.
+ */
+export const controlFocusClass = 'focus:border-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/10';
+
+/**
+ * The one required-field mark. Every label — form field, dropdown, searchable
+ * select — renders its asterisk exactly like this.
+ */
+export const requiredMarkClass = 'ml-1 text-destructive';
+
 export const inputClass = cn(
   'w-full rounded-xl border border-border bg-background/60 px-4 py-3 text-sm text-foreground',
   'placeholder:text-muted-foreground/60',
   'transition-[border-color,background-color,box-shadow] ease-[cubic-bezier(0.32,0.72,0,1)]',
-  'hover:border-border focus:border-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/10',
+  'hover:border-border',
+  controlFocusClass,
 );
 
 export const textareaClass = cn(
