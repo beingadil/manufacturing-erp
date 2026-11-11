@@ -22,16 +22,20 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_DIR"
 
+# Local binaries, never `npx` — see the note in scripts/lint.sh.
+BIN="$PROJECT_DIR/node_modules/.bin"
+BIOME_TARGETS=(src tailwind.config.js)
+
 MODE="${1:---check}"
 
 echo "━━━ Tool consistency (biome ↔ tsgo) ━━━"
 
 if [ "$MODE" = "--write" ]; then
   echo "→ Applying safe biome fixes (organize imports, safe autofixes)…"
-  if ! npx biome check --write --files-ignore-unknown=true . >/dev/null 2>&1; then
+  if ! "$BIN/biome" check --write --files-ignore-unknown=true "${BIOME_TARGETS[@]}" >/dev/null 2>&1; then
     # biome exits non-zero when it *finds* fixable issues even after fixing;
     # only a diagnostics error is fatal here.
-    if [ -n "$(npx biome check --files-ignore-unknown=true . 2>/dev/null | grep -i 'error')" ]; then
+    if [ -n "$("$BIN/biome" check --files-ignore-unknown=true "${BIOME_TARGETS[@]}" 2>/dev/null | grep -i 'error')" ]; then
       echo "❌ biome itself failed. Run 'npx biome check .' and fix manually."
       exit 1
     fi
@@ -39,7 +43,7 @@ if [ "$MODE" = "--write" ]; then
 fi
 
 echo "→ Verifying types still resolve after any biome edits…"
-TSGO_OUT="$(npx tsgo -p tsconfig.check.json 2>&1)"
+TSGO_OUT="$("$BIN/tsgo" -p tsconfig.check.json 2>&1)"
 TSGO_CODE=$?
 
 if [ $TSGO_CODE -eq 0 ]; then

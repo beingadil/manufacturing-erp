@@ -13,8 +13,13 @@
 
 set -u
 
+# Local binaries, never `npx` — npx resolves against the npm registry before
+# falling back to the local install, so a slow registry turned this gate into
+# a multi-minute hang with no output. The same two checks run in CI.
+BIN="./node_modules/.bin"
+
 echo "━━━ pre-push: type check (tsgo) ━━━"
-npx tsgo -p tsconfig.check.json
+"$BIN/tsgo" -p tsconfig.check.json
 if [ $? -ne 0 ]; then
   echo ""
   echo "❌ Type check failed — push blocked. Fix the errors above, then push again."
@@ -24,10 +29,10 @@ fi
 
 echo ""
 echo "━━━ pre-push: biome lint ━━━"
-npx biome lint
+"$BIN/biome" lint src tailwind.config.js
 if [ $? -ne 0 ]; then
   echo ""
-  echo "❌ Biome lint failed — push blocked. Run 'npx biome lint' to see details."
+  echo "❌ Biome lint failed — push blocked. Run 'npm run lint' to see details."
   echo "   (Bypass with: git push --no-verify — not recommended.)"
   exit 1
 fi

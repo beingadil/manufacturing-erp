@@ -19,6 +19,19 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 EXIT_CODE=0
 
+# Run the tools from node_modules/.bin, never through `npx`.
+#
+# `npx` resolves a package against the npm REGISTRY before falling back to the
+# local install, so every call paid a network round-trip — on a machine with a
+# slow or blocked registry that is where "npm run lint" hung for minutes with
+# no output. The local binary is the same tool the CI runner uses (pnpm links
+# the bin on install), so this changes nothing about what is checked.
+BIN="$PROJECT_DIR/node_modules/.bin"
+# The files biome checks (biome.json: src/** plus tailwind.config.js). Passing
+# them explicitly keeps biome from walking the 44,000 files under node_modules
+# on every run — the walk is the expensive half of the check.
+BIOME_TARGETS=(src tailwind.config.js)
+
 step() {
   local label="$1"
   shift
@@ -27,8 +40,8 @@ step() {
   "$@" || EXIT_CODE=$?
 }
 
-step "TypeScript (tsgo)"        npx tsgo -p tsconfig.check.json
-step "Biome Lint"               npx biome lint
+step "TypeScript (tsgo)"        "$BIN/tsgo" -p tsconfig.check.json
+step "Biome Lint"               "$BIN/biome" lint "${BIOME_TARGETS[@]}"
 
 # Tool-consistency guard: biome autofixes (e.g. removed "unused" imports) can
 # break symbol resolution — verify tsgo still passes after biome, and fail fast
@@ -47,7 +60,7 @@ else
 fi
 
 # Tailwind — suppress everything except CSS errors
-step "Tailwind CSS" sh -c 'npx tailwindcss -i ./src/index.css -o /dev/null 2>&1 | grep -E "^(CssSyntaxError|Error):" || true'
+step "Tailwind CSS" sh -c "\"$BIN/tailwindcss\" -i ./src/index.css -o /dev/null 2>&1 | grep -E \"^(CssSyntaxError|Error):\" || true"
 
 # Vite build smoke test is dev-only (gitignored .rules/testBuild.sh) — skip
 # gracefully when absent; CI runs a real `npx vite build` in the workflow.

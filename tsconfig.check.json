@@ -11,6 +11,10 @@
     "skipLibCheck": true,
     "strictNullChecks": true,
     "noEmit": true,
+    // Incremental: a second run only re-checks what changed, so the type
+    // check is fast on a working tree instead of re-reading every file.
+    "incremental": true,
+    "tsBuildInfoFile": "./node_modules/.cache/tsconfig.check.tsbuildinfo",
     "paths": {
       "@/*": ["./src/*"]
     }

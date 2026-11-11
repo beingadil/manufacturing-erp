@@ -44,7 +44,22 @@ else
   SKIP="$BASE_SKIP"
 fi
 
-OUTPUT=$(cd "$PROJECT_DIR" && npx --yes ts-prune --project "$PROJECT" 2>/dev/null | grep -vE "$SKIP" || true)
+# ts-prune is not a project dependency, so `npx --yes` downloads it on every
+# run — a network round-trip before the scan even starts. Use the local binary
+# when it is there, and fall back to npx (warn-only, never fatal) otherwise.
+TS_PRUNE="$PROJECT_DIR/node_modules/.bin/ts-prune"
+if [ -x "$TS_PRUNE" ]; then
+  PRUNE_CMD=("$TS_PRUNE" --project "$PROJECT")
+elif command -v npx >/dev/null 2>&1; then
+  PRUNE_CMD=(npx --yes ts-prune --project "$PROJECT")
+else
+  PRUNE_CMD=()
+fi
+
+OUTPUT=""
+if [ "${#PRUNE_CMD[@]}" -gt 0 ]; then
+  OUTPUT=$(cd "$PROJECT_DIR" && "${PRUNE_CMD[@]}" 2>/dev/null | grep -vE "$SKIP" || true)
+fi
 
 if [ -n "$OUTPUT" ]; then
   COUNT=$(echo "$OUTPUT" | grep -c '[^[:space:]]' || echo 0)
