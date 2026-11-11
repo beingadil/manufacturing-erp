@@ -300,12 +300,54 @@ function BalanceSheet() {
 }
 
 function ChartOfAccounts() {
-  const { accounts, accountSubtypes } = useERPStore();
+  const { accounts, accountSubtypes, addAccountSubtype, deleteAccountSubtype } = useERPStore();
   const [search, setSearch] = useState("");
   const [isAddAccountModalOpen, setIsAddAccountModalOpen] = useState(false);
   const [editAccountId, setEditAccountId] = useState<string | undefined>();
   const [quickAddType, setQuickAddType] = useState<{type: AccountType, subtypeName: string} | undefined>();
   const [deleteModal, setDeleteModal] = useState<{isOpen: boolean, id: string, no: string}>({isOpen: false, id: "", no: ""});
+  // Sub-type creation: the chart's buckets are the user's own, not just the
+  // seeded ones — a "Salaries & Wages" or "Committee Fund" bucket is theirs to
+  // add, per account type.
+  const [newSubtypeFor, setNewSubtypeFor] = useState<AccountType | null>(null);
+  const [newSubtypeName, setNewSubtypeName] = useState('');
+  const [subtypeError, setSubtypeError] = useState<string | null>(null);
+
+  const startNewSubtype = (type: AccountType) => {
+    setNewSubtypeFor(type);
+    setNewSubtypeName('');
+    setSubtypeError(null);
+  };
+
+  const cancelNewSubtype = () => {
+    setNewSubtypeFor(null);
+    setNewSubtypeName('');
+    setSubtypeError(null);
+  };
+
+  const saveNewSubtype = (type: AccountType) => {
+    const name = newSubtypeName.trim();
+    if (!name) {
+      setSubtypeError('Give the sub-type a name.');
+      return;
+    }
+    try {
+      addAccountSubtype({ name, type, description: '', isSystem: false } as any);
+      toast.success(`Sub-type "${name}" added to ${type}.`);
+      cancelNewSubtype();
+    } catch (err: any) {
+      setSubtypeError(err?.message || 'Could not add the sub-type.');
+    }
+  };
+
+  const removeSubtype = (id: string, name: string) => {
+    try {
+      deleteAccountSubtype(id);
+      toast.success(`Sub-type "${name}" deleted.`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Could not delete the sub-type.');
+    }
+  };
 
   const handleDelete = () => {
     const store = useERPStore.getState();
@@ -409,32 +451,93 @@ function ChartOfAccounts() {
             const typeAccounts = visibleAccounts.filter(a => a.type === type && !a.parentId); // Only top-level
             
             if (typeAccounts.length === 0 && search !== "") return null;
-            if (typeAccounts.length === 0 && search === "") return null; // Optionally hide empty types
+            // An empty type still shows while the user is adding a sub-type to
+            // it, otherwise there would be nowhere to create the first bucket.
+            if (typeAccounts.length === 0 && search === "" && newSubtypeFor !== type) return null;
             
             return (
               <div key={type} className="border border-border/50 rounded-xl overflow-hidden shadow-sm">
                 <div className="bg-muted/30 px-4 py-3 flex items-center gap-2 border-b border-border/50">
                   <FolderOpen className="h-5 w-5 text-primary" />
                   <h3 className="font-semibold text-foreground">{type}</h3>
+                  <button
+                    onClick={() => (newSubtypeFor === type ? cancelNewSubtype() : startNewSubtype(type))}
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground/80 transition-colors hover:bg-muted"
+                    title={`Add a sub-type under ${type}`}
+                  >
+                    <Plus className="h-3 w-3" />
+                    Sub-type
+                  </button>
                   <span className="text-xs bg-background border border-border text-muted-foreground px-2 py-0.5 rounded-full ml-auto">
                     {matchedAccounts.filter(a => a.type === type).length} accounts
                   </span>
                 </div>
+
+                {newSubtypeFor === type && (
+                  <div className="px-4 py-2.5 flex flex-wrap items-center gap-2 border-b border-border/50 bg-background/60">
+                    <input
+                      autoFocus
+                      value={newSubtypeName}
+                      onChange={e => { setNewSubtypeName(e.target.value); setSubtypeError(null); }}
+                      onKeyDown={e => { if (e.key === 'Enter') saveNewSubtype(type); if (e.key === 'Escape') cancelNewSubtype(); }}
+                      placeholder={`New ${type} sub-type name`}
+                      className="flex-1 min-w-[220px] rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
+                    />
+                    <button
+                      onClick={() => saveNewSubtype(type)}
+                      className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                    >
+                      Add sub-type
+                    </button>
+                    <button
+                      onClick={cancelNewSubtype}
+                      className="rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-muted"
+                    >
+                      Cancel
+                    </button>
+                    {subtypeError && <span className="text-xs font-medium text-destructive">{subtypeError}</span>}
+                  </div>
+                )}
                 
                 <div className="divide-y divide-border/50 bg-card">
                   {subtypesOfType.map(subtype => {
                     const subtypeAccounts = typeAccounts.filter(a => a.subtypeId === subtype.id);
-                    if (subtypeAccounts.length === 0) return null;
-                    
+                    const allSubtypeAccounts = accounts.filter(a => a.subtypeId === subtype.id);
+                    const canDelete = !subtype.isSystem && allSubtypeAccounts.length === 0;
+
                     return (
                       <div key={subtype.id}>
                         <div className="px-4 py-2.5 flex items-center gap-2 text-sm font-medium text-muted-foreground border-b border-border/50 bg-muted/10">
                           <Folder className="h-4 w-4" />
                           {subtype.name}
+                          <span className="text-[11px] font-normal text-muted-foreground/70">
+                            {allSubtypeAccounts.length} account{allSubtypeAccounts.length === 1 ? '' : 's'}
+                          </span>
+                          {subtype.isSystem && (
+                            <span className="rounded bg-background border border-border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                              System
+                            </span>
+                          )}
+                          {canDelete ? (
+                            <button
+                              onClick={() => removeSubtype(subtype.id, subtype.name)}
+                              aria-label={`Delete sub-type ${subtype.name}`}
+                              title="Delete this sub-type"
+                              className="ml-auto rounded-md p-1 text-muted-foreground/60 transition-colors hover:bg-destructive/10 hover:text-destructive"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          ) : !subtype.isSystem && (
+                            <span className="ml-auto text-[10px] text-muted-foreground/60">
+                              Has accounts — move them to delete it
+                            </span>
+                          )}
                         </div>
-                        <div className="divide-y divide-border/50">
-                          {subtypeAccounts.map(account => renderAccount(account))}
-                        </div>
+                        {subtypeAccounts.length > 0 && (
+                          <div className="divide-y divide-border/50">
+                            {subtypeAccounts.map(account => renderAccount(account))}
+                          </div>
+                        )}
                       </div>
                     );
                   })}

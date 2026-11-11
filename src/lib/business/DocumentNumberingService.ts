@@ -159,12 +159,36 @@ export class DocumentNumberingService {
    * Generates a Chart of Accounts code based on type and count
    */
   static generateAccountCode(type: string, sameTypeCount: number): string {
+    const prefix = DocumentNumberingService.accountTypePrefix(type);
+    return `${prefix}${(sameTypeCount + 1).toString().padStart(3, '0')}`;
+  }
+
+  /** The numeric prefix a type's codes start with (Assets 1, Liabilities 2, …). */
+  static accountTypePrefix(type: string): string {
     const typePrefixMap: Record<string, string> = {
       'Assets': '1', 'Liabilities': '2', 'Equity': '3', 
       'Revenue': '4', 'Cost of Goods Sold': '5', 'Expenses': '6', 
       'Other Income': '7', 'Other Expenses': '8'
     };
-    const prefix = typePrefixMap[type] || '9';
-    return `${prefix}${(sameTypeCount + 1).toString().padStart(3, '0')}`;
+    return typePrefixMap[type] || '9';
+  }
+
+  /**
+   * The next free Chart of Accounts code for a type.
+   *
+   * Max-based, never count-based: counting only the accounts of a type hands
+   * out the code of a DELETED account (delete one, add one, and the new account
+   * lands on the freed code) — which is how two accounts ended up sharing 1015.
+   * Taking the highest code in the type's range and stepping past it can never
+   * collide, however the chart is edited.
+   */
+  static nextAccountCode(type: string, existingCodes: string[]): string {
+    const prefix = DocumentNumberingService.accountTypePrefix(type);
+    const pattern = new RegExp(`^${prefix}(\\d{3})$`);
+    const highest = existingCodes.reduce((max, code) => {
+      const match = (code || '').trim().match(pattern);
+      return match ? Math.max(max, Number(match[1])) : max;
+    }, 0);
+    return `${prefix}${String(highest + 1).padStart(3, '0')}`;
   }
 }

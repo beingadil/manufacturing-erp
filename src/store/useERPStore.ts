@@ -1,4 +1,4 @@
-﻿import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { SQLiteStorageAdapter } from '../database/sqlite/SQLiteStorageAdapter';
@@ -189,6 +189,12 @@ export interface ERPState {
   
   // Accounting Actions
   addAccountSubtype: (data: Omit<AccountSubtype, 'id'>) => string;
+  /**
+   * Delete a sub-type. Only a custom sub-type with nothing on it may go:
+   * system sub-types are resolved by name by the posting engine, and a
+   * sub-type with accounts on it would orphan them.
+   */
+  deleteAccountSubtype: (id: string) => void;
   addAccount: (data: Omit<Account, 'id' | 'code'> & { code?: string }) => string;
   addVoucher: (voucher: Omit<Voucher, 'id' | 'voucherNo' | 'createdAt'>, entries: Omit<JournalEntry, 'id' | 'voucherId'>[]) => string;
   updateVoucher: (voucherId: string, voucherData: Partial<Voucher>, newEntries: Omit<JournalEntry, 'id' | 'voucherId'>[]) => void;
@@ -536,17 +542,62 @@ export const useERPStore = create<ERPState>()(
 
       addAccountSubtype: (data) => {
         const id = uuidv4();
-        set((state) => ({ accountSubtypes: [...state.accountSubtypes, { ...data, id }] }));
+        set((state) => {
+          const clash = state.accountSubtypes.find(
+            s => s.type === data.type && s.name.trim().toLowerCase() === data.name.trim().toLowerCase(),
+          );
+          if (clash) {
+            throw new AppError(`A "${data.type}" sub-type named "${data.name}" already exists.`);
+          }
+          return { accountSubtypes: [...state.accountSubtypes, { ...data, id }] };
+        });
         return id;
+      },
+
+      /**
+       * Delete a sub-type. Only a custom sub-type with nothing on it may go:
+       * system sub-types are the ones the engine resolves by name, and a
+       * sub-type with accounts on it would orphan them.
+       */
+      deleteAccountSubtype: (id) => {
+        set((state) => {
+          const subtype = state.accountSubtypes.find(s => s.id === id);
+          if (!subtype) return state;
+          if (subtype.isSystem) {
+            throw new AppError(`"${subtype.name}" is a system sub-type and cannot be deleted.`);
+          }
+          const used = state.accounts.filter(a => a.subtypeId === id).length;
+          if (used > 0) {
+            throw new AppError(
+              `"${subtype.name}" still has ${used} account${used === 1 ? '' : 's'} on it. Move or delete them first.`,
+            );
+          }
+          return { accountSubtypes: state.accountSubtypes.filter(s => s.id !== id) };
+        });
       },
 
       addAccount: (data) => {
         const id = uuidv4();
         set((state) => {
           let code = data.code;
-          if (!code) {
-            const sameTypeCount = state.accounts.filter(a => a.type === data.type).length;
-            code = DocumentNumberingService.generateAccountCode(data.type, sameTypeCount);
+          if (data.code) {
+            // A code identifies exactly one account — a repeat makes the chart
+            // ambiguous and every code-based lookup wrong.
+            const wanted = data.code.trim();
+            const clash = state.accounts.find(
+              a => (a.code || '').trim().toLowerCase() === wanted.toLowerCase(),
+            );
+            if (clash) {
+              throw new AppError(`No. "${wanted}" is already used by "${clash.name}". Each No. must identify one account.`);
+            }
+            code = wanted;
+          } else {
+            // Max-based, not count-based: a count reuses the code of a deleted
+            // account, which is how two accounts ended up on 1015.
+            code = DocumentNumberingService.nextAccountCode(
+              data.type,
+              state.accounts.map(a => a.code).filter(Boolean),
+            );
           }
           
           return { accounts: [...state.accounts, { ...data, id, code }] };
@@ -716,8 +767,12 @@ export const useERPStore = create<ERPState>()(
         const id = uuidv4();
         set((state) => {
           const accountSubtype = state.accountSubtypes.find(s => s.name === 'Accounts Payable');
-          const sameTypeCount = state.accounts.filter(a => a.type === 'Liabilities').length;
-          const code = DocumentNumberingService.generateAccountCode('Liabilities', sameTypeCount);
+          // Max-based, not count-based: a count can hand out the code of a
+          // deleted account, which is how two accounts ended up sharing 1015.
+          const code = DocumentNumberingService.nextAccountCode(
+            'Liabilities',
+            state.accounts.map(a => a.code).filter(Boolean),
+          );
           // Nest under the system AP control account (spec Â§15)
           const control = state.accounts.find(a => a.subtypeId === accountSubtype?.id && a.isSystem);
           const account: Account = {
@@ -746,8 +801,12 @@ export const useERPStore = create<ERPState>()(
         const id = uuidv4();
         set((state) => {
           const accountSubtype = state.accountSubtypes.find(s => s.name === 'Accounts Payable');
-          const sameTypeCount = state.accounts.filter(a => a.type === 'Liabilities').length;
-          const code = DocumentNumberingService.generateAccountCode('Liabilities', sameTypeCount);
+          // Max-based, not count-based: a count can hand out the code of a
+          // deleted account, which is how two accounts ended up sharing 1015.
+          const code = DocumentNumberingService.nextAccountCode(
+            'Liabilities',
+            state.accounts.map(a => a.code).filter(Boolean),
+          );
           // Nest under the system AP control account (spec Â§15)
           const control = state.accounts.find(a => a.subtypeId === accountSubtype?.id && a.isSystem);
           const account: Account = {
@@ -776,8 +835,12 @@ export const useERPStore = create<ERPState>()(
         const id = uuidv4();
         set((state) => {
           const accountSubtype = state.accountSubtypes.find(s => s.name === 'Accounts Receivable');
-          const sameTypeCount = state.accounts.filter(a => a.type === 'Assets').length;
-          const code = DocumentNumberingService.generateAccountCode('Assets', sameTypeCount);
+          // Max-based, not count-based: a count can hand out the code of a
+          // deleted account, which is how two accounts ended up sharing 1015.
+          const code = DocumentNumberingService.nextAccountCode(
+            'Assets',
+            state.accounts.map(a => a.code).filter(Boolean),
+          );
           // Nest under the system AR control account (spec Â§15)
           const control = state.accounts.find(a => a.subtypeId === accountSubtype?.id && a.isSystem);
           const account: Account = {

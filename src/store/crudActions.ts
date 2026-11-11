@@ -1031,10 +1031,22 @@ export const createCRUDActions = (
   },
 
   updateAccount: (id: string, data: any) => {
-    set((state) => ({
-      ...state,
-      accounts: state.accounts.map(a => a.id === id ? { ...a, ...data } : a)
-    }));
+    set((state) => {
+      // Re-using another account's code makes the chart ambiguous, so an
+      // edited code has to be free.
+      if (data.code) {
+        const clash = state.accounts.find(
+          a => a.id !== id && (a.code || '').trim().toLowerCase() === String(data.code).trim().toLowerCase(),
+        );
+        if (clash) {
+          throw new AppError(`No. "${data.code}" is already used by "${clash.name}". Each No. must identify one account.`);
+        }
+      }
+      return {
+        ...state,
+        accounts: state.accounts.map(a => a.id === id ? { ...a, ...data } : a)
+      };
+    });
   },
 
   /**

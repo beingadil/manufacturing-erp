@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useERPStore } from '../store/useERPStore';
 import { AccountType, } from '../types/erp';
 import { Dropdown } from './Dropdown';
@@ -26,6 +26,24 @@ export function AddAccountModal({ isOpen, onClose, onSave, editAccountId, quickA
   const [openingBalanceType, setOpeningBalanceType] = useState<'Debit' | 'Credit'>('Debit');
   const [parentId, setParentId] = useState('');
   const [code, setCode] = useState('');
+
+  // An account can never be its own ancestor — picking a descendant as the
+  // parent would loop the chart tree forever.
+  const descendantIds = useMemo(() => {
+    const out = new Set<string>();
+    if (!editAccountId) return out;
+    const walk = (parentId: string) => {
+      accounts
+        .filter(a => a.parentId === parentId)
+        .forEach(child => {
+          if (out.has(child.id)) return;
+          out.add(child.id);
+          walk(child.id);
+        });
+    };
+    walk(editAccountId);
+    return out;
+  }, [accounts, editAccountId]);
 
   useEffect(() => {
     if (isOpen) {
@@ -155,13 +173,18 @@ export function AddAccountModal({ isOpen, onClose, onSave, editAccountId, quickA
                 options={[
                   { id: '', label: 'None (Top Level)' },
                   ...accounts
-                    .filter(a => a.type === type && a.id !== editAccountId)
+                    .filter(a => a.type === type && a.id !== editAccountId && !descendantIds.has(a.id))
                     .map(a => ({ id: a.id, label: `${a.code} — ${a.name}` })),
                 ]}
                 value={parentId}
                 onChange={setParentId}
                 placeholder="Select parent account..."
               />
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                A parent groups this account under a control account — party accounts sit
+                under {type === 'Assets' ? 'Accounts Receivable' : type === 'Liabilities' ? 'Accounts Payable' : 'their control account'}.
+                It must be the same type.
+              </p>
             </div>
           </div>
           

@@ -86,14 +86,20 @@ export function migrateERPState(state: any): any {
   const hasLinkedAccount = (party: any): boolean =>
     !!party.id && (linkedAccounts.some(a => a.linkedEntityId === party.id)
       || (!!party.accountId && migratedAccounts.some(a => a.id === party.accountId)));
-  const typeCount = (type: string) => migratedAccounts.filter(a => a.type === type).length;
+  // Max-based code: a count-based one can hand out the code of a deleted
+  // account, which is how two accounts ended up sharing 1015.
+  const nextCode = (type: string, extra: Account[] = []) =>
+    DocumentNumberingService.nextAccountCode(
+      type,
+      [...migratedAccounts, ...extra].map(a => a.code).filter(Boolean),
+    );
 
   const ensurePartyAccount = (party: any, type: 'Assets' | 'Liabilities', subtypeName: string, controlId: string | undefined): any => {
     if (hasLinkedAccount(party)) return party;
     const subtype = subtypes.find(s => s.name === subtypeName);
     const account: Account = {
       id: uuidv4(),
-      code: DocumentNumberingService.generateAccountCode(type, typeCount(type)),
+      code: nextCode(type),
       name: party.name || party.code || 'Party',
       subtypeId: subtype?.id || '',
       type,
@@ -340,7 +346,7 @@ export function migrateERPState(state: any): any {
     if (found) return found;
     const account: Account = {
       id: uuidv4(),
-      code: DocumentNumberingService.generateAccountCode(type, typeCount(type)),
+      code: nextCode(type, migratedAccountsInner),
       name,
       type,
       subtypeId,
