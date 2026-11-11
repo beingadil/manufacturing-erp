@@ -173,7 +173,7 @@ function GeneralLedger() {
         </div>
         <div className="flex flex-col sm:flex-row sm:items-end gap-3 w-full xl:w-auto">
           <div className="flex flex-col gap-1.5 w-full sm:w-80">
-            <label className="flex h-4 items-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Account</label>
+            <label className="flex h-4 items-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Account</label>
             <SearchableSelect
               options={accounts.map(a => {
                 let relatedParty = '';
@@ -195,19 +195,19 @@ function GeneralLedger() {
               })}
               value={resolvedAccountId}
               onChange={val => setSelectedAccountId(val)}
-              triggerClassName="h-11 px-4"
+              triggerClassName="h-10 px-3 py-0"
               placeholder="Search account..."
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="flex h-4 items-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Period</label>
-            <LedgerPeriodFilter onChange={setPeriod} defaultLabel="All Time" triggerClassName="h-11 px-4" />
+            <label className="flex h-4 items-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Period</label>
+            <LedgerPeriodFilter onChange={setPeriod} defaultLabel="All Time" triggerClassName="h-10 px-3" />
           </div>
           <button
             type="button"
             onClick={handleExportPDF}
             disabled={!account}
-            className="flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Download className="h-4 w-4" />
             Export PDF
@@ -216,7 +216,7 @@ function GeneralLedger() {
             type="button"
             onClick={() => setPreviewAccountId(resolvedAccountId || null)}
             disabled={!resolvedAccountId || resolvedAccountId === previewAccountId}
-            className="flex h-11 items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Eye className="h-4 w-4" />
             {account ? 'Previewing' : 'Preview Ledger'}

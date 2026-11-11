@@ -195,25 +195,28 @@ export function Ledgers() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate("/accounting/journal-voucher")} className="inline-flex items-center gap-2 rounded-lg bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/90">
+          <button onClick={() => navigate("/accounting/journal-voucher")} className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/90">
             New Journal Voucher
           </button>
-          <button onClick={handleExportPDF} disabled={!activeAccount} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+          <button onClick={handleExportPDF} disabled={!activeAccount} className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
             Export PDF
           </button>
         </div>
       </div>
 
       <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col">
-        <div className="p-4 sm:p-6 border-b border-border/50 bg-muted/30 flex flex-col gap-4">
-          <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-4">
-            <div className="flex flex-col sm:flex-row sm:items-end gap-4 flex-1">
+        {/* Filter bar — one row, one control height (40px), one radius (12px).
+            The fields, the period picker and Preview share a baseline so the
+            bar costs one line of height on a short laptop screen. */}
+        <div className="p-4 border-b border-border/50 bg-muted/30">
+          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-end gap-3 flex-1">
               <div className="flex items-center gap-3 flex-1 max-w-md">
-                <div className="h-11 w-11 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                <div className="h-10 w-10 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-primary">
                   <Wallet className="h-5 w-5" />
                 </div>
                 <div className="flex flex-col flex-1">
-                  <label className="flex h-4 items-center mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Select Account</label>
+                  <label className="flex h-4 items-center mb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Select Account</label>
                   <SearchableSelect
                     options={accounts.map(a => {
                       let relatedParty = '';
@@ -235,56 +238,52 @@ export function Ledgers() {
                     })}
                     value={selectedAccountId}
                     onChange={setSelectedAccountId}
-                    triggerClassName="h-11 px-4"
+                    triggerClassName="h-10 px-3 py-0"
                     placeholder="Search account..."
                   />
                 </div>
               </div>
 
               <div className="flex flex-col">
-                <label className="flex h-4 items-center mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Statement Period</label>
-                <LedgerPeriodFilter onChange={setPeriod} defaultLabel="All Time" triggerClassName="h-11 px-4" />
+                <label className="flex h-4 items-center mb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Statement Period</label>
+                <LedgerPeriodFilter onChange={setPeriod} defaultLabel="All Time" triggerClassName="h-10 px-3" />
               </div>
+
+              {/* Preview — the ledger opens only when the user asks for it. */}
+              <button
+                type="button"
+                onClick={() => setPreviewAccountId(selectedAccountId || null)}
+                disabled={!selectedAccount || selectedAccountId === previewAccountId}
+                className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Eye className="h-4 w-4" />
+                {isPreviewing && selectedAccountId === previewAccountId ? 'Previewing' : 'Preview Ledger'}
+              </button>
             </div>
 
             {activeAccount && (
-              <div className="flex flex-col items-start xl:items-end bg-background p-4 rounded-xl border border-border/50 shadow-sm">
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                  {hasSubLedger ? 'Sub-ledger Balance' : 'Closing Balance'}
+              <div className="flex shrink-0 items-center gap-2 rounded-xl border border-border/50 bg-background px-3 py-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {hasSubLedger ? 'Sub-ledger' : 'Closing'}
                 </span>
-                <div className="flex items-baseline gap-2">
-                  <span className={cn("font-bold text-2xl tracking-tight tabular-nums", currentFinancialBalance !== 0 ? "text-primary" : "text-foreground")}>
-                    {formatCurrency(Math.abs(currentFinancialBalance))}
-                  </span>
-                  <span className="text-sm font-medium text-muted-foreground">
-                    {ledgerBalanceSide(currentFinancialBalance, isDebitNormal)}
-                  </span>
-                </div>
-                <span className="mt-0.5 text-[11px] text-muted-foreground">{period.label}</span>
+                <span className={cn("text-base font-bold tracking-tight tabular-nums", currentFinancialBalance !== 0 ? "text-primary" : "text-foreground")}>
+                  {formatCurrency(Math.abs(currentFinancialBalance))}
+                </span>
+                <span className="text-xs font-medium text-muted-foreground">
+                  {ledgerBalanceSide(currentFinancialBalance, isDebitNormal)}
+                </span>
               </div>
             )}
           </div>
 
-          {/* Preview — the ledger opens only when the user asks for it. */}
-          <div className="flex flex-wrap items-end gap-3">
-            <button
-              type="button"
-              onClick={() => setPreviewAccountId(selectedAccountId || null)}
-              disabled={!selectedAccount || selectedAccountId === previewAccountId}
-              className="inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Eye className="h-4 w-4" />
-              {isPreviewing && selectedAccountId === previewAccountId ? 'Previewing' : 'Preview Ledger'}
-            </button>
-            {isPreviewing && selectedAccountId !== previewAccountId && (
-              <span className="text-xs text-muted-foreground">
-                Press Preview to switch to {selectedAccount?.code} — {selectedAccount?.name}
-              </span>
-            )}
-          </div>
+          {isPreviewing && selectedAccountId !== previewAccountId && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Press Preview to switch to {selectedAccount?.code} — {selectedAccount?.name}
+            </p>
+          )}
 
           {isProcessorAccount && (
-            <div className="flex gap-2 mt-2">
+            <div className="flex gap-2 mt-3">
               <button
                 onClick={() => setViewMode("Financial")}
                 className={cn("px-4 py-2 text-sm font-medium rounded-lg transition-colors", viewMode === "Financial" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80")}

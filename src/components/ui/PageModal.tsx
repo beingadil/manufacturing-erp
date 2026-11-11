@@ -114,7 +114,7 @@ export function PageModal({ isOpen, onClose, title, children, maxWidth = 'max-w-
       <div
         ref={contentRef}
         tabIndex={-1}
-        className={`bg-card rounded-2xl shadow-xl w-full ${maxWidth} flex flex-col overflow-hidden outline-none`}
+        className={`bg-card rounded-2xl shadow-xl w-full ${maxWidth} flex flex-col overflow-hidden outline-none max-h-[calc(100vh-2rem)]`}
         style={{ overscrollBehavior: 'contain' }}
       >
         {header ?? (
@@ -129,7 +129,11 @@ export function PageModal({ isOpen, onClose, title, children, maxWidth = 'max-w-
             </button>
           </div>
         )}
-        <div className="p-6 space-y-4 flex-1 min-h-0 max-h-[80vh] overflow-y-auto" style={{ overscrollBehavior: 'contain' }}>
+        {/* The modal itself is capped to the viewport (the overlay's p-4 is the
+            2rem gutter), so the body flexes inside it and scrolls — capping the
+            BODY at 80vh instead let header + body + footer overflow a short
+            laptop screen. */}
+        <div className="p-5 space-y-3 flex-1 min-h-0 overflow-y-auto" style={{ overscrollBehavior: 'contain' }}>
           {children}
         </div>
         {footer}
