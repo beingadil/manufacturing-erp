@@ -139,6 +139,12 @@ jobs:
       - name: Run lint checks
         run: npm run lint
 
+      # Tests gate the release, not just master. v1.3.0 shipped from a tag
+      # without the suite running, so a startup-breaking Electron API call
+      # reached users. Never publish an installer the tests have not seen.
+      - name: Run tests
+        run: npm test
+
       - name: Build Vite frontend
         run: npx vite build
 
