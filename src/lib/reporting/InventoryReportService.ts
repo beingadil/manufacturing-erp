@@ -1,7 +1,7 @@
 import { differenceInDays } from 'date-fns';
 import { useERPStore } from '../../store/useERPStore';
 import { InventoryCalculationService } from '../business/InventoryCalculationService';
-import { isManufacturingEnabled, lotAverageCost, lotStockForProduct } from '../business/ManufacturingService';
+import { isManufacturingEnabled, lotStockForProduct } from '../business/ManufacturingService';
 import { ReportEngine } from './ReportEngine';
 
 export class InventoryReportService {
@@ -58,29 +58,6 @@ export class InventoryReportService {
         value
       };
     });
-  }
-
-
-  static getFinishedGoodsStockData(search: any) {
-    const state = useERPStore.getState();
-    const { products, categories, finishedGoodsLots, materials } = state;
-    const v4 = isManufacturingEnabled(state);
-    return products.map(p => {
-      // v4 stock lives in finished-goods lots. Legacy sales movements were
-      // written with `materialId` only (no productId), so replaying movements
-      // silently returned zero — use the authoritative stock model instead.
-      const currentStock = v4
-        ? lotStockForProduct(finishedGoodsLots || [], p.id)
-        : (materials.find(m => m.id === p.materialId)?.processedStockPcs || 0);
-      const avgCost = v4 ? lotAverageCost(finishedGoodsLots || [], p.id) : 0;
-      return {
-        ...p,
-        category: categories.find(c => c.id === p.categoryId)?.name || 'Product',
-        currentStock,
-        avgCost,
-        stockValue: currentStock * avgCost,
-      };
-    }).filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase()));
   }
 
 

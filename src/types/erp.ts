@@ -351,6 +351,20 @@ export interface ManufacturingComponentConsumption {
   pcs: number;
   costPerPiece: number;
   cost: number;
+  /** Which pool the pcs were drawn from at completion time. */
+  bucket?: 'raw' | 'finished';
+}
+
+/** Per-BOM-line cost rollup frozen at completion — "what did this line draw, at what cost". */
+export interface ManufacturingOrderComponentCost {
+  /** Snapshot material id from the BOM line. */
+  materialId: string;
+  /** pcs actually drawn for this line (from consumptions[]). */
+  pcs: number;
+  /** Total cost of everything drawn for this line. */
+  cost: number;
+  /** cost ÷ pcs (0 when the line drew nothing). */
+  costPerPiece: number;
 }
 
 export interface ManufacturingOrder {
@@ -371,6 +385,8 @@ export interface ManufacturingOrder {
   totalCost?: number;
   costPerPiece?: number;
   consumptions?: ManufacturingComponentConsumption[];
+  /** Per-BOM-line cost rollup frozen at completion (re-derived on read if a pre-existing MO lacks it). */
+  componentCosts?: ManufacturingOrderComponentCost[];
   completedAt?: string;
   completedBy?: string;
   remarks?: string;
@@ -456,6 +472,10 @@ export interface Sale {
    * are skipped by the legacy batch-trail replay. Undefined means legacy.
    */
   stockModelAtSale?: 'material' | 'manufactured';
+  /** Manufacturing v4: gross profit snapshot at completion — totalAmount − cogsAmount. */
+  grossProfit?: number;
+  /** grossProfit ÷ totalAmount as a percentage, snapshotted. Undefined on legacy rows. */
+  marginPercent?: number;
 }
 
 // -- Accounting System --

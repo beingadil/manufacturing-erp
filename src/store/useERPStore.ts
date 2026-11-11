@@ -1082,6 +1082,15 @@ export const useERPStore = create<ERPState>()(
               totalCost: costed.totalCost,
               costPerPiece,
               consumptions: drawn.draws,
+              // Frozen per-line cost roll-up: "what did each BOM line draw and what did it cost".
+              componentCosts: order.components.map(c => {
+                const line = drawn.draws.filter(d => d.materialId === c.materialId);
+                const pcs = line.reduce((s, d) => s + d.pcs, 0);
+                const cost = line.reduce((s, d) => s + d.cost, 0);
+                return { materialId: c.materialId, pcs, cost, costPerPiece: pcs > 0 ? cost / pcs : 0 };
+              }),
+              // Stamp the actual drawn quantity per line (equals plannedQty today — components are consumed in full).
+              components: order.components.map(c => ({ ...c, consumedQuantity: c.plannedQuantity })),
               completedAt: new Date().toISOString(),
               completedBy: state.currentUser?.name,
             };
@@ -2159,6 +2168,9 @@ export const useERPStore = create<ERPState>()(
           const totalAmount = roundQty(pcsSold * (Number(data.pricePerPiece) || 0));
           const invoiceNo = DocumentNumberingService.nextDocumentNumber(state.sales, 'invoiceNo', 'INV', data.date);
           const saleId = uuidv4();
+          // Snapshot gross profit and margin at completion — reports recompute on demand otherwise.
+          const grossProfit = totalAmount - lotResult.cogs;
+          const marginPercent = totalAmount > 0 ? (grossProfit / totalAmount) * 100 : 0;
           const newSale: Sale = {
             ...data,
             id: saleId,
@@ -2168,6 +2180,8 @@ export const useERPStore = create<ERPState>()(
             lotAllocations: lotResult.allocations,
             cogsAmount: lotResult.cogs,
             stockModelAtSale: 'manufactured',
+            grossProfit,
+            marginPercent,
           };
           const posting = buildManufacturedSale(
             state.accounts,
@@ -2507,6 +2521,7 @@ export const useERPStore = create<ERPState>()(
               lots = lotResult.lots;
               const totalAmount = roundQty(pcsSold * pricePerPiece);
               const saleId = uuidv4();
+              const grossProfit = totalAmount - lotResult.cogs;
               newSales.push({
                 id: saleId,
                 invoiceNo,
@@ -2519,6 +2534,8 @@ export const useERPStore = create<ERPState>()(
                 lotAllocations: lotResult.allocations,
                 cogsAmount: lotResult.cogs,
                 stockModelAtSale: 'manufactured',
+                grossProfit,
+                marginPercent: totalAmount > 0 ? (grossProfit / totalAmount) * 100 : 0,
               });
               const posting = buildManufacturedSale(
                 state.accounts,

@@ -4,6 +4,7 @@ import {
   previewProcessingCostReclassification,
 } from '../lib/accounting/processingCostReclassification';
 import { ManufacturingReportService } from '../lib/reporting/ManufacturingReportService';
+import { restoreComponentsFromManufacturing } from '../lib/business/ManufacturingService';
 import { buildDefaultStages } from '../lib/processing/processingStageSeed';
 import type { ProcessingReceipt } from '../types/erp';
 import { migrateERPState } from './erpMigration';
@@ -230,6 +231,24 @@ describe('Manufacturing v4 — manufacturing orders', () => {
     const lot = st().finishedGoodsLots.find(l => l.manufacturingOrderId === orderId)!;
     expect(lot.costPerPiece).toBe(275);
     expect(lot.pcsProduced).toBe(8);
+  });
+
+  it('draw → restore round-trips every batch exactly (bucket-aware, byte-for-byte)', () => {
+    const snapshot: Array<Record<string, unknown>> = JSON.parse(JSON.stringify(st().batches));
+
+    const orderId = st().addManufacturingOrder({
+      productId: 'product-1', date: '2026-02-01', plannedQty: 10, productionCost: 500,
+    } as any);
+    st().completeManufacturingOrder(orderId, { date: '2026-02-10' });
+
+    // No drift from the untouched second batch.
+    expect(st().batches.find(b => b.id === 'batch-2')).toEqual(expect.objectContaining(snapshot[1]));
+
+    const order = st().manufacturingOrders.find(o => o.id === orderId)!;
+    const consumptions = order.consumptions!;
+    const restored = restoreComponentsFromManufacturing(st().batches, consumptions);
+
+    expect(restored).toEqual(JSON.parse(JSON.stringify(snapshot)));
   });
 
   it('refuses to finish more than planned and leaves stock untouched', () => {
@@ -703,7 +722,63 @@ describe('Manufacturing — one-time processing-cost reclassification', () => {
   });
 });
 
-describe('Manufacturing — reports see the immutable trail', () => {
+describe('Manufacturing v4 - per-line cost rollup and sale profit snapshot', () => {
+  const makeJug = () => {
+    const orderId = st().addManufacturingOrder({ productId: 'product-1', date: '2026-02-01', plannedQty: 10, productionCost: 500 } as any);
+    st().completeManufacturingOrder(orderId, { date: '2026-02-10' });
+    return orderId;
+  };
+
+  it('completion stamps the per-line roll-up: consumedQuantity, bucket on every draw, componentCosts', () => {
+    makeJug();
+    const order = st().manufacturingOrders.find(o => o.productId === 'product-1')!;
+    expect(order.components[0].consumedQuantity).toBe(20);
+    for (const draw of order.consumptions || []) expect(draw.bucket).toBe('raw');
+    expect(order.componentCosts).toEqual([
+      { materialId: 'material-1', pcs: 20, cost: 2000, costPerPiece: 100 },
+    ]);
+  });
+
+  it('snapshots gross profit and margin on create, update and multi-line, and deletes cleanly', () => {
+    makeJug();
+    st().addSale({ customerId: 'customer-1', productId: 'product-1', date: '2026-03-01', pcsSold: 4, pricePerPiece: 500 } as any);
+    const sale = st().sales.find(s => s.productId === 'product-1')!;
+    expect(sale.grossProfit).toBe(1000); // 2000 - cogs 1000
+    expect(sale.marginPercent).toBeCloseTo(50, 6);
+
+    st().updateSale(sale.id, { pcsSold: 2, date: '2026-03-02' } as any);
+    const edited = st().sales.find(s => s.id === sale.id)!;
+    expect(edited.totalAmount).toBe(1000);
+    expect(edited.grossProfit).toBe(500); // 1000 - cogs 500
+    expect(edited.marginPercent).toBeCloseTo(50, 6);
+
+    st().deleteSale(sale.id);
+    expect(st().sales).toHaveLength(0);
+  });
+
+  it('multi-line sale snapshots grossProfit on every line', () => {
+    makeJug();
+    const plateId = st().addManufacturingOrder({ productId: 'product-2', date: '2026-02-02', plannedQty: 5 } as any);
+    st().completeManufacturingOrder(plateId, { date: '2026-02-11' });
+
+    st().addSaleGroup({
+      customerId: 'customer-1',
+      date: '2026-03-01',
+      lines: [
+        { productId: 'product-1', pcsSold: 2, pricePerPiece: 500 },
+        { productId: 'product-2', pcsSold: 3, pricePerPiece: 700 },
+      ],
+    });
+    const jug = st().sales.find(s => s.productId === 'product-1')!;
+    const plate = st().sales.find(s => s.productId === 'product-2')!;
+    expect(jug.grossProfit).toBe(500);
+    expect(plate.grossProfit).toBe(1800); // 2100 - 300
+    expect(jug.marginPercent).toBeCloseTo(50, 5);
+    expect(plate.marginPercent).toBeCloseTo((1800 / 2100) * 100, 5);
+  });
+});
+
+describe('Manufacturing - reports see the immutable trail', () => {
   function produceAndSell() {
     const orderId = st().addManufacturingOrder({
       productId: 'product-1', date: '2026-02-01', plannedQty: 10, productionCost: 500,

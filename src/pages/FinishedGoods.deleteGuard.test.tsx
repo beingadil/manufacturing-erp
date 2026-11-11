@@ -13,6 +13,7 @@ vi.mock('sonner', () => ({
 }));
 
 import { useERPStore } from '../store/useERPStore';
+import { MemoryRouter } from 'react-router-dom';
 import { FinishedGoods } from './FinishedGoods';
 
 // This vitest 4 + jsdom 29 setup does not expose window.localStorage (window
@@ -81,7 +82,11 @@ function seed(sales: unknown[]) {
 }
 
 function deleteProduct() {
-  render(<FinishedGoods />);
+  render(
+    <MemoryRouter>
+      <FinishedGoods />
+    </MemoryRouter>,
+  );
   fireEvent.click(screen.getByRole('button', { name: 'Delete Steel Tray 12in' }));
   fireEvent.click(screen.getByRole('button', { name: /Permanently Delete/ }));
 }

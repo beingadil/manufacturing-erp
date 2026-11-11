@@ -397,15 +397,6 @@ export default function SalesFormPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowProductForm(v => !v)}
-                  aria-expanded={showProductForm}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground/80 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add product
-                </button>
                 {!isEdit && (
                   <button
                     type="button"

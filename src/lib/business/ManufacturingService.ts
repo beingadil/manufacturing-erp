@@ -226,6 +226,35 @@ export function consumeComponentsForManufacturing(
 }
 
 /**
+ * Return drawn pcs to the exact batches and buckets they came from — the exact
+ * inverse of consumeComponentsForManufacturing. A completed manufacturing
+ * order never un-posts its ledger pieces, but a cancelled or planned order
+ * whose consumption list is known can be undone byte-for-byte.
+ *
+ * A batch missing from `batches` is ignored (it may have been cleaned up);
+ * a Depleted batch that regains pcs flips back to Active.
+ */
+export function restoreComponentsFromManufacturing(
+  batches: Batch[],
+  consumptions: ManufacturingComponentConsumption[],
+): Batch[] {
+  const next = batches.map(b => ({ ...b }));
+  for (const draw of consumptions) {
+    const batch = next.find(b => b.id === draw.batchId);
+    if (!batch) continue;
+    if (draw.bucket === 'finished') {
+      batch.processedPcs = roundQty((batch.processedPcs || 0) + draw.pcs);
+    } else {
+      batch.remainingPcs = roundQty((batch.remainingPcs || 0) + draw.pcs);
+    }
+    if (batch.status === 'Depleted' && ((batch.remainingPcs || 0) > 0 || (batch.processedPcs || 0) > 0)) {
+      batch.status = 'Active';
+    }
+  }
+  return next;
+}
+
+/**
  * Replay recorded MO draws exactly. Delegates to the inventory engine so the
  * live completion path, the boot replay and every edit replay share ONE
  * implementation. (Kept exported here so callers that think in manufacturing

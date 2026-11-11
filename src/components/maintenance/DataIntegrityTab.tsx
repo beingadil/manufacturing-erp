@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, } from '@/components/ui/card';
 import { InventoryReportService } from '@/lib/reporting/InventoryReportService';
+import { ManufacturingReportService } from '@/lib/reporting/ManufacturingReportService';
 import { useERPStore } from '@/store/useERPStore';
 
 interface IntegrityIssue {
@@ -75,7 +76,7 @@ export function DataIntegrityTab() {
     }
 
     // 3. Negative Stock Check
-    const productStock = InventoryReportService.getFinishedGoodsStockData('');
+    const productStock = ManufacturingReportService.getFinishedGoodsStockData('');
     productStock.forEach(p => {
       if (p.currentStock < 0) {
         foundIssues.push({

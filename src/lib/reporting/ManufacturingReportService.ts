@@ -1,4 +1,5 @@
 import { useERPStore } from '../../store/useERPStore';
+import { formatNumber } from '../utils';
 import {
   isManufacturingEnabled,
   lotAverageCost,
@@ -29,7 +30,7 @@ export class ManufacturingReportService {
   /** Finished-goods stock per product, valued at the lots' produced cost. */
   static getFinishedGoodsStockData(search: string) {
     const state = useERPStore.getState();
-    const { products, finishedGoodsLots, manufacturingOrders } = state;
+    const { products, categories, finishedGoodsLots, manufacturingOrders } = state;
     const lots = finishedGoodsLots || [];
     return products
       .map(product => {
@@ -39,6 +40,7 @@ export class ManufacturingReportService {
         return {
           ...product,
           lotCount: productLots.length,
+          category: (categories || []).find(c => c.id === product.categoryId)?.name || 'Product',
           currentStock: pcs,
           avgCost,
           stockValue: roundQty(pcs * avgCost),
@@ -178,5 +180,55 @@ export class ManufacturingReportService {
       }))
       .filter(row => !search || row.productName.toLowerCase().includes(search.toLowerCase()))
       .sort((a, b) => b.revenue - a.revenue);
+  }
+
+  /** End-to-end trace, one row per completed MO: raw batches → order → FG lot → sales. */
+  static getTraceabilityData(dateRange: { start: string; end: string } | null | undefined, search: string) {
+    const state = useERPStore.getState();
+    const { manufacturingOrders, products, materials, finishedGoodsLots, sales } = state;
+
+    return (manufacturingOrders || [])
+      .filter(o => o.status === 'Completed')
+      .map(o => {
+        const product = (products || []).find(p => p.id === o.productId) as any;
+        const lot = (finishedGoodsLots || []).find(l => l.manufacturingOrderId === o.id);
+        const orderSales = lot
+          ? (sales || []).filter(s => (s.lotAllocations || []).some(a => a.lotId === lot.id))
+          : [];
+        const consumptions = (o.consumptions || []).map(c => {
+          const m = (materials || []).find(b => b.id === c.materialId);
+          return `${m?.name || 'Unknown'} ×${formatNumber(c.pcs || 0)}`;
+        });
+
+        return {
+          orderNo: o.orderNo,
+          productId: o.productId,
+          productName: product?.name ?? 'Unknown',
+          productSku: product?.sku ?? product?.code ?? '',
+          date: o.date || '',
+          plannedQty: o.plannedQty,
+          finishedQty: o.finishedQty || 0,
+          shortfall: Math.max(0, o.plannedQty - (o.finishedQty || 0)),
+          materialCost: o.materialCost || 0,
+          productionCost: o.productionCost || 0,
+          totalCost: o.totalCost || 0,
+          costPerPiece: o.costPerPiece || 0,
+          lotNo: lot?.lotNo ?? '—',
+          lotRemaining: lot?.pcsRemaining ?? 0,
+          lotProduced: lot?.pcsProduced ?? 0,
+          componentCount: consumptions.length,
+          componentNames: [...new Set(consumptions)].join(' · ') || '—',
+          batchDraws: (o.consumptions || []).length,
+          saleCount: orderSales.length,
+          saleQty: orderSales.reduce((s, sa) => s + (sa.pcsSold || 0), 0),
+          saleAmount: orderSales.reduce((s, sa) => s + (sa.totalAmount || 0), 0),
+          saleInvoices: orderSales.map(s => s.invoiceNo).join(' · ') || '—',
+        };
+      })
+      .filter(row => inRange(row.date, dateRange))
+      .filter(row => !search
+        || [row.orderNo, row.productName, row.productSku, row.lotNo, row.componentNames, row.saleInvoices]
+            .some(f => String(f).toLowerCase().includes(search.toLowerCase())))
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   }
 }

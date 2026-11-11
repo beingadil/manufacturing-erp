@@ -682,6 +682,8 @@ export const createCRUDActions = (
           lotAllocations: consumed.allocations,
           cogsAmount: consumed.cogs,
           stockModelAtSale: 'manufactured',
+          grossProfit: newTotalAmount - consumed.cogs,
+          marginPercent: newTotalAmount > 0 ? ((newTotalAmount - consumed.cogs) / newTotalAmount) * 100 : 0,
         };
         const updatedSales = state.sales.map(s => (s.id === id ? updatedSale : s));
 

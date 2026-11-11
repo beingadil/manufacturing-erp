@@ -4,7 +4,7 @@ import { getReportDefinition, getReportsByCategory, reportDefinitions } from './
 describe('reportDefinitions', () => {
   it('resolves every registered report by id', () => {
     const definitions = Object.values(reportDefinitions);
-    expect(definitions.length).toBe(56);
+    expect(definitions.length).toBe(57);
     expect(getReportDefinition('purchase-register')?.title).toBe('Purchase Register');
     expect(getReportDefinition('balance-sheet')?.category).toBe('financial');
     expect(getReportDefinition('manufacturing-profitability')?.category).toBe('manufacturing');
@@ -16,7 +16,7 @@ describe('reportDefinitions', () => {
     expect(processing.every((report) => report.category === 'processing')).toBe(true);
 
     const manufacturing = getReportsByCategory('manufacturing');
-    expect(manufacturing).toHaveLength(4);
+    expect(manufacturing).toHaveLength(5);
     expect(manufacturing.every((report) => report.category === 'manufacturing')).toBe(true);
   });
 

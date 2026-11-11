@@ -1,5 +1,6 @@
-import { ChevronRight, FileText, Layers, Package, PackageCheck, Pencil, Plus, Trash2 } from "lucide-react";
+import { FileText, Layers, Package, PackageCheck, Pencil, Plus, Trash2 } from "lucide-react";
 import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { DeleteConfirmationModal } from "../components/DeleteConfirmationModal";
 import { DatePicker } from '../components/ui/date-picker';
@@ -18,6 +19,8 @@ import type { ProductComponent, ProductUsageType } from "../types/erp";
 
 export function FinishedGoods() {
   const { products, materials, categories, sales, batches, finishedGoodsLots, manufacturingOrders, stateSchemaVersion, addProduct, updateModuleItem, removeModuleItem, produceForProduct } = useERPStore();
+  const navigate = useNavigate();
+
   const v4 = isManufacturingEnabled({ stateSchemaVersion });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAddMaterialOpen, setIsAddMaterialOpen] = useState(false);
@@ -39,7 +42,6 @@ export function FinishedGoods() {
   });
   const [components, setComponents] = useState<ProductComponent[]>([]);
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; id: string; no: string }>({ isOpen: false, id: '', no: '' });
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [producing, setProducing] = useState<any | null>(null);
   const [produceForm, setProduceForm] = useState({ qty: '', productionCost: '0', date: new Date().toISOString().slice(0, 10), remarks: '' });
 
@@ -197,7 +199,6 @@ export function FinishedGoods() {
       });
       toast.success(`${producing.name}: ${formatNumber(result.finishedQty)} PCS produced — ${result.lotNo || 'lot'} posted.`);
       setProducing(null);
-      setExpandedId(producing.id);
     } catch (error: any) {
       toast.error(error?.message ?? 'Could not produce.');
     }
@@ -302,151 +303,104 @@ export function FinishedGoods() {
         )}
       </section>
 
-      {/* ── Products: one row each, expand for parts / lots / history, one-tap produce ── */}
-      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            <tr>
-              <th className="w-10 px-2 py-3" />
-              <th className="px-4 py-3 text-left">Product</th>
-              <th className="px-4 py-3 text-left">Category</th>
-              <th className="px-4 py-3 text-right">FG on hand</th>
-              {v4 && <th className="px-4 py-3 text-right">Ready to make</th>}
-              {v4 && <th className="px-4 py-3 text-right">Avg cost</th>}
-              <th className="px-4 py-3 text-right">Price</th>
-              <th className="px-4 py-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/50">
-            {enrichedProducts.length === 0 && (
-              <tr><td colSpan={v4 ? 8 : 6} className="px-6 py-10 text-center text-sm text-muted-foreground">No products yet — add one to start the factory floor.</td></tr>
-            )}
-            {enrichedProducts.map(item => {
-              const expanded = expandedId === item.id;
-              const canMake = v4 && (item.buildable || 0) > 0;
-              const zeroLines = v4 ? (item.buildableLines || []).filter((l: any) => l.lineBuildable === 0) : [];
-              return (
-                <React.Fragment key={item.id}>
-                  <tr className="transition-colors hover:bg-muted/20">
-                    <td className="px-2 py-3">
+      {/* ── Product register — rows open the product detail page; Produce stays one tap ── */}
+      <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+        <header className="hidden grid-cols-[minmax(0,1.6fr)_minmax(0,1.1fr)_minmax(0,0.7fr)_minmax(0,0.7fr)_minmax(0,auto)] gap-2 border-b border-border/60 bg-muted/30 px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground lg:grid">
+          <div>Product</div>
+          <div>Category</div>
+          <div className="text-right">On hand</div>
+          <div className="text-right">Ready to make</div>
+          <div className="text-right">Price</div>
+          <div />
+        </header>
+        {enrichedProducts.length === 0 && (
+          <div className="px-6 py-12 text-center text-sm text-muted-foreground">No products yet — add one to start the factory floor.</div>
+        )}
+        <ul className="divide-y divide-border/50">
+          {enrichedProducts.map(item => {
+            const canMake = v4 && (item.buildable || 0) > 0;
+            const zeroLines = v4 ? (item.buildableLines || []).filter((l: any) => l.lineBuildable === 0) : [];
+            return (
+              <li
+                key={item.id}
+                tabIndex={0}
+                role="link"
+                aria-label={`Open ${item.name}`}
+                onClick={(e) => {
+                  const t = e.target as HTMLElement;
+                  if (t.closest('button, a, input, select, textarea, [role="combobox"]')) return;
+                  navigate(`/products/${item.id}`);
+                }}
+                onKeyDown={(e) => {
+                  if (e.target !== e.currentTarget) return;
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/products/${item.id}`); }
+                }}
+                className="cursor-pointer border-l-2 border-l-transparent px-4 py-4 transition-colors hover:border-l-primary/60 hover:bg-muted/40 sm:px-5"
+              >
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1.1fr)_minmax(0,0.7fr)_minmax(0,0.7fr)_minmax(0,auto)] lg:items-center lg:gap-2">
+                  {/* Identity */}
+                  <div className="col-span-2 min-w-0 lg:col-span-1">
+                    <div className="font-medium leading-snug text-foreground">{item.name}</div>
+                    <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">{item.sku || '—'} · BOM v{item.bomVersion} · {item.bomLines} line{item.bomLines === 1 ? '' : 's'}</div>
+                  </div>
+                  {/* Category */}
+                  <div className="min-w-0 text-sm text-muted-foreground lg:self-center">{item.categoryName}</div>
+                  {/* On hand */}
+                  <div className="min-w-0 text-right lg:self-center">
+                    <div className={item.availableStock > 0 ? 'font-bold tabular-nums text-success' : 'tabular-nums text-muted-foreground'}>
+                      {formatNumber(item.availableStock)} <span className="text-[10px] font-semibold uppercase">PCS</span>
+                    </div>
+                    {v4 && item.availableStock > 0 && (
+                      <div className="text-[10px] tabular-nums text-muted-foreground">{formatCurrency(item.stockValue)}</div>
+                    )}
+                  </div>
+                  {/* Ready to make */}
+                  {v4 && (
+                    <div className="min-w-0 text-right lg:self-center">
+                      {canMake ? (
+                        <span className="text-lg font-bold tabular-nums text-emerald-500">{formatNumber(item.buildable)}</span>
+                      ) : (
+                        <div className="flex flex-col items-end">
+                          <span className="text-sm font-semibold tabular-nums text-muted-foreground">0</span>
+                          {zeroLines.length > 0 && (
+                            <span className="text-[9px] leading-tight text-muted-foreground/70">
+                              need {zeroLines.map((l: any) => `${l.materialName} (${l.available}/${l.quantityPerUnit})`).join(' · ')}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {/* Price */}
+                  <div className="min-w-0 text-right lg:self-center">
+                    <div className="tabular-nums font-medium text-foreground">{formatCurrency(item.sellingPrice)}</div>
+                    {v4 && item.averageCost > 0 && (
+                      <div className="text-[10px] tabular-nums text-muted-foreground">{formatCurrency(item.averageCost)} / pc</div>
+                    )}
+                  </div>
+                  {/* Actions */}
+                  <div className="col-span-2 flex items-center justify-end gap-1.5 lg:col-span-1">
+                    {v4 && (
                       <button
                         type="button"
-                        onClick={() => setExpandedId(expanded ? null : item.id)}
-                        aria-expanded={expanded}
-                        aria-label={expanded ? `Collapse details for ${item.name}` : `Expand details for ${item.name}`}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        onClick={() => openProduce(item)}
+                        disabled={!canMake}
+                        title={canMake ? `Produce ${formatNumber(item.buildable)} PCS of ${item.name}` : 'Parts are short — nothing can be made yet'}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-30"
                       >
-                        <ChevronRight className={cn('h-4 w-4 transition-transform duration-200', expanded && 'rotate-90')} />
+                        <PackageCheck className="h-3.5 w-3.5" />
+                        Produce
                       </button>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-foreground">{item.name}</div>
-                      <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">{item.sku || '—'} · BOM v{item.bomVersion} · {item.bomLines} line{item.bomLines === 1 ? '' : 's'}</div>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">{item.categoryName}</td>
-                    <td className="px-4 py-3 text-right">
-                      <span className={item.availableStock > 0 ? 'font-bold tabular-nums text-success' : 'tabular-nums text-muted-foreground'}>
-                        {formatNumber(item.availableStock)} PCS
-                      </span>
-                      {v4 && item.availableStock > 0 && (
-                        <div className="text-[10px] tabular-nums text-muted-foreground">{formatCurrency(item.stockValue)}</div>
-                      )}
-                    </td>
-                    {v4 && (
-                      <td className="px-4 py-3 text-right">
-                        {canMake ? (
-                          <span className="text-base font-bold tabular-nums text-emerald-500">{formatNumber(item.buildable)}</span>
-                        ) : (
-                          <div className="flex flex-col items-end">
-                            <span className="text-sm font-semibold tabular-nums text-muted-foreground">0</span>
-                            {zeroLines.length > 0 && (
-                              <span className="text-[10px] leading-tight text-muted-foreground/70">
-                                need {zeroLines.map((l: any) => `${l.materialName} (${l.available}/${l.quantityPerUnit})`).join(' · ')}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </td>
                     )}
-                    {v4 && (
-                      <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{item.averageCost > 0 ? formatCurrency(item.averageCost) : '—'}</td>
-                    )}
-                    <td className="px-4 py-3 text-right tabular-nums font-medium text-foreground">{formatCurrency(item.sellingPrice)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {v4 && (
-                          <button
-                            type="button"
-                            onClick={() => openProduce(item)}
-                            disabled={!canMake}
-                            title={canMake ? `Produce ${formatNumber(item.buildable)} PCS of ${item.name}` : 'Parts are short — nothing can be made yet'}
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-30"
-                          >
-                            <PackageCheck className="h-3.5 w-3.5" />
-                            Produce
-                          </button>
-                        )}
-                        <button onClick={() => openEditModal(item)} aria-label={`Edit ${item.name}`} className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-primary"><Pencil className="h-4 w-4" /></button>
-                        <button onClick={() => setDeleteModal({ isOpen: true, id: item.id, no: item.name })} aria-label={`Delete ${item.name}`} className="rounded-md p-1.5 text-destructive transition-colors hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></button>
-                      </div>
-                    </td>
-                  </tr>
-                  {expanded && (
-                    <tr className="bg-muted/10">
-                      <td colSpan={v4 ? 8 : 6} className="px-5 py-4">
-                        <div className="grid gap-4 md:grid-cols-3">
-                          {/* Parts */}
-                          <div className="rounded-xl border border-border/60 bg-card p-4">
-                            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">What it takes</div>
-                            <ul className="mt-2 space-y-1.5">
-                              {(item.buildableLines || []).map((l: any) => {
-                                const short = l.lineBuildable === 0;
-                                return (
-                                  <li key={l.materialId} className="flex items-center justify-between gap-2 text-xs">
-                                    <span className="min-w-0 truncate">{l.materialName} <span className="text-muted-foreground">× {l.quantityPerUnit}/pc</span></span>
-                                    <span className={cn('shrink-0 tabular-nums', short ? 'text-destructive font-semibold' : 'text-foreground')}>{formatNumber(l.available)} on hand</span>
-                                  </li>
-                                );
-                              })}
-                              {(item.buildableLines || []).length === 0 && <li className="text-xs text-muted-foreground">No components configured.</li>}
-                            </ul>
-                          </div>
-                          {/* Lots */}
-                          <div className="rounded-xl border border-border/60 bg-card p-4">
-                            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Finished lots</div>
-                            <ul className="mt-2 space-y-1.5">
-                              {(finishedGoodsLots || []).filter((l: any) => l.productId === item.id).slice(0, 6).map((l: any) => (
-                                <li key={l.id} className="flex items-center justify-between gap-2 text-xs">
-                                  <span className="font-mono text-muted-foreground">{l.lotNo}</span>
-                                  <span className="tabular-nums">{formatNumber(l.pcsRemaining)} PCS · {formatCurrency(l.costPerPiece)}/pc</span>
-                                </li>
-                              ))}
-                              {(finishedGoodsLots || []).filter((l: any) => l.productId === item.id).length === 0 && <li className="text-xs text-muted-foreground">Not produced yet.</li>}
-                            </ul>
-                          </div>
-                          {/* History */}
-                          <div className="rounded-xl border border-border/60 bg-card p-4">
-                            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Produced history</div>
-                            <ul className="mt-2 space-y-1.5">
-                              {(manufacturingOrders || []).filter((o: any) => o.productId === item.id && o.status === 'Completed').slice(0, 6).map((o: any) => (
-                                <li key={o.id} className="flex items-center justify-between gap-2 text-xs">
-                                  <span className="font-mono text-muted-foreground">{o.orderNo}</span>
-                                  <span className="tabular-nums">{formatNumber(o.finishedQty || 0)} PCS · {new Date(o.date).toLocaleDateString()}</span>
-                                </li>
-                              ))}
-                              {(manufacturingOrders || []).filter((o: any) => o.productId === item.id && o.status === 'Completed').length === 0 && <li className="text-xs text-muted-foreground">No production yet.</li>}
-                            </ul>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                    <button onClick={() => openEditModal(item)} aria-label={`Edit ${item.name}`} className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-primary"><Pencil className="h-4 w-4" /></button>
+                    <button onClick={() => setDeleteModal({ isOpen: true, id: item.id, no: item.name })} aria-label={`Delete ${item.name}`} className="rounded-md p-1.5 text-destructive transition-colors hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></button>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
 
       <DeleteConfirmationModal
         isOpen={deleteModal.isOpen}

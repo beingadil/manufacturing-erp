@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import {
-  AlertTriangle, ArrowLeftRight, Banknote, BarChart3, Boxes, CalendarClock, ChartPie, Coins,
+  AlertTriangle, ArrowLeftRight, Banknote, BarChart3, Boxes, CalendarClock, ChartPie, ClipboardList, Coins,
   CreditCard, FileSpreadsheet, FileText, Gauge, Landmark, Layers, ListTree, Package2,
   PackageCheck, PackageSearch, Percent, PiggyBank, Scale, ShoppingCart, Store, TrendingDown,
   TrendingUp, Truck, UserRound, Users, Wallet, Warehouse,
@@ -51,6 +51,7 @@ export const reportIcons: Record<string, LucideIcon> = {
   'manufacturing-consumption': Layers,
   'manufacturing-cost-breakdown': Coins,
   'manufacturing-profitability': PiggyBank,
+  'manufacturing-traceability': ClipboardList,
   // inventory
   'current-stock': Boxes,
   'stock-movement': ArrowLeftRight,
@@ -112,6 +113,7 @@ export const reportDescriptions: Record<string, string> = {
   'manufacturing-consumption': 'Raw material batches consumed by completed manufacturing orders.',
   'manufacturing-cost-breakdown': 'Material and production cost build-up per completed order.',
   'manufacturing-profitability': 'Revenue vs FIFO lot cost and margin per manufactured product.',
+  'manufacturing-traceability': 'End-to-end trace from raw materials to FG lot to sale invoice.',
   'current-stock': 'Current quantities and values across your inventory.',
   'stock-movement': 'Stock movements by batch with direction (IN/OUT/ADJUST).',
   'material-stock': 'Raw material stock levels vs minimum levels.',
@@ -163,4 +165,5 @@ export const reportTags: Record<string, string[]> = {
   'manufacturing-consumption': ['bom', 'raw material', 'issued', 'consumed'],
   'manufacturing-cost-breakdown': ['cost sheet', 'conversion', 'production cost'],
   'manufacturing-profitability': ['margin', 'gross profit', 'cogs', 'lot cost'],
+  'manufacturing-traceability': ['traceability', 'provenance', 'order to sale', 'chain', 'audit'],
 };

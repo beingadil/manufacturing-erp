@@ -1,13 +1,13 @@
 import { Database, Package } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { InventoryReportService } from "../../../lib/reporting/InventoryReportService";
+import { ManufacturingReportService } from "../../../lib/reporting/ManufacturingReportService";
 import { formatNumber } from '../../../lib/utils';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
 
 export function FinishedGoodsStock() {
   const [search, setSearch] = useState('');
 
-  const data = useMemo(() => InventoryReportService.getFinishedGoodsStockData(search), [search]);
+  const data = useMemo(() => ManufacturingReportService.getFinishedGoodsStockData(search), [search]);
 
   const totalStock = data.reduce((sum, item) => sum + item.currentStock, 0);
 

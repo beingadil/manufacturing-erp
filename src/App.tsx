@@ -16,6 +16,8 @@ import Categories from './pages/Categories';
 import { Customers } from './pages/Customers';
 import { Dashboard } from './pages/Dashboard';
 import { FinishedGoods } from './pages/FinishedGoods';
+import ProductDetail from './pages/ProductDetail';
+import ProductionOrderDetail from './pages/products/ProductionOrderDetail';
 import { BankPaymentVoucher } from './pages/finance/BankPaymentVoucher';
 import { BankReceiptVoucher } from './pages/finance/BankReceiptVoucher';
 import { CashBookPage } from './pages/finance/CashBookPage';
@@ -155,6 +157,8 @@ export default function App() {
           <Route path="materials/:id" element={<RouteGuard requireModule="Master Data" requireAction="View"><MaterialDetail /></RouteGuard>} />
           <Route path="materials/:id/purchases/:batchId" element={<RouteGuard requireModule="Master Data" requireAction="View"><PurchaseDetail /></RouteGuard>} />
           <Route path="products" element={<RouteGuard requireModule="Master Data" requireAction="View"><FinishedGoods /></RouteGuard>} />
+<Route path="products/:id" element={<RouteGuard requireModule="Master Data" requireAction="View"><ProductDetail /></RouteGuard>} />
+<Route path="products/:id/mo/:moId" element={<RouteGuard requireModule="Master Data" requireAction="View"><ProductionOrderDetail /></RouteGuard>} />
           
           <Route path="ledgers" element={<RouteGuard requireModule="Ledgers" requireAction="View"><Ledgers /></RouteGuard>} />
           <Route path="processors" element={<RouteGuard requireModule="Master Data" requireAction="View"><Processors /></RouteGuard>} />
