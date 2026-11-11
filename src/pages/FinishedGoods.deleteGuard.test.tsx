@@ -15,23 +15,6 @@ vi.mock('sonner', () => ({
 import { useERPStore } from '../store/useERPStore';
 import { FinishedGoods } from './FinishedGoods';
 
-// This vitest 4 + jsdom 29 setup does not expose window.localStorage (window
-// exists, sessionStorage exists, localStorage is undefined), and DataTable
-// mirrors its search/sort/page state into it on mount — same shim the
-// SQLiteStorageAdapter tests use.
-class MemoryStorage {
-  private store = new Map<string, string>();
-  get length() { return this.store.size; }
-  clear() { this.store.clear(); }
-  getItem(key: string) { return this.store.has(String(key)) ? this.store.get(String(key))! : null; }
-  key(index: number) { return [...this.store.keys()][index] ?? null; }
-  removeItem(key: string) { this.store.delete(String(key)); }
-  setItem(key: string, value: string) { this.store.set(String(key), String(value)); }
-}
-
-(globalThis as any).localStorage = new MemoryStorage();
-(window as any).localStorage = (globalThis as any).localStorage;
-
 // jsdom does not implement scrollIntoView, which SearchableSelect calls to keep
 // the highlighted option in view.
 beforeAll(() => {
