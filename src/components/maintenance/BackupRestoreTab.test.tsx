@@ -42,6 +42,10 @@ beforeEach(() => {
     isElectron: true,
     exportBackup: vi.fn(),
     importBackup: vi.fn(),
+    googleStatus: vi.fn().mockResolvedValue({ configured: false, signedIn: false }),
+    googleSignIn: vi.fn(),
+    googleSignOut: vi.fn(),
+    googleUploadBackup: vi.fn(),
   });
 });
 
@@ -51,22 +55,71 @@ afterEach(() => {
 });
 
 describe("BackupRestoreTab", () => {
-  it("offers exactly two actions: backup to a file and restore from a file", () => {
+  it("offers the backup and restore actions", async () => {
     render(<BackupRestoreTab />);
 
+    await waitFor(() =>
+      expect((window as any).electronDB.googleStatus).toHaveBeenCalled()
+    );
     const buttons = screen.getAllByRole("button");
-    expect(buttons).toHaveLength(2);
     expect(buttons[0].textContent).toContain("Backup to file");
     expect(buttons[1].textContent).toContain("Restore from file");
   });
 
-  it("no longer exposes the removed snapshot / Google Drive surfaces", () => {
+  it("shows the Google Drive card with setup guidance when the credentials are not in place", async () => {
     render(<BackupRestoreTab />);
 
-    const text = document.body.textContent ?? "";
-    for (const removed of ["Google Drive", "Drive", "Connect", "Snapshot", "Delete", "Upload", "Auto backup"]) {
-      expect(text).not.toContain(removed);
-    }
+    expect(await screen.findByText("Google Drive Backup")).toBeTruthy();
+    expect(screen.getByText(/not set up/i)).toBeTruthy();
+    expect(screen.getByText(/free, one-time setup in google cloud/i)).toBeTruthy();
+    // No button should be offered until the credentials exist — a dead button
+    // is worse than no button.
+    expect(screen.queryByRole("button", { name: /sign in with google/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /backup to drive/i })).toBeNull();
+  });
+
+  it("offers sign-in when configured but not signed in, and uploads after sign-in", async () => {
+    const db = (window as any).electronDB;
+    db.googleStatus
+      .mockResolvedValueOnce({ configured: true, signedIn: false }) // on mount
+      .mockResolvedValueOnce({ configured: true, signedIn: true }); // after sign-in
+    db.googleSignIn.mockResolvedValue({ success: true });
+    db.googleUploadBackup.mockResolvedValue({
+      success: true,
+      name: "manufacturing-erp-backup-2026-11-12.merpbak",
+      webViewLink: "https://drive.google.com/file/d/1abc/view",
+    });
+
+    render(<BackupRestoreTab />);
+
+    const signInButton = await screen.findByRole("button", { name: /sign in with google/i });
+    fireEvent.click(signInButton);
+    await waitFor(() => expect(db.googleSignIn).toHaveBeenCalledTimes(1));
+    expect(toastSuccess).toHaveBeenCalledWith("Signed in to Google");
+
+    const uploadButton = await screen.findByRole("button", { name: /backup to drive/i });
+    fireEvent.click(uploadButton);
+    await waitFor(() => expect(db.googleUploadBackup).toHaveBeenCalledTimes(1));
+    expect(toastSuccess).toHaveBeenCalledWith(
+      "Backup uploaded to Google Drive",
+      expect.objectContaining({ description: "manufacturing-erp-backup-2026-11-12.merpbak" })
+    );
+  });
+
+  it("surfaces a failed upload instead of pretending it worked", async () => {
+    const db = (window as any).electronDB;
+    db.googleStatus.mockResolvedValue({ configured: true, signedIn: true });
+    db.googleUploadBackup.mockResolvedValue({ success: false, error: "Upload failed (HTTP 403)." });
+
+    render(<BackupRestoreTab />);
+
+    const uploadButton = await screen.findByRole("button", { name: /backup to drive/i });
+    fireEvent.click(uploadButton);
+
+    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    expect(toastError.mock.calls[0][0]).toBe("Upload failed");
+    expect(toastError.mock.calls[0][1].description).toContain("403");
+    expect(toastSuccess).not.toHaveBeenCalledWith("Backup uploaded to Google Drive");
   });
 
   it("backup writes through to the export bridge and reports the manifest", async () => {

@@ -25,6 +25,12 @@ contextBridge.exposeInMainWorld('electronDB', {
   exportBackup: () => ipcRenderer.invoke('dialog:exportBackup'),
   importBackup: () => ipcRenderer.invoke('dialog:importBackup'),
 
+  // Google Drive backup upload (Settings → Maintenance → Backup to Drive)
+  googleStatus: () => ipcRenderer.invoke('google:status'),
+  googleSignIn: () => ipcRenderer.invoke('google:signIn'),
+  googleSignOut: () => ipcRenderer.invoke('google:signOut'),
+  googleUploadBackup: () => ipcRenderer.invoke('google:uploadBackup'),
+
   // Update migration notice — legacy per-machine install detection
   checkLegacyInstall: () => ipcRenderer.invoke('migration:checkLegacyInstall'),
 });

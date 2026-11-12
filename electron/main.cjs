@@ -4,6 +4,7 @@ const { autoUpdater } = require('electron-updater');
 const db = require('./database.cjs');
 const ai = require('./ai.cjs');
 const { detectLegacyInstall } = require('./legacy-install-detector.cjs');
+const googleDrive = require('./googleDrive.cjs');
 
 // Test hook (e2e/CI only): redirect userData to a scratch directory so the
 // app NEVER touches the real database during automated verification. Never
@@ -373,6 +374,42 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
       }
       const importResult = db.importUnifiedBackupFromPath(result.filePaths[0]);
       return importResult;
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // ─── Google Drive backup upload ──────────────────────────────────────────
+  // Renders the "Backup to Drive" card in Settings → Maintenance. Everything
+  // that talks to Google lives in ./googleDrive.cjs; these are thin wrappers.
+
+  ipcMain.handle('google:status', async () => {
+    try {
+      return googleDrive.getStatus();
+    } catch (error) {
+      return { configured: false, signedIn: false, folderName: 'Manufacturing ERP Backups', message: error.message };
+    }
+  });
+
+  ipcMain.handle('google:signIn', async () => {
+    try {
+      return await googleDrive.signIn();
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('google:signOut', async () => {
+    try {
+      return googleDrive.signOut();
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('google:uploadBackup', async () => {
+    try {
+      return await googleDrive.uploadTodayBackup();
     } catch (error) {
       return { success: false, error: error.message };
     }

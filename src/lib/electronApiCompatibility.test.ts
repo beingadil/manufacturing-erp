@@ -51,7 +51,17 @@ describe('electron main process API compatibility', () => {
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/(^|[^:])\/\/.*$/gm, '$1');
 
-  const code = stripComments(mainSource);
+  // Every Electron module the main process loads is included in the scan, so a
+  // removed API in ANY of them fails this suite instead of shipping.
+  const driveSource = (() => {
+    try {
+      return readFileSync(resolve(root, 'electron/googleDrive.cjs'), 'utf8');
+    } catch {
+      return ''; // not built yet on this checkout — main/preload still check
+    }
+  })();
+
+  const code = stripComments([mainSource, driveSource].join('\n'));
   const preloadCode = stripComments(preloadSource);
 
   /**

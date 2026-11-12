@@ -98,3 +98,5 @@ history/*.json
 /tasks
 
 typecheck-reports.txt
+
+nul

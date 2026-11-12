@@ -165,6 +165,7 @@ the binary against what the package should ship:
 | Processing (send/receive/bill) | `src/pages/processing/` |
 | Store + migrations | `src/store/useERPStore.ts`, `src/store/erpMigration.ts` |
 | Electron main process | `electron/main.cjs` |
+| Google Drive backup upload | `electron/googleDrive.cjs` |
 | Release workflow | `.github/workflows/release.yml` |
 | Human release guide | `docs/RELEASING.md` |
 
@@ -192,6 +193,13 @@ the binary against what the package should ship:
   that guard passing; it is what stops a "installs but never opens" release.
 - Data is the user's. A migration or a seed must never overwrite an
   existing chart of accounts, parties or vouchers.
+- **Google Drive backups**: the user chose to host their own Desktop OAuth
+  credentials in the repo. They live in `electron/googleDrive.cjs`
+  (`PASTE_CLIENT_ID_HERE` / `PASTE_CLIENT_SECRET_HERE`). Scope is
+  `drive.file` only — the app can create/manage just the backups it uploads,
+  never the user's other Drive files. Tokens are stored in userData encrypted
+  via `safeStorage`; Drive access is never revoked without the user clicking
+  "Sign out". Nothing is ever deleted from Drive.
 - Commit messages are conventional commits (`feat`, `fix`, `test`, `docs`,
   `ci`, `chore`, `refactor`, `perf`) — the GitHub release notes are
   generated from them.
