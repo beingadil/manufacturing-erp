@@ -305,7 +305,7 @@ export function FinishedGoods() {
 
       {/* ── Product register — rows open the product detail page; Produce stays one tap ── */}
       <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-        <header className="hidden grid-cols-[minmax(0,1.6fr)_minmax(0,1.1fr)_minmax(0,0.7fr)_minmax(0,0.7fr)_minmax(0,auto)] gap-2 border-b border-border/60 bg-muted/30 px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground lg:grid">
+        <header className="hidden grid-cols-[minmax(0,1.5fr)_minmax(0,1.05fr)_minmax(0,0.65fr)_minmax(0,0.65fr)_minmax(0,0.75fr)_11rem] gap-4 border-b border-border/60 bg-muted/30 px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground lg:grid">
           <div>Product</div>
           <div>Category</div>
           <div className="text-right">On hand</div>
@@ -337,7 +337,7 @@ export function FinishedGoods() {
                 }}
                 className="cursor-pointer border-l-2 border-l-transparent px-4 py-4 transition-colors hover:border-l-primary/60 hover:bg-muted/40 sm:px-5"
               >
-                <div className="grid grid-cols-2 gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1.1fr)_minmax(0,0.7fr)_minmax(0,0.7fr)_minmax(0,auto)] lg:items-center lg:gap-2">
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1.05fr)_minmax(0,0.65fr)_minmax(0,0.65fr)_minmax(0,0.75fr)_11rem] lg:items-center lg:gap-4">
                   {/* Identity */}
                   <div className="col-span-2 min-w-0 lg:col-span-1">
                     <div className="font-medium leading-snug text-foreground">{item.name}</div>
