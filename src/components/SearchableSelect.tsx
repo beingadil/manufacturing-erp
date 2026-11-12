@@ -210,9 +210,12 @@ export function SearchableSelect({
                   e.stopPropagation();
                   onChange("");
                 }}
-                className="rounded-md p-1 text-muted-foreground/70 hover:bg-muted hover:text-foreground"
+                // 20px, not 24px: the trigger's content must stay one text
+                // line tall (20px) or the whole control grows 4px past the
+                // 46px text inputs it sits beside.
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
               >
-                <X className="h-4 w-4" />
+                <X className="h-3.5 w-3.5" />
               </button>
             )}
             <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />

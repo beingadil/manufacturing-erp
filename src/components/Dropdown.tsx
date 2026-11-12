@@ -189,10 +189,13 @@ export function Dropdown({
         )}
       >
         {leadingIcon && <span className="shrink-0 text-muted-foreground">{leadingIcon}</span>}
-        <div className="flex min-w-0 flex-1 flex-col leading-tight">
+        {/* leading-5 (20px), the same line box a text input uses — a tighter
+            line height shrinks the whole control below the 46px of the inputs
+            it sits beside. */}
+        <div className="flex min-w-0 flex-1 flex-col leading-5">
           <span className="truncate font-medium">{selected?.label ?? placeholder}</span>
           {selected?.secondaryLabel && (
-            <span className="truncate text-[11px] text-muted-foreground">{selected.secondaryLabel}</span>
+            <span className="truncate text-[11px] leading-4 text-muted-foreground">{selected.secondaryLabel}</span>
           )}
         </div>
         <ChevronDown

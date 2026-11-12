@@ -3,7 +3,7 @@
 #
 # The failure this catches: `biome check --write` (or an unsafe autofix) removes
 # an import that tsgo still resolves, producing "Cannot find name" errors on CI
-# *after* the commit landed. Biome's unused-import analysis and tsc's symbol
+# *after* the commit landed. Biome's unused-import analysis and tsgo's symbol
 # resolution can disagree mid-refactor; whenever they do, the type check is the
 # source of truth, so this guard re-runs tsgo AFTER any biome --write pass and
 # demands a clean type check before letting the pipeline continue.

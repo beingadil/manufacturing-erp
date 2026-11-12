@@ -127,7 +127,24 @@ every installed app** — the updater 404s instead of offering the new version.
 | An account code from a count | `generateAccountCode` used to count accounts per type, so deleting one and adding another reissued the freed code (two accounts on 1015, two on 6015) | Codes are **max-based** now (`nextAccountCode`) and a duplicate code is refused. Never go back to counting |
 | `gh release edit` on an electron-builder release | It tries to CREATE the release and fails with "tag_name already exists" | PATCH the release through the REST API, or let the workflow's notes step do it |
 | A stale tool process left running | A `tsgo` from a killed probe kept running for 30+ minutes at 1.8 GB and starved every later run. "The lint is slow" was really "three lints are fighting" | Before measuring anything, check `Get-Process node,tsgo,biome` and kill what is not yours. One tool at a time |
-| `tsgo` on this Windows machine | The same type check CI does in **10 seconds** on Linux has taken **25+ minutes** locally. Ruled out: program size (one trivial file still took 85s), path length (a `subst R:` short drive was just as slow), the registry (the binary is local, `getExePath` never calls out) | It is the **machine**, not the config: Windows was compressing ~1 GB of pages with Brave, two OpenCode instances and Electron all resident. **Reboot, then measure once on a clean machine** before touching anything else. The config fixes in §6 are correct anyway — keep them |
+| `tsgo` on this Windows machine | The same type check CI does in **10 seconds** on Linux took **306 seconds for a SINGLE trivial file**. Ruled out: program size, path length (a `subst R:` short drive was just as slow), the registry, CPU/RAM pressure, the repo itself | **It was a corrupted pnpm store.** `biome.exe` and `tsgo.exe` were the *same* 533 KB stub (identical MD5) instead of 66 MB and 25 MB binaries — `pnpm store status` reports `ERR_PNPM_MODIFIED_DEPENDENCY` | `pnpm store status` → if it says "mutated", `pnpm install --force` (delete the listed `.pnpm/<pkg>` dirs first if the rename hits EPERM). Afterwards: tsgo **2.3s**, biome **4.1s**, whole lint **17s** |
+
+### When a tool is inexplicably slow, check the binary before the code
+
+The symptom was "tsgo and biome are slow". The usual suspects were all
+ruled out by measurement, in this order:
+
+| Hypothesis | Test | Verdict |
+|---|---|---|
+| The program is too big | check ONE trivial file | 306s → **not the program** |
+| The path is too long | `subst R:` and run from there | just as slow → **not the path** |
+| The registry | read `getExePath.js` — it never calls out | **not the network** |
+| The machine is thrashing | check `Memory Compression` / free RAM | idle → **not memory** |
+| The tool itself is broken | `Get-FileHash` on the binary vs the expected size | **it was** — a 533 KB stub where a 66 MB binary belongs |
+
+Two different tools having the **same file size** is the tell. Always compare
+the binary against what the package should ship:
+`node_modules/.pnpm/@biomejs+cli-win32-x64@*/node_modules/@biomejs/cli-win32-x64/biome.exe` should be ~66 MB.
 
 ---
 
@@ -181,13 +198,11 @@ every installed app** — the updater 404s instead of offering the new version.
 
 ---
 
-## 6. Where we left off (2026-11-11)
+## 6. Where we left off (2026-11-12)
 
-Work in progress, committed and pushed as `b41a399`:
-
-**Done — the master-data form polish.**
-The four create forms (Customer, Supplier, Processor, Raw Material) were built
-from three different control languages. Now one system, in
+**Done — the master-data form polish** (commit `b41a399`, verified in the
+preview). The four create forms (Customer, Supplier, Processor, Raw Material)
+were built from three different control languages. Now one system, in
 `src/components/ui/formStyles.ts`:
 
 | Token | Value |
@@ -205,16 +220,25 @@ from three different control languages. Now one system, in
   three — the save action is outside the scroll area on all of them now.
   `MaterialForm` / `SupplierForm` take `formId` + `showFooter` for this.
 
-**Still to do:**
-1. `npm run lint` + `npm test` must pass (the master-data Save-button suite
-   `src/pages/masterDataForms.test.tsx` covers the footer move).
-2. Build and check the forms in the preview at `http://localhost:4181`.
-3. `tsgo` is still pathologically slow locally — **it is the machine, not the
-   config** (see the trap table: one trivial file takes 85s, and a short
-   `subst` drive is no faster). Reboot, then measure once. The config fixes
-   are in `tsconfig.check.json` and are correct regardless: `"types": []`
-   (no auto-inclusion of every `@types` package — `@types/jsdom` alone drags
-   in a large DOM graph), `*.test.tsx` excluded (the old pattern only
-   excluded `*.test.ts`, so 9 test files were being type-checked), and
-   `incremental: true`. `tsconfig.app.json` lost a `typeRoots` glob that
-   walked all of `node_modules`.
+Two height bugs found by MEASURING in the preview, not by reading the code:
+the searchable select's clear button inflated the trigger to 50px (it is now a
+20px box), and the dropdown's `leading-tight` shrank it to 43px (now
+`leading-5`). Every control in a form row is 46px.
+
+**Done — the type check is fast again.** It was never the config: see the trap
+table. `pnpm store status` → `pnpm install --force`. Now: tsgo 2.3s, biome
+4.1s, whole `npm run lint` **17s**, `npm test` **23s** (386 tests). The config
+fixes stay — `"types": []`, `*.test.tsx` excluded (the old pattern only
+excluded `*.test.ts`, so 9 test files were being type-checked), `incremental:
+true`, and `tsconfig.app.json` lost a `typeRoots` glob that walked all of
+`node_modules`.
+
+**The preview** (browser mirror of a real backup, for looking at UI changes):
+- build: `./node_modules/.bin/vite build` → `dist/`
+- data: `node %TEMP%\opencode\blob-from-fixed.cjs` writes
+  `dist/restore-blobs.json` from `Downloads\TODAY 11-11-FIXED.merpbak`
+  (re-run it AFTER every build — a build deletes the file)
+- serve: `node %TEMP%\opencode\preview-server.cjs "<dist>" 4181`
+- sign in: the session is `localStorage['offline-session']` =
+  `{id, email, expires_at}`; the admin id comes out of
+  `erp-access-storage` → `state.users[0].id`
