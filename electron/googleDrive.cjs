@@ -31,12 +31,15 @@ const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 
-// ─── Paste your Google OAuth credentials here ───────────────────────────────
-// Leave both placeholders as-is until you have created them —
-// Settings then tells the user exactly what to do instead of failing silently.
-const CLIENT_ID = 'PASTE_CLIENT_ID_HERE';
-const CLIENT_SECRET = 'PASTE_CLIENT_SECRET_HERE';
-const READY = CLIENT_ID !== 'PASTE_CLIENT_ID_HERE' && CLIENT_SECRET !== 'PASTE_CLIENT_SECRET_HERE' && CLIENT_ID.length > 20;
+// ─── Google OAuth credentials ────────────────────────────────────────────────
+// NOT stored in git — GitHub push protection refuses to let OAuth client values
+// near the repo, and we do not want them there anyway. They are pasted once per
+// machine via Settings → System Maintenance → Backup & Restore → Google Drive
+// Backup → "Paste your Client ID and Client secret", and are saved in the app's
+// userData directory (google-drive.json) on that machine.
+//
+// Project: "Manufacturing ERP" in Google Cloud. Scope: drive.file (non-sensitive).
+// The signed-in user must be listed as a test user in the OAuth consent screen.
 
 const FOLDER_NAME = 'Manufacturing ERP Backups';
 const SCOPE = 'https://www.googleapis.com/auth/drive.file';
@@ -93,16 +96,49 @@ function readRefreshToken() {
   return refreshToken;
 }
 
-const isConfigured = () => READY;
+// Credentials read from the machine, not hard-coded. Returns null until the user
+// pastes both into Settings → Backup & Restore → Google Drive Backup.
+function readCredentials() {
+  const { clientId, clientSecret } = readConfig();
+  if (typeof clientId === 'string' && typeof clientSecret === 'string') {
+    const id = clientId.trim();
+    const secret = clientSecret.trim();
+    if (id.length > 20 && secret.length > 10) return { clientId: id, clientSecret: secret };
+  }
+  return null;
+}
+
+const isConfigured = () => readCredentials() !== null;
 const isSignedIn = () => !!readRefreshToken();
 
+// Called from the "Save credentials" button in the renderer — validates shape,
+// writes them to userData, nothing else.
+function setCredentials({ clientId, clientSecret }) {
+  const id = String(clientId || '').trim();
+  const secret = String(clientSecret || '').trim();
+  if (!id || !secret) return { success: false, error: 'Both the Client ID and the Client secret are required.' };
+  if (!id.includes('.apps.googleusercontent.com')) {
+    return { success: false, error: 'The Client ID should end with .apps.googleusercontent.com — check you copied the whole thing.' };
+  }
+  if (!secret.startsWith('GOCSPX-')) {
+    return { success: false, error: 'The Client secret starts with GOCSPX- — check you copied the whole thing.' };
+  }
+  writeConfig({ clientId: id, clientSecret: secret });
+  return { success: true };
+}
+
+function clearCredentials() {
+  writeConfig({ clientId: undefined, clientSecret: undefined, refreshToken: undefined, encrypted: undefined, folderId: undefined, signedInAt: undefined });
+  return { success: true };
+}
+
 function getStatus() {
-  if (!READY) {
+  if (!isConfigured()) {
     return {
       configured: false,
       signedIn: false,
       folderName: FOLDER_NAME,
-      message: 'Google Drive is not set up yet. Create the OAuth credentials and paste them into electron/googleDrive.cjs.',
+      message: 'Paste your Google OAuth credentials in Settings → System Maintenance → Backup & Restore.',
     };
   }
   return {
@@ -151,9 +187,11 @@ async function driveFetch(pathname, token, init = {}) {
 // ─── Sign-in (in-app Google window + loopback redirect) ─────────────────────
 
 async function signIn() {
-  if (!READY) {
-    return { success: false, error: 'not-configured', message: 'Google Drive is not configured — paste your OAuth credentials into electron/googleDrive.cjs.' };
+  const credentials = readCredentials();
+  if (!credentials) {
+    return { success: false, error: 'not-configured', message: 'Paste your Google OAuth credentials in Settings → System Maintenance → Backup & Restore.' };
   }
+  const { clientId, clientSecret } = credentials;
 
   // A random free loopback port for the OAuth redirect URI.
   const port = await new Promise((resolve, reject) => {
@@ -167,7 +205,7 @@ async function signIn() {
   const redirectUri = `http://127.0.0.1:${port}`;
 
   const authUrl = `${AUTH_ENDPOINT}?${new URLSearchParams({
-    client_id: CLIENT_ID,
+    client_id: clientId,
     redirect_uri: redirectUri,
     response_type: 'code',
     scope: SCOPE,
@@ -226,8 +264,8 @@ async function signIn() {
   if (!authWindow.isDestroyed()) authWindow.close();
 
   const exchanged = await postForm({
-    client_id: CLIENT_ID,
-    client_secret: CLIENT_SECRET,
+    client_id: clientId,
+    client_secret: clientSecret,
     code,
     redirect_uri: redirectUri,
     grant_type: 'authorization_code',
@@ -259,11 +297,13 @@ function signOut() {
 // ─── Access token (refresh on demand) ───────────────────────────────────────
 
 async function getAccessToken() {
+  const credentials = readCredentials();
+  if (!credentials) return null;
   const refreshToken = readRefreshToken();
   if (!refreshToken) return null;
   const response = await postForm({
-    client_id: CLIENT_ID,
-    client_secret: CLIENT_SECRET,
+    client_id: credentials.clientId,
+    client_secret: credentials.clientSecret,
     refresh_token: refreshToken,
     grant_type: 'refresh_token',
   });
@@ -350,8 +390,8 @@ async function uploadFile(filePath, token) {
 }
 
 async function uploadTodayBackup() {
-  if (!READY) {
-    return { success: false, error: 'not-configured', message: 'Paste your Google OAuth credentials into electron/googleDrive.cjs.' };
+  if (!isConfigured()) {
+    return { success: false, error: 'not-configured', message: 'Paste your Google OAuth credentials in Settings → System Maintenance → Backup & Restore.' };
   }
   const token = await getAccessToken();
   if (!token) {
@@ -383,6 +423,8 @@ module.exports = {
   getStatus,
   isConfigured,
   isSignedIn,
+  setCredentials,
+  clearCredentials,
   signIn,
   signOut,
   uploadTodayBackup,

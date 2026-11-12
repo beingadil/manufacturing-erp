@@ -2,6 +2,7 @@ import { CheckCircle2, CloudUpload, Database, FileDown, FileUp, Loader2, LogOut,
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { clearStorageMirrors } from '../../database/sqlite/SQLiteStorageAdapter';
+import { formInputClass } from '../form/formStyles';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -58,8 +59,11 @@ export function BackupRestoreTab() {
   const [lastManifest, setLastManifest] = useState<BackupManifest | null>(null);
   const [confirmRestore, setConfirmRestore] = useState(false);
   const [driveStatus, setDriveStatus] = useState<GoogleDriveStatus | null>(null);
-  const [driveBusy, setDriveBusy] = useState<'signin' | 'upload' | 'signout' | null>(null);
+  const [driveBusy, setDriveBusy] = useState<'signin' | 'upload' | 'signout' | 'save-creds' | null>(null);
   const [lastDriveUpload, setLastDriveUpload] = useState<string | null>(null);
+  const [credsId, setCredsId] = useState('');
+  const [credsSecret, setCredsSecret] = useState('');
+  const [showCredsForm, setShowCredsForm] = useState(false);
 
   const refreshDriveStatus = async () => {
     const db = electronDB() as any;
@@ -107,6 +111,40 @@ export function BackupRestoreTab() {
       }
     } finally {
       setDriveBusy(null);
+    }
+  };
+
+  const handleSaveCredentials = async () => {
+    const db = electronDB() as any;
+    if (!db?.googleSetCredentials) return;
+    setDriveBusy('save-creds');
+    try {
+      const res = await db.googleSetCredentials({ clientId: credsId, clientSecret: credsSecret });
+      if (res?.success) {
+        setCredsId('');
+        setCredsSecret('');
+        setShowCredsForm(false);
+        toast.success('Credentials saved');
+        await refreshDriveStatus();
+      } else {
+        toast.error('Credentials were not saved', { description: res?.error || 'Unknown error' });
+      }
+    } catch (e: any) {
+      toast.error('Credentials were not saved', { description: e?.message });
+    }
+    setDriveBusy(null);
+  };
+
+  const handleClearCredentials = async () => {
+    const db = electronDB() as any;
+    if (!db?.googleClearCredentials) return;
+    try {
+      await db.googleClearCredentials();
+      setLastDriveUpload(null);
+      toast.success('Google Drive credentials cleared');
+      await refreshDriveStatus();
+    } catch (e: any) {
+      toast.error('Could not clear credentials', { description: e?.message });
     }
   };
 
@@ -179,6 +217,55 @@ export function BackupRestoreTab() {
       setBusy(null);
     }
   };
+
+  const credentialsForm = (
+    <div className="mt-4 max-w-lg rounded-lg border border-border bg-muted/30 p-4">
+      <p className="text-sm font-semibold text-foreground mb-3">Your Google OAuth credentials</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="drive-client-id" className="text-xs font-medium text-muted-foreground">Client ID</label>
+          <input
+            id="drive-client-id"
+            type="text"
+            value={credsId}
+            onChange={e => setCredsId(e.target.value)}
+            placeholder="….apps.googleusercontent.com"
+            autoComplete="off"
+            spellCheck={false}
+            className={formInputClass}
+          />
+        </div>
+        <div>
+          <label htmlFor="drive-client-secret" className="text-xs font-medium text-muted-foreground">Client secret</label>
+          <input
+            id="drive-client-secret"
+            type="password"
+            value={credsSecret}
+            onChange={e => setCredsSecret(e.target.value)}
+            placeholder="GOCSPX-…"
+            autoComplete="off"
+            className={formInputClass}
+          />
+        </div>
+      </div>
+      <div className="mt-3 flex items-center gap-3">
+        <button
+          onClick={handleSaveCredentials}
+          disabled={driveBusy !== null || !credsId.trim() || !credsSecret.trim()}
+          className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {driveBusy === 'save-creds' ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          {driveBusy === 'save-creds' ? 'Saving…' : 'Save credentials'}
+        </button>
+        <button
+          onClick={handleClearCredentials}
+          className="text-sm font-medium text-destructive/80 hover:text-destructive transition-colors"
+        >
+          Clear credentials
+        </button>
+      </div>
+    </div>
+  );
 
   if (!isDesktop) {
     return (
@@ -259,51 +346,69 @@ export function BackupRestoreTab() {
                   and the <code>drive.file</code> scope only sees the app's own files.
                 </p>
                 <ol className="mt-3 space-y-1.5 list-decimal list-inside max-w-lg">
-                  <li>Go to <span className="font-mono text-foreground">console.cloud.google.com</span> and create a project (e.g. “Manufacturing ERP”).</li>
-                  <li><span className="font-medium text-foreground">APIs &amp; Services → Library</span> → search “Google Drive API” → Enable.</li>
-                  <li><span className="font-medium text-foreground">APIs &amp; Services → OAuth consent screen</span> → External, add your email as a test user, add only the <code>drive.file</code> scope.</li>
-                  <li><span className="font-medium text-foreground">APIs &amp; Services → Credentials</span> → Create Credentials → OAuth client ID → <span className="font-medium text-foreground">Desktop app</span>.</li>
-                  <li>Paste the Client ID and Client Secret into <span className="font-mono text-foreground">electron/googleDrive.cjs</span> (the two placeholders at the top), then rebuild the app.</li>
+                  <li>Go to <span className="font-mono text-foreground">console.cloud.google.com</span>, create a project (e.g. “Manufacturing ERP”) and enable the <span className="font-medium text-foreground">Google Drive API</span>.</li>
+                  <li><span className="font-medium text-foreground">APIs &amp; Services → OAuth consent screen</span> → External, add your own email as a <span className="font-medium text-foreground">test user</span>, keep only the <code>drive.file</code> scope.</li>
+                  <li><span className="font-medium text-foreground">APIs &amp; Services → Credentials</span> → Create credentials → OAuth client ID → <span className="font-medium text-foreground">Desktop app</span>.</li>
+                  <li>Paste the Client ID and Client secret below. They are stored on this machine — never in the repo — and can be cleared anytime.</li>
                 </ol>
+                {credentialsForm}
               </div>
             ) : !driveStatus.signedIn ? (
-              <div className="flex flex-wrap items-center gap-4">
-                <p className="text-sm text-muted-foreground max-w-md flex-1">
-                  Sign in to your Google account. The app can only see the backups it uploads
-                  (the <code>drive.file</code> scope) — nothing else in your Drive.
-                </p>
-                <button
-                  onClick={handleDriveSignIn}
-                  disabled={driveBusy !== null}
-                  className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50"
-                >
-                  {driveBusy === 'signin' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudUpload className="h-4 w-4" />}
-                  {driveBusy === 'signin' ? 'Waiting for Google…' : 'Sign in with Google'}
-                </button>
+              <div>
+                <div className="flex flex-wrap items-center gap-4">
+                  <p className="text-sm text-muted-foreground max-w-md flex-1">
+                    Sign in to your Google account. The app can only see the backups it uploads
+                    (the <code>drive.file</code> scope) — nothing else in your Drive.
+                  </p>
+                  <button
+                    onClick={handleDriveSignIn}
+                    disabled={driveBusy !== null}
+                    className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  >
+                    {driveBusy === 'signin' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudUpload className="h-4 w-4" />}
+                    {driveBusy === 'signin' ? 'Waiting for Google…' : 'Sign in with Google'}
+                  </button>
+                  <button
+                    onClick={() => setShowCredsForm(v => !v)}
+                    className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showCredsForm ? 'Hide credentials' : 'Change credentials'}
+                  </button>
+                </div>
+                {showCredsForm && credentialsForm}
               </div>
             ) : (
-              <div className="flex flex-wrap items-center gap-4">
-                <p className="text-sm text-muted-foreground max-w-md flex-1">
-                  {lastDriveUpload
-                    ? <>Last upload: <span className="font-medium text-foreground">{lastDriveUpload}</span>. Find it in Drive under “Manufacturing ERP Backups”.</>
-                    : <>Signed in and ready. Today's backup will land in “Manufacturing ERP Backups” in your Drive.</>}
-                </p>
-                <button
-                  onClick={handleDriveSignOut}
-                  disabled={driveBusy !== null}
-                  className="flex items-center gap-2 px-3 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-xl transition-colors disabled:opacity-50"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Sign out
-                </button>
-                <button
-                  onClick={handleDriveUpload}
-                  disabled={driveBusy !== null}
-                  className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50"
-                >
-                  {driveBusy === 'upload' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudUpload className="h-4 w-4" />}
-                  {driveBusy === 'upload' ? 'Uploading…' : 'Backup to Drive'}
-                </button>
+              <div>
+                <div className="flex flex-wrap items-center gap-4">
+                  <p className="text-sm text-muted-foreground max-w-md flex-1">
+                    {lastDriveUpload
+                      ? <>Last upload: <span className="font-medium text-foreground">{lastDriveUpload}</span>. Find it in Drive under “Manufacturing ERP Backups”.</>
+                      : <>Signed in and ready. Today's backup will land in “Manufacturing ERP Backups” in your Drive.</>}
+                  </p>
+                  <button
+                    onClick={handleDriveSignOut}
+                    disabled={driveBusy !== null}
+                    className="flex items-center gap-2 px-3 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-xl transition-colors disabled:opacity-50"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Sign out
+                  </button>
+                  <button
+                    onClick={handleDriveUpload}
+                    disabled={driveBusy !== null}
+                    className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  >
+                    {driveBusy === 'upload' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudUpload className="h-4 w-4" />}
+                    {driveBusy === 'upload' ? 'Uploading…' : 'Backup to Drive'}
+                  </button>
+                  <button
+                    onClick={() => setShowCredsForm(v => !v)}
+                    className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showCredsForm ? 'Hide credentials' : 'Change credentials'}
+                  </button>
+                </div>
+                {showCredsForm && credentialsForm}
               </div>
             )}
           </div>

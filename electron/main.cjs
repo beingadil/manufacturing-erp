@@ -415,6 +415,22 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     }
   });
 
+  ipcMain.handle('google:setCredentials', async (_event, creds) => {
+    try {
+      return googleDrive.setCredentials(creds || {});
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('google:clearCredentials', async () => {
+    try {
+      return googleDrive.clearCredentials();
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
   // ─── Auto-Update ──────────────────────────────────────────────────────────
   // Full documentation: https://www.electron.build/auto-update
 

@@ -193,13 +193,13 @@ the binary against what the package should ship:
   that guard passing; it is what stops a "installs but never opens" release.
 - Data is the user's. A migration or a seed must never overwrite an
   existing chart of accounts, parties or vouchers.
-- **Google Drive backups**: the user chose to host their own Desktop OAuth
-  credentials in the repo. They live in `electron/googleDrive.cjs`
-  (`PASTE_CLIENT_ID_HERE` / `PASTE_CLIENT_SECRET_HERE`). Scope is
-  `drive.file` only — the app can create/manage just the backups it uploads,
-  never the user's other Drive files. Tokens are stored in userData encrypted
-  via `safeStorage`; Drive access is never revoked without the user clicking
-  "Sign out". Nothing is ever deleted from Drive.
+- **Google Drive backups**: OAuth credentials are **never in git** — GitHub push
+  protection refused them. They are pasted once per machine into the Settings
+  card (Backup & Restore → Google Drive Backup) and stored in userData
+  (`google-drive.json`, keys `clientId`/`clientSecret`), separate from the
+  encrypted refresh token. Scope is `drive.file` only. Revoke access from the
+  card's "Sign out", swap credentials with "Change credentials". Nothing is ever
+  deleted from Drive.
 - Commit messages are conventional commits (`feat`, `fix`, `test`, `docs`,
   `ci`, `chore`, `refactor`, `perf`) — the GitHub release notes are
   generated from them.

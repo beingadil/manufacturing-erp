@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld('electronDB', {
   googleSignIn: () => ipcRenderer.invoke('google:signIn'),
   googleSignOut: () => ipcRenderer.invoke('google:signOut'),
   googleUploadBackup: () => ipcRenderer.invoke('google:uploadBackup'),
+  googleSetCredentials: (creds) => ipcRenderer.invoke('google:setCredentials', creds),
+  googleClearCredentials: () => ipcRenderer.invoke('google:clearCredentials'),
 
   // Update migration notice — legacy per-machine install detection
   checkLegacyInstall: () => ipcRenderer.invoke('migration:checkLegacyInstall'),

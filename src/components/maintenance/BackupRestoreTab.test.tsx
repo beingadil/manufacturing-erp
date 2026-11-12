@@ -46,6 +46,8 @@ beforeEach(() => {
     googleSignIn: vi.fn(),
     googleSignOut: vi.fn(),
     googleUploadBackup: vi.fn(),
+    googleSetCredentials: vi.fn().mockResolvedValue({ success: true }),
+    googleClearCredentials: vi.fn().mockResolvedValue({ success: true }),
   });
 });
 
@@ -66,16 +68,32 @@ describe("BackupRestoreTab", () => {
     expect(buttons[1].textContent).toContain("Restore from file");
   });
 
-  it("shows the Google Drive card with setup guidance when the credentials are not in place", async () => {
+  it("shows the Google Drive card with a paste-credentials form when the keys are not in place", async () => {
     render(<BackupRestoreTab />);
 
     expect(await screen.findByText("Google Drive Backup")).toBeTruthy();
     expect(screen.getByText(/not set up/i)).toBeTruthy();
-    expect(screen.getByText(/free, one-time setup in google cloud/i)).toBeTruthy();
-    // No button should be offered until the credentials exist — a dead button
-    // is worse than no button.
-    expect(screen.queryByRole("button", { name: /sign in with google/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: /backup to drive/i })).toBeNull();
+
+    // The credentials form is available in place — no need to rebuild the app.
+    const idInput = screen.getByLabelText(/client id/i) as HTMLInputElement;
+    const secretInput = screen.getByLabelText(/client secret/i) as HTMLInputElement;
+    const saveButton = screen.getByRole("button", { name: /save credentials/i }) as HTMLButtonElement;
+    expect(idInput).toBeTruthy();
+    expect(secretInput).toBeTruthy();
+
+    // Save is disabled until both fields are filled.
+    expect(saveButton.disabled).toBe(true);
+    fireEvent.change(idInput, { target: { value: "111111111111-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.apps.googleusercontent.com" } });
+    fireEvent.change(secretInput, { target: { value: "GOCSPX-abc123" } });
+    expect(saveButton.disabled).toBe(false);
+
+    fireEvent.click(saveButton);
+    await waitFor(() =>
+      expect((window as any).electronDB.googleSetCredentials).toHaveBeenCalledWith({
+        clientId: "111111111111-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.apps.googleusercontent.com",
+        clientSecret: "GOCSPX-abc123",
+      })
+    );
   });
 
   it("offers sign-in when configured but not signed in, and uploads after sign-in", async () => {
