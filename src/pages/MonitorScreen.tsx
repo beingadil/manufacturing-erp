@@ -322,7 +322,7 @@ export function MonitorScreen() {
                 <RechartsTooltip
                   contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: 8, fontSize: 12 }}
                   itemStyle={{ color: 'hsl(var(--foreground))' }}
-                  formatter={(v: number, name: string) => [formatCurrency(v), name === 'revenue' ? 'Revenue' : 'Purchases']}
+                  formatter={(v, name) => [formatCurrency(Number(v ?? 0)), name === 'revenue' ? 'Revenue' : 'Purchases']}
                 />
                 <Line type="monotone" dataKey="revenue" name="Revenue" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
                 <Line type="monotone" dataKey="purchase" name="Purchases" stroke="hsl(var(--chart-3))" strokeWidth={2} dot={false} />

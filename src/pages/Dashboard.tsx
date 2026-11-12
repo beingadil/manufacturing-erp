@@ -300,7 +300,7 @@ export function Dashboard() {
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }} dx={-10} tickFormatter={(value) => `PKR ${value/1000}k`} />
                 <Tooltip 
                   contentStyle={{ backgroundColor: "hsl(var(--card))", color: "hsl(var(--foreground))", borderRadius: '12px', border: "1px solid hsl(var(--border))", boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  formatter={(value: number) => [formatCurrency(value), 'Revenue']}
+                  formatter={(value) => [formatCurrency(Number(value ?? 0)), 'Revenue']}
                 />
                 <Line type="monotone" dataKey="sales" stroke="hsl(var(--chart-1))" strokeWidth={3} dot={{ r: 4, fill: 'hsl(var(--chart-1))', strokeWidth: 0 }} activeDot={{ r: 6 }} />
               </LineChart>
@@ -320,7 +320,7 @@ export function Dashboard() {
                 <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: "hsl(var(--foreground))", fontSize: 13, fontWeight: 500 }} width={100} />
                 <Tooltip 
                   contentStyle={{ backgroundColor: "hsl(var(--card))", color: "hsl(var(--foreground))", borderRadius: '12px', border: "1px solid hsl(var(--border))", boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  formatter={(value: number) => [formatCurrency(value), 'Revenue']}
+                  formatter={(value) => [formatCurrency(Number(value ?? 0)), 'Revenue']}
                 />
                 <Bar dataKey="amount" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} barSize={24} />
               </BarChart>
