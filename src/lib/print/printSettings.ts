@@ -129,20 +129,19 @@ export function formatPrintCurrency(amount: number): string {
   }).format(amount);
 }
 
-/** Format a date for documents (default dd-MMM-yyyy). */
+/** Format a date for documents — honours Settings → Print & PDF `dateFormat`. */
 export function formatPrintDate(date: string | Date | undefined | null): string {
   if (!date) return '—';
   const d = typeof date === 'string' ? new Date(date) : date;
   if (isNaN(d.getTime())) return '—';
   const { output } = getPrintSettings();
-  const parts = new Intl.DateTimeFormat(output.numberLocale, {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  }).formatToParts(d);
-  const map: Record<string, string> = {};
-  for (const p of parts) map[p.type] = p.value;
-  return `${map.day}-${map.month}-${map.year}`;
+  const dd = String(d.getDate()).padStart(2, '0');
+  const MM = String(d.getMonth() + 1).padStart(2, '0');
+  const MMM = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()];
+  const MMMM = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][d.getMonth()];
+  const yyyy = String(d.getFullYear());
+  const map: Record<string, string> = { dd, MM, MMM, MMMM, yyyy, yy: yyyy.slice(-2) };
+  return (output.dateFormat || 'dd-MMM-yyyy').replace(/MMMM|MMM|MM|dd|yyyy|yy/g, t => map[t]);
 }
 
 /** Format a plain number for documents. */

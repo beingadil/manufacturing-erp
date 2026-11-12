@@ -37,7 +37,7 @@ export async function generateEnterpriseDocument(config: PDFDocumentConfig) {
     subtitle,
     filters = [],
     tables,
-    orientation = 'portrait',
+    orientation: configOrientation,
     action = 'download',
     filename,
     infoBlock = []
@@ -46,6 +46,9 @@ export async function generateEnterpriseDocument(config: PDFDocumentConfig) {
   // ── Single source of truth for everything printed ──
   const settings = getPrintSettings();
   const { company, branding, document, printedBy } = settings;
+
+  // Honour Settings → Print & PDF `Default Orientation` when callers don't pass one.
+  const orientation = configOrientation ?? (document.orientation === 'Landscape' ? 'landscape' : 'portrait');
 
   const isLandscape = orientation === 'landscape';
   const doc = new jsPDF({
@@ -74,31 +77,46 @@ export async function generateEnterpriseDocument(config: PDFDocumentConfig) {
   let currentY = margins.top;
 
   // ── HEADER ──
-  // Two-tier: logo (left/center) + company identity block + document title on its own line.
+  // Two-tier: logo + company identity block + document title on its own line.
+  // Logo placement follows "Print & PDF" → logo position: left / center / right.
   const logoSize = 30;
-  const logoX = margins.left;
+  const logoPosition = branding.logoPosition;
   let logoDrawn = false;
 
-  if (branding.logoDataUrl) {
+  const drawLogo = (x: number, y: number) => {
     try {
-      doc.addImage(branding.logoDataUrl, 'PNG', logoX, currentY, logoSize, logoSize);
+      doc.addImage(branding.logoDataUrl as string, 'PNG', x, y, logoSize, logoSize);
       logoDrawn = true;
     } catch (_e) {
       // ignore bad image data
     }
-  }
+  };
 
-  // Company name block (right of logo, or full width if no logo)
-  const companyX = logoDrawn ? logoX + logoSize + 12 : margins.left;
-  const companyMaxW = pageWidth - margins.right - companyX;
+  if (branding.logoDataUrl && logoPosition === 'left') drawLogo(margins.left, currentY);
+  else if (branding.logoDataUrl && logoPosition === 'center') drawLogo((pageWidth - logoSize) / 2, currentY);
+  else if (branding.logoDataUrl && logoPosition === 'right') drawLogo(pageWidth - margins.right - logoSize, currentY);
+
+  const fullWidth = pageWidth - margins.left - margins.right;
+
+  let companyX = margins.left;
+  let companyMaxW = fullWidth;
+  if (logoDrawn && logoPosition === 'left') {
+    companyX = logoSize + margins.left + 12;
+    companyMaxW = fullWidth - logoSize - 12;
+  } else if (logoDrawn && logoPosition === 'right') {
+    companyMaxW = fullWidth - logoSize - 12;
+  }
+  const isCenter = logoPosition === 'center';
+  const companyAlign = isCenter ? 'center' : 'left';
+  const textAlignX = isCenter ? pageWidth / 2 : companyX;
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(15);
   doc.setTextColor(...accentRgb);
-  doc.text(company.name, companyX, currentY, { maxWidth: companyMaxW });
+  doc.text(company.name, textAlignX, currentY + (isCenter ? logoSize + 12 : 0), { align: companyAlign, maxWidth: companyMaxW });
 
-  // Tagline / subtitle under company name
-  let identityY = currentY + 12;
+  // Address lines under the company name
+  let identityY = currentY + (isCenter ? logoSize + 22 : 12);
   if (company.address || company.phone || company.email || company.website || company.taxNumber) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8.5);
@@ -111,23 +129,26 @@ export async function generateEnterpriseDocument(config: PDFDocumentConfig) {
       .filter(Boolean);
     if (webTax.length) lines.push(webTax.join('  |  '));
     lines.forEach((line, i) => {
-      doc.text(line, companyX, identityY + i * 10, { maxWidth: companyMaxW });
+      doc.text(line, textAlignX, identityY + i * 10, { align: companyAlign, maxWidth: companyMaxW });
     });
     identityY += lines.length * 10 + 8;
   }
 
-  // Document title on its own line (right-aligned, accent)
-  const titleY = logoDrawn ? currentY + logoSize + 14 : currentY + 6;
+  // Document title. Placement follows the logo column layout.
+  const titleX = logoPosition === 'left' ? pageWidth - margins.right : pageWidth / 2;
+  const titleAlign = logoPosition === 'left' ? 'right' : 'center';
+  const titleTop = isCenter ? currentY + logoSize + 12 : currentY;
+  const titleY = logoDrawn && !isCenter ? currentY + logoSize + 14 : titleTop + 6;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(17);
   doc.setTextColor(30, 30, 30);
-  doc.text(title.toUpperCase(), pageWidth - margins.right, titleY, { align: 'right' });
+  doc.text(title.toUpperCase(), titleX, titleY, { align: titleAlign });
 
   if (documentNo) {
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(120, 120, 120);
-    doc.text(`Doc #: ${documentNo}`, pageWidth - margins.right, titleY + 11, { align: 'right' });
+    doc.text(`Doc #: ${documentNo}`, titleX, titleY + 11, { align: titleAlign });
   }
 
   currentY = Math.max(identityY, titleY + (documentNo ? 22 : 12)) + 16;
