@@ -48,6 +48,28 @@ beforeEach(() => {
     googleUploadBackup: vi.fn(),
     googleSetCredentials: vi.fn().mockResolvedValue({ success: true }),
     googleClearCredentials: vi.fn().mockResolvedValue({ success: true }),
+    googleListBackups: vi.fn().mockResolvedValue({
+      success: true,
+      files: [
+        {
+          id: "drive-file-1",
+          name: "manufacturing-erp-backup-2026-11-11.merpbak",
+          size: 2_097_152,
+          createdTime: "2026-11-11T07:00:00.000Z",
+          webViewLink: "https://drive.google.com/file/d/drive-file-1/view",
+        },
+        {
+          id: "drive-file-2",
+          name: "manufacturing-erp-backup-2026-10-30.merpbak",
+          size: 1_048_576,
+          createdTime: "2026-10-30T04:30:00.000Z",
+          webViewLink: null,
+        },
+      ],
+      folderName: "Manufacturing ERP Backups",
+      folderId: "folder-1",
+    }),
+    googleRestoreBackup: vi.fn().mockResolvedValue({ success: true, manifest: { appVersion: "1.3.2", stores: ["erp-storage"], createdAt: "2026-11-11T07:00:00.000Z" } }),
   });
 });
 
@@ -122,6 +144,55 @@ describe("BackupRestoreTab", () => {
       "Backup uploaded to Google Drive",
       expect.objectContaining({ description: "manufacturing-erp-backup-2026-11-12.merpbak" })
     );
+  });
+
+  it("lists the Drive backups when Restore from Drive is opened", async () => {
+    const db = (window as any).electronDB;
+    db.googleStatus.mockResolvedValue({ configured: true, signedIn: true });
+
+    render(<BackupRestoreTab />);
+    const restoreButton = await screen.findByRole("button", { name: /restore from drive/i });
+    fireEvent.click(restoreButton);
+
+    await waitFor(() => expect(db.googleListBackups).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/manufacturing-erp-backup-2026-11-11\.merpbak/i)).toBeTruthy();
+    expect(screen.findByText(/2026-10-30\.merpbak/i)).toBeTruthy();
+  });
+
+  it("restores the selected backup from Drive after confirmation", async () => {
+    const db = (window as any).electronDB;
+    db.googleStatus.mockResolvedValue({ configured: true, signedIn: true });
+
+    render(<BackupRestoreTab />);
+    fireEvent.click(await screen.findByRole("button", { name: /restore from drive/i }));
+    await screen.findByText(/manufacturing-erp-backup-2026-11-11\.merpbak/i);
+
+    const restoreButtons = await screen.findAllByRole("button", { name: "Restore" });
+    fireEvent.click(restoreButtons[0]);
+
+    // The confirmation dialog shows, and no restore happens yet.
+    expect(await screen.findByText(/restore this backup from drive\?/i)).toBeTruthy();
+    expect(db.googleRestoreBackup).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /download and restore/i }));
+    await waitFor(() => expect(db.googleRestoreBackup).toHaveBeenCalledWith("drive-file-1"));
+    expect(clearStorageMirrors).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancelling the restore keeps everything alone", async () => {
+    const db = (window as any).electronDB;
+    db.googleStatus.mockResolvedValue({ configured: true, signedIn: true });
+
+    render(<BackupRestoreTab />);
+    fireEvent.click(await screen.findByRole("button", { name: /restore from drive/i }));
+    await screen.findByText(/manufacturing-erp-backup-2026-11-11\.merpbak/i);
+
+    const restoreButtons = await screen.findAllByRole("button", { name: "Restore" });
+    fireEvent.click(restoreButtons[0]);
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+
+    expect(db.googleRestoreBackup).not.toHaveBeenCalled();
+    expect(clearStorageMirrors).not.toHaveBeenCalled();
   });
 
   it("surfaces a failed upload instead of pretending it worked", async () => {

@@ -319,6 +319,41 @@ async function getAccessToken() {
 
 // ─── Drive folder + upload ──────────────────────────────────────────────────
 
+// How many backups to show — the 50 newest. Plenty for a "restore my data" list.
+const MAX_BACKUP_FILES = 50;
+
+async function listBackups() {
+  if (!isConfigured()) {
+    return { success: false, error: 'not-configured', message: 'Paste your Google OAuth credentials in Settings → System Maintenance → Backup & Restore.' };
+  }
+  const token = await getAccessToken();
+  if (!token) {
+    return { success: false, error: 'not-signed-in', message: 'Sign in to Google first.' };
+  }
+
+  let folderId;
+  try {
+    folderId = await getOrCreateFolderId(token);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+
+  const query = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
+  const found = await driveFetch(`/files?q=${query}&orderBy=createdTime desc&fields=files(id,name,size,createdTime,webViewLink)&pageSize=${MAX_BACKUP_FILES}`, token);
+  if (!found.ok) {
+    return { success: false, error: `Could not list the backups (HTTP ${found.status}). ${found.raw || ''}`.trim() };
+  }
+
+  const files = (found.json?.files || []).map(file => ({
+    id: file.id,
+    name: file.name,
+    size: typeof file.size === 'number' ? file.size : Number(file.size || 0),
+    createdTime: file.createdTime,
+    webViewLink: file.webViewLink || null,
+  }));
+  return { success: true, files, folderName: FOLDER_NAME, folderId };
+}
+
 async function getOrCreateFolderId(token) {
   const existing = readConfig().folderId;
   if (existing) return existing;
@@ -419,6 +454,54 @@ async function uploadTodayBackup() {
   }
 }
 
+// ─── Download + restore one backup from Drive ────────────────────────────────
+
+async function downloadBackup(fileId) {
+  if (!isConfigured()) {
+    return { success: false, error: 'not-configured', message: 'Paste your Google OAuth credentials in Settings → System Maintenance → Backup & Restore.' };
+  }
+  const token = await getAccessToken();
+  if (!token) {
+    return { success: false, error: 'not-signed-in', message: 'Sign in to Google first.' };
+  }
+  if (!fileId) return { success: false, error: 'No backup was selected.' };
+
+  // Get the file's name first so the local copy keeps it.
+  const meta = await driveFetch(`/files/${encodeURIComponent(fileId)}?fields=id,name`, token);
+  if (!meta.ok || !meta.json?.name) {
+    return { success: false, error: `Could not read the file's details (HTTP ${meta.status}). ${meta.raw || ''}`.trim() };
+  }
+  const safeName = meta.json.name.replace(/[/\\:*?"<>|]/g, '_');
+  const target = uniquePath(path.join(backupsDir(), `restore-${safeName}`));
+
+  const response = await fetch(`${DRIVE_API}/files/${encodeURIComponent(fileId)}?alt=media`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    return { success: false, error: `Download failed (HTTP ${response.status}). ${text || ''}`.trim() };
+  }
+  const bytes = Buffer.from(await response.arrayBuffer());
+  fs.writeFileSync(target, bytes);
+  return { success: true, filePath: target, fileName: meta.json.name };
+}
+
+async function restoreBackupFromDrive(fileId) {
+  if (!isConfigured()) {
+    return { success: false, error: 'not-configured', message: 'Paste your Google OAuth credentials in Settings → System Maintenance → Backup & Restore.' };
+  }
+  const downloaded = await downloadBackup(fileId);
+  if (!downloaded.success) return downloaded;
+
+  // The dialog-free equivalent of "pick a file and restore" — same code path.
+  const db = require('./database.cjs');
+  const result = db.importUnifiedBackupFromPath(downloaded.filePath);
+  if (!result || !result.success) {
+    return { success: false, error: (result && result.error) || 'The backup was downloaded but restoring it failed.' };
+  }
+  return { ...result, sourceFile: downloaded.fileName };
+}
+
 module.exports = {
   getStatus,
   isConfigured,
@@ -428,4 +511,6 @@ module.exports = {
   signIn,
   signOut,
   uploadTodayBackup,
+  listBackups,
+  restoreBackupFromDrive,
 };

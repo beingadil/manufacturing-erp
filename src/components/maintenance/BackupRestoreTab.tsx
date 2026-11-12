@@ -1,4 +1,4 @@
-import { CheckCircle2, CloudUpload, Database, FileDown, FileUp, Loader2, LogOut, Monitor } from 'lucide-react';
+import { CheckCircle2, CloudDownload, CloudUpload, Database, FileDown, FileUp, Loader2, LogOut, Monitor } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { clearStorageMirrors } from '../../database/sqlite/SQLiteStorageAdapter';
@@ -40,6 +40,14 @@ interface GoogleDriveStatus {
   message?: string;
 }
 
+interface DriveBackupFile {
+  id: string;
+  name: string;
+  size: number;
+  createdTime: string | null;
+  webViewLink: string | null;
+}
+
 const electronDB = () => (window as any).electronDB;
 
 const formatSize = (bytes: number) => {
@@ -64,6 +72,12 @@ export function BackupRestoreTab() {
   const [credsId, setCredsId] = useState('');
   const [credsSecret, setCredsSecret] = useState('');
   const [showCredsForm, setShowCredsForm] = useState(false);
+  const [showDriveRestore, setShowDriveRestore] = useState(false);
+  const [driveFiles, setDriveFiles] = useState<DriveBackupFile[] | null>(null);
+  const [driveListBusy, setDriveListBusy] = useState(false);
+  const [driveListError, setDriveListError] = useState<string | null>(null);
+  const [restoreCandidateId, setRestoreCandidateId] = useState<string | null>(null);
+  const [restoreBusy, setRestoreBusy] = useState(false);
 
   const refreshDriveStatus = async () => {
     const db = electronDB() as any;
@@ -145,6 +159,56 @@ export function BackupRestoreTab() {
       await refreshDriveStatus();
     } catch (e: any) {
       toast.error('Could not clear credentials', { description: e?.message });
+    }
+  };
+
+  const refreshDriveList = async () => {
+    const db = electronDB() as any;
+    setDriveListBusy(true);
+    setDriveListError(null);
+    try {
+      const res = await db?.googleListBackups?.();
+      if (res?.success) {
+        setDriveFiles(res.files || []);
+      } else {
+        setDriveListError(res?.message || res?.error || 'Could not list the Drive backups.');
+        setDriveFiles([]);
+      }
+    } catch (e: any) {
+      setDriveListError(e?.message || 'Could not list the Drive backups.');
+      setDriveFiles([]);
+    }
+    setDriveListBusy(false);
+  };
+
+  const handleToggleDriveRestore = async () => {
+    const next = !showDriveRestore;
+    setShowDriveRestore(next);
+    if (next) await refreshDriveList();
+  };
+
+  const handleRestoreFromDrive = async () => {
+    const db = electronDB() as any;
+    const fileId = restoreCandidateId;
+    if (!db?.googleRestoreBackup || !fileId) return;
+    setRestoreBusy(true);
+    setRestoreCandidateId(null);
+    try {
+      const res = await db.googleRestoreBackup(fileId);
+      if (res?.success) {
+        const info = res?.manifest
+          ? `Restored v${res.manifest.appVersion ?? '?'} · ${res.manifest.stores?.length ?? 0} store(s) · ${formatDate(res.manifest.createdAt ?? '')}`
+          : `Restored from ${res?.sourceFile || 'Drive'}`;
+        toast.success('Restore complete. Reloading…', { description: info });
+        clearStorageMirrors();
+        setTimeout(() => window.location.reload(), 400);
+      } else {
+        toast.error('Restore failed', { description: res?.error || 'Unknown error' });
+        setRestoreBusy(false);
+      }
+    } catch (e: any) {
+      toast.error('Restore failed', { description: e?.message || 'Unknown error' });
+      setRestoreBusy(false);
     }
   };
 
@@ -387,15 +451,23 @@ export function BackupRestoreTab() {
                   </p>
                   <button
                     onClick={handleDriveSignOut}
-                    disabled={driveBusy !== null}
+                    disabled={driveBusy !== null || restoreBusy}
                     className="flex items-center gap-2 px-3 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-xl transition-colors disabled:opacity-50"
                   >
                     <LogOut className="h-4 w-4" />
                     Sign out
                   </button>
                   <button
+                    onClick={handleToggleDriveRestore}
+                    disabled={driveBusy !== null || restoreBusy}
+                    className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium border border-border text-foreground rounded-xl hover:bg-muted/60 transition-colors disabled:opacity-50"
+                  >
+                    {restoreBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudDownload className="h-4 w-4" />}
+                    {restoreBusy ? 'Restoring…' : 'Restore from Drive'}
+                  </button>
+                  <button
                     onClick={handleDriveUpload}
-                    disabled={driveBusy !== null}
+                    disabled={driveBusy !== null || restoreBusy}
                     className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50"
                   >
                     {driveBusy === 'upload' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudUpload className="h-4 w-4" />}
@@ -409,6 +481,60 @@ export function BackupRestoreTab() {
                   </button>
                 </div>
                 {showCredsForm && credentialsForm}
+
+                {showDriveRestore && (
+                  <div className="mt-4 overflow-hidden rounded-xl border border-border max-w-xl">
+                    <div className="flex items-center justify-between border-b border-border/50 bg-muted/30 px-4 py-2.5">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Backups in Drive{driveFiles ? ` (${driveFiles.length})` : ''}
+                      </p>
+                      <button
+                        onClick={refreshDriveList}
+                        disabled={driveListBusy}
+                        className="text-xs font-medium text-primary hover:underline disabled:opacity-50"
+                      >
+                        Refresh
+                      </button>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto">
+                      {driveListBusy && (
+                        <div className="flex items-center justify-center gap-2 px-4 py-6 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" /> Loading your Drive backups…
+                        </div>
+                      )}
+                      {!driveListBusy && driveListError && (
+                        <p className="px-4 py-6 text-sm text-destructive">{driveListError}</p>
+                      )}
+                      {!driveListBusy && !driveListError && driveFiles && driveFiles.length === 0 && (
+                        <p className="px-4 py-6 text-sm text-muted-foreground">
+                          No backups in Drive yet. Press “Backup to Drive” first.
+                        </p>
+                      )}
+                      {!driveListBusy && !driveListError && driveFiles && driveFiles.length > 0 && (
+                        <ul className="divide-y divide-border/50">
+                          {driveFiles.map(file => (
+                            <li key={file.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30">
+                              <CloudDownload className="h-4 w-4 shrink-0 text-muted-foreground" />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-medium text-foreground">{file.name}</p>
+                                <p className="text-[11px] tabular-nums text-muted-foreground">
+                                  {file.createdTime ? formatDate(file.createdTime) : '—'} · {formatSize(file.size)}
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => setRestoreCandidateId(file.id)}
+                                disabled={restoreBusy}
+                                className="rounded-lg border border-warning/40 px-3 py-1.5 text-xs font-semibold text-warning hover:bg-warning/10 transition-colors disabled:opacity-50"
+                              >
+                                Restore
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -470,6 +596,31 @@ export function BackupRestoreTab() {
               }}
             >
               Choose file and restore
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={restoreCandidateId !== null} onOpenChange={open => { if (!open) setRestoreCandidateId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Restore this backup from Drive?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This replaces everything currently in the app with the contents of the selected
+              Drive backup. Your current data is saved first (a safety copy), and the app
+              restarts when the restore finishes.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => {
+                e.preventDefault();
+                void handleRestoreFromDrive();
+              }}
+            >
+              Download and restore
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

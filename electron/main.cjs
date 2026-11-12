@@ -415,6 +415,22 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     }
   });
 
+  ipcMain.handle('google:listBackups', async () => {
+    try {
+      return await googleDrive.listBackups();
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('google:restoreBackup', async (_event, fileId) => {
+    try {
+      return await googleDrive.restoreBackupFromDrive(fileId);
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
   ipcMain.handle('google:setCredentials', async (_event, creds) => {
     try {
       return googleDrive.setCredentials(creds || {});
