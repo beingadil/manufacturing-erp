@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 import { filterFinancialData } from '../lib/abac';
 import { exportToCSV } from '../lib/exportUtils';
+import { generateEnterpriseDocument } from '../lib/pdfEngine';
 import { formatCurrency, formatDate } from '../lib/utils';
 import { useERPStore } from '../store/useERPStore';
 import { SourceModule } from '../types/erp';
@@ -78,24 +79,37 @@ export function VoucherHistoryTab({ sourceModule }: VoucherHistoryTabProps) {
       return;
     }
     const title = `${sourceModule} Voucher History`;
-    const rows = filteredVouchers
-      .map(v => `<tr><td>${formatDate(v.date)}</td><td>${v.voucherNo}</td><td>${v.type}</td><td>${v.referenceNo || '-'}</td><td style="text-align:right">${formatCurrency(v.totalDebit)}</td><td style="text-align:right">${formatCurrency(v.totalCredit)}</td><td>${v.status}</td></tr>`)
-      .join('');
-    const w = window.open('', '_blank', 'width=1000,height=700');
-    if (!w) { toast.error('Print failed', { description: 'The print window was blocked.' }); return; }
-    w.document.write(`<html><head><title>${title}</title><style>
-      body{font-family:system-ui,sans-serif;padding:24px;color:#0f172a}
-      h1{font-size:18px;margin:0 0 4px}p{font-size:12px;color:#64748b;margin:0 0 16px}
-      table{width:100%;border-collapse:collapse;font-size:12px}
-      th,td{border:1px solid #cbd5e1;padding:6px 10px;text-align:left}
-      th{background:#f1f5f9;font-weight:600;text-transform:uppercase;font-size:10px}
-    </style></head><body><h1>${title}</h1>
-    <p>${filteredVouchers.length} vouchers${dateFrom || dateTo ? ` · ${dateFrom || '…'} to ${dateTo || '…'}` : ''}</p>
-    <table><thead><tr><th>Date</th><th>Voucher No</th><th>Type</th><th>Reference</th><th>Debit</th><th>Credit</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>
-    </body></html>`);
-    w.document.close();
-    w.focus();
-    w.print();
+    const filters =
+      dateFrom || dateTo
+        ? [{ label: 'From', value: dateFrom || '…' }, { label: 'To', value: dateTo || '…' }]
+        : [];
+    void generateEnterpriseDocument({
+      title,
+      action: 'print',
+      filters,
+      tables: [
+        {
+          columns: [
+            { header: 'Date', dataKey: 'date' },
+            { header: 'Voucher No', dataKey: 'voucherNo' },
+            { header: 'Type', dataKey: 'type' },
+            { header: 'Reference', dataKey: 'reference' },
+            { header: 'Debit', dataKey: 'debit', align: 'right' },
+            { header: 'Credit', dataKey: 'credit', align: 'right' },
+            { header: 'Status', dataKey: 'status', align: 'center' },
+          ],
+          rows: filteredVouchers.map(v => ({
+            date: formatDate(v.date),
+            voucherNo: v.voucherNo,
+            type: v.type,
+            reference: v.referenceNo || '-',
+            debit: formatCurrency(v.totalDebit),
+            credit: formatCurrency(v.totalCredit),
+            status: v.status,
+          })),
+        },
+      ],
+    });
   };
 
   return (
