@@ -1,6 +1,6 @@
-export const APP_VERSION = '1.3.6';
-export const BUILD_NUMBER = '20261112.1710';
-export const RELEASE_DATE = '2026-11-12';
+export const APP_VERSION = '1.3.7';
+export const BUILD_NUMBER = '20261115.2312';
+export const RELEASE_DATE = '2026-11-15';
 export const ENVIRONMENT = import.meta.env.MODE || 'development';
 export const IS_PRODUCTION = ENVIRONMENT === 'production';
 export const DATABASE_SCHEMA_VERSION = '1.0';
