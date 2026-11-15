@@ -1,20 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// This vitest 4 + jsdom 29 setup does not expose window.localStorage (window
-// exists, sessionStorage exists, localStorage is undefined). The adapter's
-// mirror logic is exactly what these tests exercise, so provide a minimal,
-// faithful Storage implementation instead of fighting the environment.
-class MemoryStorage {
-  private store = new Map<string, string>();
-  get length() { return this.store.size; }
-  clear() { this.store.clear(); }
-  getItem(key: string) { return this.store.has(String(key)) ? this.store.get(String(key))! : null; }
-  key(index: number) { return [...this.store.keys()][index] ?? null; }
-  removeItem(key: string) { this.store.delete(String(key)); }
-  setItem(key: string, value: string) { this.store.set(String(key), String(value)); }
-}
-
 // In-memory key_value_store behind a mock electronDB (same shape as
 // CategoryService.persistence.test.ts) — but with controlled updated_at
 // timestamps so we can simulate the restore scenario exactly.
@@ -71,8 +57,6 @@ const DELETE_MS = Date.parse("2026-08-15T11:21:06Z"); // seconds after the resto
 
 describe("SQLiteStorageAdapter restore-mirror interplay", () => {
   beforeEach(() => {
-    (globalThis as any).localStorage = new MemoryStorage();
-    (window as any).localStorage = (globalThis as any).localStorage;
     localStorage.clear();
     kvTable.clear();
     sqliteBroken = false;
