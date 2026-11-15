@@ -14,21 +14,6 @@ import { MaterialForm } from './MaterialForm';
  * offering the whole processor chain for something that is never dispatched.
  */
 
-// This vitest 4 + jsdom 29 setup does not expose localStorage, and the persist
-// middleware writes to it — same shim as the SQLiteStorageAdapter tests.
-class MemoryStorage {
-  private store = new Map<string, string>();
-  get length() { return this.store.size; }
-  clear() { this.store.clear(); }
-  getItem(key: string) { return this.store.has(String(key)) ? this.store.get(String(key))! : null; }
-  key(index: number) { return [...this.store.keys()][index] ?? null; }
-  removeItem(key: string) { this.store.delete(String(key)); }
-  setItem(key: string, value: string) { this.store.set(String(key), String(value)); }
-}
-
-(globalThis as any).localStorage = new MemoryStorage();
-(window as any).localStorage = (globalThis as any).localStorage;
-
 beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn();
 });

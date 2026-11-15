@@ -1,17 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// Same jsdom shim approach as SQLiteStorageAdapter.restore.test.ts
-class MemoryStorage {
-  private store = new Map<string, string>();
-  get length() { return this.store.size; }
-  clear() { this.store.clear(); }
-  getItem(key: string) { return this.store.has(String(key)) ? this.store.get(String(key))! : null; }
-  key(index: number) { return [...this.store.keys()][index] ?? null; }
-  removeItem(key: string) { this.store.delete(String(key)); }
-  setItem(key: string, value: string) { this.store.set(String(key), String(value)); }
-}
-
 const kvTable = new Map<string, { value: string }>();
 
 function makeMockElectronDB() {
@@ -39,8 +28,6 @@ function makeMockElectronDB() {
 
 describe("SQLiteStorageAdapter write suspension", () => {
   beforeEach(() => {
-    (globalThis as any).localStorage = new MemoryStorage();
-    (window as any).localStorage = (globalThis as any).localStorage;
     localStorage.clear();
     kvTable.clear();
     (window as any).electronDB = makeMockElectronDB();

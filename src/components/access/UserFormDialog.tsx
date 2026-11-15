@@ -30,7 +30,7 @@ const userSchema = z.object({
 }).superRefine((values, ctx) => {
   if (values.password && values.password.length > 0) {
     if (values.password.length < 8) {
-      ctx.addIssue({ code: z.ZodIssueCode.too_small, minimum: 8, inclusive: true, type: 'string', path: ['password'], message: 'Password must be at least 8 characters' });
+      ctx.addIssue({ code: z.ZodIssueCode.too_small, minimum: 8, inclusive: true, type: 'string', origin: 'string', path: ['password'], message: 'Password must be at least 8 characters' });
     } else if (!/(?=.*[A-Za-z])(?=.*\d)/.test(values.password)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['password'], message: 'Password must contain a letter and a number' });
     }
