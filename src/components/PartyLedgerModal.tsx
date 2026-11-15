@@ -8,6 +8,7 @@ import { useERPStore } from '../store/useERPStore';
 import { DatePicker } from './ui/date-picker';
 import { ModalOverlay } from './ui/ModalOverlay';
 import { VoucherDetailModal } from './VoucherDetailModal';
+import { useShallow } from 'zustand/react/shallow';
 
 export type PartyKind = 'Customer' | 'Supplier' | 'Processor';
 
@@ -24,7 +25,7 @@ export interface PartyLedgerModalProps {
  */
 export function PartyLedgerModal({ party, onClose }: PartyLedgerModalProps) {
   const navigate = useNavigate();
-  const { accounts, journalEntries, vouchers } = useERPStore();
+  const { accounts, journalEntries, vouchers } = useERPStore(useShallow(s => ({ accounts: s.accounts, journalEntries: s.journalEntries, vouchers: s.vouchers })));
 
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -182,7 +183,7 @@ export function PartyLedgerModal({ party, onClose }: PartyLedgerModalProps) {
                   </td>
                   <td className="py-3 px-6 text-sm text-muted-foreground">{row.voucher?.type || '-'}</td>
                   <td className="py-3 px-6 text-sm text-muted-foreground max-w-[260px] truncate">
-                    {row.narration || row.voucher?.narration || '-'}
+                    {row.narration?.trim() || '-'}
                   </td>
                   <td className={cn('py-3 px-6 text-sm text-right font-medium', row.debit > 0 && 'text-success')}>
                     {row.debit > 0 ? formatCurrency(row.debit) : ''}

@@ -9,9 +9,10 @@ import { formatCurrency } from "../lib/utils";
 import { ErrorManagement } from '../lib/validation';
 import { PurchaseService } from '../services/PurchaseService';
 import { useERPStore } from "../store/useERPStore";
+import { useShallow } from 'zustand/react/shallow';
 
 export function Purchases() {
-  const { purchases, materials, suppliers, vouchers } = useERPStore();
+  const { purchases, materials, suppliers, vouchers } = useERPStore(useShallow(s => ({ purchases: s.purchases, materials: s.materials, suppliers: s.suppliers, vouchers: s.vouchers })));
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [deleteModal, setDeleteModal] = useState<{isOpen: boolean, id: string, no: string}>({isOpen: false, id: '', no: ''});

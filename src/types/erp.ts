@@ -584,4 +584,12 @@ export interface DocumentSettings {
   footerText: string;
   showSignatureDisclaimer: boolean;
   defaultOrientation: "Portrait" | "Landscape";
+  /** ISO currency code used on printed documents. */
+  currency?: string;
+  /** Decimal places for money on printed documents. */
+  currencyFractionDigits?: number;
+  /** BCP-47 locale for number formatting. */
+  numberLocale?: string;
+  /** Date pattern for printed documents, e.g. dd-MMM-yyyy. */
+  dateFormat?: string;
 }

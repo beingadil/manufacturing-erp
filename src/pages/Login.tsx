@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../lib/utils';
 import { useSettingsStore } from '../store/useSettingsStore';
+import { useShallow } from 'zustand/react/shallow';
 
 export function Login() {
   const [email, setEmail] = useState('');
@@ -12,7 +13,7 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
 
   const navigate = useNavigate();
-  const { dashboardName, logo, tagline, logoPosition } = useSettingsStore();
+  const { dashboardName, logo, tagline, logoPosition } = useSettingsStore(useShallow(s => ({ dashboardName: s.dashboardName, logo: s.logo, tagline: s.tagline, logoPosition: s.logoPosition })));
   const { signIn } = useAuth();
 
   const handleLogin = async (e: React.FormEvent) => {

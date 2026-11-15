@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { cn, formatCurrency, formatNumber } from '../../lib/utils';
 import { useERPStore } from '../../store/useERPStore';
 import type { ManufacturingOrderComponent } from '../../types/erp';
+import { useShallow } from 'zustand/react/shallow';
 
 /**
  * A single manufacturing order — the most granular artifact in the chain.
@@ -12,7 +13,7 @@ import type { ManufacturingOrderComponent } from '../../types/erp';
  */
 export default function ProductionOrderDetail() {
   const { id: productId, moId } = useParams<{ id: string; moId: string }>();
-  const { manufacturingOrders, products, finishedGoodsLots, sales, materials } = useERPStore();
+  const { manufacturingOrders, products, finishedGoodsLots, sales, materials } = useERPStore(useShallow(s => ({ manufacturingOrders: s.manufacturingOrders, products: s.products, finishedGoodsLots: s.finishedGoodsLots, sales: s.sales, materials: s.materials })));
 
   const mo = (manufacturingOrders || []).find(o => o.id === moId) as any;
   const product = products.find(p => p.id === productId) as any;

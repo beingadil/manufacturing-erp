@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { format } from 'date-fns';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import { cn, formatNumber } from '../../lib/utils';
@@ -10,8 +11,10 @@ import type { InventoryMovement } from '../../types/erp';
  *
  * Rows are two-line entries rather than a fixed table, so the ledger fits
  * narrow side-column cards without horizontal overflow or scrollbars.
+ * Memoized on the movements array reference — parents derive it via useMemo,
+ * so unrelated re-renders skip the whole list.
  */
-export function LedgerTable({ movements }: { movements: InventoryMovement[] }) {
+export const LedgerTable = memo(function LedgerTable({ movements }: { movements: InventoryMovement[] }) {
   if (movements.length === 0) {
     return (
       <div className="px-5 py-10 text-center text-sm text-muted-foreground">
@@ -53,4 +56,4 @@ export function LedgerTable({ movements }: { movements: InventoryMovement[] }) {
       })}
     </ul>
   );
-}
+});

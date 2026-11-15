@@ -129,7 +129,7 @@ every installed app** — the updater 404s instead of offering the new version.
 | PDF `summaryRows` must be a FLAT array of row objects | `[[{...}]]` (a list whose member is itself a list) makes `row[dataKey]` undefined on every column, so the TOTAL row renders as an EMPTY row and the totals silently vanish — no error, no warning | The engine maps `summaryRows.map(row => columns.map(c => row[c.dataKey]))`, so each element must be `{ [dataKey]: value }`. ~20 report components and 4 document generators pass the nested shape today — see §6 |
 | The PDF footer has three items on one baseline | "Printed By: … on <date>" (left) and the disclaimer (centred) overlap by ~20pt on A4 portrait — they print on top of each other and the text is unreadable | Measure the three strings before placing them; never let the left and centre items share a baseline unguarded |
 | A stale tool process left running | A `tsgo` from a killed probe kept running for 30+ minutes at 1.8 GB and starved every later run. "The lint is slow" was really "three lints are fighting" | Before measuring anything, check `Get-Process node,tsgo,biome` and kill what is not yours. One tool at a time |
-| `tsgo` on this Windows machine | The same type check CI does in **10 seconds** on Linux took **306 seconds for a SINGLE trivial file**. Ruled out: program size, path length (a `subst R:` short drive was just as slow), the registry, CPU/RAM pressure, the repo itself | **It was a corrupted pnpm store.** `biome.exe` and `tsgo.exe` were the *same* 533 KB stub (identical MD5) instead of 66 MB and 25 MB binaries — `pnpm store status` reports `ERR_PNPM_MODIFIED_DEPENDENCY` | `pnpm store status` → if it says "mutated", `pnpm install --force` (delete the listed `.pnpm/<pkg>` dirs first if the rename hits EPERM). Afterwards: tsgo **2.3s**, biome **4.1s**, whole lint **17s** |
+| `tsgo` on this Windows machine | The same type check CI does in **10 seconds** on Linux took **306 seconds for a SINGLE trivial file**. Ruled out: program size, path length (a `subst R:` short drive was just as slow), the registry, CPU/RAM pressure, the repo itself | **It was a corrupted pnpm store.** `biome.exe` and `tsgo.exe` were the *same* 533 KB stub (identical MD5) instead of 66 MB and 25 MB binaries — `pnpm store status` reports `ERR_PNPM_MODIFIED_DEPENDENCY` | `pnpm store status` → if it says "mutated", delete the listed `.pnpm/<pkg>` dirs **then** `pnpm install --force` and build IMMEDIATELY. **It recurs** — on 2026-11-15 core-js `es.regexp.exec.js` flipped back to the 533,504-byte MZP stub within minutes of a repair that had produced a good 274-byte file and a green build. If a build dies with "stream did not contain valid UTF-8" / "UNLOADABLE_DEPENDENCY" mid-day, this is why — repair and re-build, don't debug the code |
 
 ### When a tool is inexplicably slow, check the binary before the code
 
@@ -208,47 +208,169 @@ the binary against what the package should ship:
 
 ---
 
-## 6. Where we left off (2026-11-12)
+## 6. Where we left off (2026-11-15)
 
-**Done — the master-data form polish** (commit `b41a399`, verified in the
-preview). The four create forms (Customer, Supplier, Processor, Raw Material)
-were built from three different control languages. Now one system, in
-`src/components/ui/formStyles.ts`:
+**Not released.** Everything in this section is built, tested and verified in
+the preview — it is waiting on the user to approve the commit and the release
+(v1.3.7). Do not cut a tag without their go-ahead.
 
-| Token | Value |
-|---|---|
-| Control height | 46px (input, textarea, dropdown, searchable select, buttons) |
-| Control radius | 12px |
-| Focus | one soft halo — `ring-4 ring-primary/10` — no hard 1px ring |
-| Label | 14px / `font-medium`, one required mark (red asterisk) |
-| Close button | 32×32 hit area (was 28×28) |
+**Done — the phantom "Finished" stock bug (processing/inventory).**
+Machine receipts were classed as "finished" whenever a custom-stages material's
+`allowedStageIds` happened to end with Machine (tick order, not chain order).
+Fix: `receiptProducesFinished` now sorts the selected stages by `sequence` and
+finishes only at the chain-final one. `stageProgress.ts` was rewritten
+(`visibleStagesForMaterial` — chain order, material-aware) so Raw Materials,
+Material Detail, Purchase Detail and Send forms show the post-Machine next
+step correctly.
 
-- `Dropdown` was 42px tall next to 46px inputs → now 46px.
-- The Raw Material usage question is now two option cards (icon, choice, the
-  consequence of choosing it) instead of bare radio pills.
-- Materials and Suppliers moved to the modal's **footer slot** like the other
-  three — the save action is outside the scroll area on all of them now.
-  `MaterialForm` / `SupplierForm` take `formId` + `showFooter` for this.
+**Done — auto-correction for previous-version users (startup replay, no schema
+bump).** `migrateERPState` replays every material's trail on EVERY startup.
+Three bugs made it keep the stale trail instead of healing it:
 
-Two height bugs found by MEASURING in the preview, not by reading the code:
-the searchable select's clear button inflated the trigger to 50px (it is now a
-20px box), and the dropdown's `leading-tight` shrank it to 43px (now
-`leading-5`). Every control in a form row is 46px.
+1. The replay's forced-creation fallbacks topped up stock, then asserted
+   conservation against the **pre-top-up** baseline — guaranteed to throw
+   "expected change 0". They now pass `expectedDelta = pcsSent`.
+2. The stage stream replayed events in date order with **all sends before all
+   receipts**, so same-day receipts hadn't landed when their dispatches
+   replayed — the replay force-created the shortfall and inventory inflated.
+   Now: chain order (stage sequence), sends before receipts within a stage.
+3. A **batch path snapshot** on ONE batch hijacked the whole material's replay
+   (a full_chain snapshot inside a custom_stages material re-modelled every
+   dispatch). Now the replay always classifies under the material's CURRENT
+   config; snapshots are honoured only to recognise ready-made lots.
+   `consumeSaleStockFIFO` (replay only — live sales unchanged) falls back to
+   WIP/raw when the re-derived finished bucket can't cover a legacy sale.
 
-**Done — the type check is fast again.** It was never the config: see the trap
-table. `pnpm store status` → `pnpm install --force`. Now: tsgo 2.3s, biome
-4.1s, whole `npm run lint` **17s**, `npm test` **23s** (386 tests). The config
-fixes stay — `"types": []`, `*.test.tsx` excluded (the old pattern only
-excluded `*.test.ts`, so 9 test files were being type-checked), `incremental:
-true`, and `tsconfig.app.json` lost a `typeRoots` glob that walked all of
-`node_modules`.
+Verified against the real 2026-11-15 backup: **no conservation failures**,
+2,759 PCS re-queued (Circle 16 1/4: 629→0 finished; Circle 15 1/4: 104→0;
+Circle 13 1/2: 552→0; Circle 7 1/2 (0.9): 1,474→0), Press-only finished stock
+untouched (Circle 7 1/2 (0.6): 1,112; 6 1/2: 3,540; 7 1/4: 2,907 — their
+chain-final stage IS Press, so by the current-config rule they are finished).
+Total inventory value unchanged. The user's 06:56-style "still finished after
+re-expanding the material" is exactly this case — it heals on next startup.
+
+**Done — guardrails (Send form).** Material picker hides materials with
+nothing to send (ready-made + empty paths); qty input carries `max` and an
+`onChange` clamp with the message "Only N PCS are available for <stage>"; the
+submit guard (`overRequested`) stays as the backstop. Raw Materials page shows
+the re-queued PCS as dispatchable (e.g. Circle 13 1/2: "1,251 from Initial ·
+552 from Machine").
+
+**Done — Processors page (work list + counts).** New columns: **Ready to
+Work** (live PCS waiting at each processor's stage, computed per material's
+own chain — a general worker sees raw stock at the entry stage) and
+**This Month** (received/sent PCS). General workers pick up nothing outside
+their chain.
+
+**Done — mojibake ("ASCII errors") repaired system-wide.** Source: 4 files
+carried double/triple-encoded text (useERPStore.ts — user-facing AppError
+messages, voucher narrations, manufacturing remarks; processingStageSeed.ts —
+stage descriptions; WipBoard.tsx — card subtitles; crudActions.test.ts) — all
+repaired to correct UTF-8 (— · § × ÷ … ★). Data: the 2026-11-15 backup has
+exactly 3 affected strings (Initial/Machine/Acid stage descriptions) — a tiny
+`unmojibake` step in `migrateERPState` repairs them on next startup
+(Latin-1 byte round-trip, only strings consisting entirely of U+0000–U+00FF,
+nothing else touched; idempotent; regression-tested with the real strings).
+
+**Done — Material Detail (`/materials/:id`) and the preview sheet (Parts 1 & 2).**
+The material page now shows the whole purchase→processing story in one place:
+**Purchased** is a headline stat in the summary strip; the Batches register
+(the page's default) gained a **Purchased** column, a **TOTAL** footer, each
+batch's **per-stage flow line** under it (e.g. `Initial 1,042→1,042 · Machine
+707→707`), and dd-MMM-yyyy dates. The preview sheet (`RawMaterialPreview`)
+was rebuilt the same way: an **ALL BATCHES — TOTALS** strip (Purchased / Raw
+/ Waiting / WIP / Finished / On hand), every batch in one flat table with
+supplier, date, a "who holds them now" line, a **TOTAL** footer that always
+reconciles (verified: 1,042 = 1,022 Japan + 20 Sethi), purchase cost Σ and
+processing cost Σ in one line. Dispatches & receipts and Movement ledger
+section headers carry **filter dropdowns** (stage / event type).
+
+**Done — the 1,042 vs 1,022 mystery on PO-2026-0009 (it was legal, just
+truly invisible).** `DSP-2026-0018` drained 1,022 PCS from the Japan batch
+and 20 PCS from SETHI-PO-2026-0006 (oldest stock first, the engine's exact
+rule) — but the send carried no split, so the display showed the Japan
+purchase as the sole source. The page now recomputes the drain in the
+render with the engine's own order and shows the split on the row
+(`incl. 20 from SETHI-PO-2026-0006`) plus a footnote on the per-stage cost
+table stating the sibling's contribution and this purchase's 1,022 PCS.
+
+**Done — Processor Detail page (`/processors/:id`).** Per-processor
+workbench: Pending work (open dispatches oldest-first with material → batch
+trail link, stage, sent / received / pending), KPI cards (Pending work / In
+this month / Back this month / Balance payable), This month's receipts
+(dd-MMM-yyyy), View-ledger access to the processor's sub-ledger. The
+Processors table's name cell now links into it. Verified against the
+backup (Haji Arshad: 9 receipts, Rs 158,590 payable, Rs 165,000 debited,
+Rs 323,590 credited, 9 ledger entries).
+
+**Done — Print & PDF overhaul (unreleased, Phases 1–3).** One shared engine
+(`pdfEngine.ts`) for every document: measured header/footer (no overlap; the
+PG disclaimer gets its own line when it doesn't fit), `summaryRows`
+normalized so nested `[[{…}]]` reports can no longer render empty TOTAL rows,
+raw values + per-column `format` specs, and the Print & PDF page gained
+Currency (PKR default) / Decimals / Number locale / Date format (dd-MMM-yyyy
+default) plus a live "Printed documents will use" preview line and a "Print a
+sample statement" button. Print settings identity falls back to the live
+dashboard brand when the seed placeholder is still stored. Voucher History
+prints through the shared engine now (was raw HTML into a popup). The ledger
+statement PDF was verified end-to-end (correct header identity, footer
+"Printed By: Hamza Akram on 15-Nov-2026 · Page 1 of 1", PKR formats, flat
+TOTAL row).
 
 **The preview** (browser mirror of a real backup, for looking at UI changes):
 - build: `./node_modules/.bin/vite build` → `dist/`
-- data: `node %TEMP%\opencode\blob-from-fixed.cjs` writes
-  `dist/restore-blobs.json` from `Downloads\TODAY 11-11-FIXED.merpbak`
-  (re-run it AFTER every build — a build deletes the file)
-- serve: `node %TEMP%\opencode\preview-server.cjs "<dist>" 4181`
+- data: `node %TEMP%\opencode\blob-from-nov15.cjs` writes
+  `dist/restore-blobs.json` from `Downloads\manufacturing-erp-backup-2026-11-15.merpbak`
+  (re-run AFTER every build — a build deletes the file)
+- **4182 serves `<repo>\dist` (the live build); the 1.3.1 build output was
+  renamed to `w-raw-erp-1.3.1-ARCHIVE`** — releases always come from
+  `w-raw-erp` (the live repo).
+  `node %TEMP%\opencode\preview-server.cjs "<repo>\dist" 4182`
 - sign in: the session is `localStorage['offline-session']` =
-  `{id, email, expires_at}`; the admin id comes out of
+  `{id, email, expires_at}`; the admin id comes from
   `erp-access-storage` → `state.users[0].id`
+- restore blobs in the browser: fetch `/restore-blobs.json`, setItem every
+  key under its name, reload (the app suspends writes, so the mirror is
+  read-only — the re-derivation happens in memory on every load)
+
+**Environment traps that bit today (2026-11-15):**
+- The pnpm store re-corrupts mid-session — core-js `es.regexp.exec.js` went
+  274 B → 533,504 B MZP stub between a green build (13:42) and 13:47. Fix:
+  `pnpm store status` → `pnpm install --force` (delete the listed `.pnpm`
+  dirs first) → **build immediately**, don't trust the machine to stay clean.
+- The 4181 mirror serves the old release — verify against a fresh port (4182).
+
+**Done — Phase 1 & 2 performance work (startup flat, subscriptions selective).**
+- **Startup replay cache.** `migrateERPState` now stamps `trailVersion: 1`
+  after a clean full replay and SKIPS the per-material trail replay on
+  subsequent boots. First boot on the real backup replays as before; every
+  boot after that stays flat no matter how large the history grows. If any
+  material fails to replay, the marker is NOT stamped and the next boot
+  re-attempts (fail-closed, same as before). Regression tests cover both
+  paths (src/store/erpMigration.test.ts).
+- **Selector subscriptions.** All 59 whole-store `useERPStore()`/`useSettingsStore()`
+  calls converted to `useShallow` grouped selectors — the app no longer
+  re-renders 59 components on every unrelated state change. Round-trip guard:
+  `ERP_STORAGE_DATA_KEYS` allowlist + `partializeERPState` test proves the
+  persisted shape can never silently lose keys (src/store/useERPStore.persist.test.ts).
+- **`partialize` persist allowlist** on the erp-storage persist — only data
+  keys are ever written; explicit, tested, additive.
+- **Debounced search** in DataTable via `useDeferredValue` — keystrokes no
+  longer run the filter on the hot path.
+- **`React.memo`** added where prop-compare is provably correct:
+  `BucketBar` (custom value-compare), `LedgerTable` (array-ref compare),
+  `StageProgressStepper` (stable stage-ref + id-list compare).
+- **Virtualization — intentionally NOT added.** Every long list in the app is
+  already bounded by incremental rendering (LedgerStatement: 250-row windows +
+  "show more"; movements on MaterialDetail: 200 + "show more"; DataTable:
+  memoized 25/50/100 paging). Adding react-virtual would be speculative
+  complexity for ≤250-row DOM trees; revisit when any list exceeds ~500
+  rendered rows.
+- Verified: tsgo 0, biome 0, **410 tests green**, lint.sh 0, boots clean on
+  the real 2026-11-15 backup with **zero console errors**.
+
+**Next (Phase 3 — not started, ask to proceed):** split the single 576 KB
+erp-storage blob into per-store slices or move hot reads to the relational
+tables (the ~30 SQLite indexes are currently decorative — reads never touch
+them); route-level code splitting (2.88 MB initial bundle → ~400 KB);
+action-level SQL for hot paths.

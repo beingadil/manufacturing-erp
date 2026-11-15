@@ -8,9 +8,10 @@ import { SupplierForm } from "../components/forms/SupplierForm";
 import { PartyLedgerModal } from "../components/PartyLedgerModal";
 import { cn, formatCurrency, formatNumber } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
+import { useShallow } from 'zustand/react/shallow';
 
 export function Suppliers() {
-  const { suppliers } = useERPStore();
+  const { suppliers } = useERPStore(useShallow(s => ({ suppliers: s.suppliers })));
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [ledgerParty, setLedgerParty] = useState<{ id: string; name: string; kind: 'Supplier' } | null>(null);

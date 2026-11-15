@@ -601,6 +601,77 @@ export class InventoryCalculationService {
   }
 
   /**
+   * Sale consumption for the STARTUP REPLAY only. History recorded a sale;
+   * the pcs must leave inventory even when the re-derived trail offers less
+   * finished stock than the sale discharged (this is exactly what the
+   * 1.3.6-era bug produced: "finished" pcs that never reached the final
+   * stage, then a sale that consumed them). After pcs are taken from the
+   * finished bucket FIFO, the remainder is drawn WIP-first (waiting pcs,
+   * earliest source stage first) and finally raw, per batch, oldest batch
+   * first — the same physical fallback the manufacturing-order replay uses.
+   * Buckets stay disjoint and the drain is conservation-checked by the
+   * caller's assertConservation downstream.
+   *
+   * Live sales keep consumeFinishedFIFO — the sale form guards availability
+   * before posting, so the fallback can never silently rewrite what a live
+   * sale discharges.
+   */
+  static consumeSaleStockFIFO(materialId: string, pcsSold: number, batches: Batch[], stages: ProcessingStage[] = []): Batch[] {
+    // 1. Finished first (identical semantics to consumeFinishedFIFO).
+    const out = this.consumeFinishedFIFO(materialId, pcsSold, batches);
+    const consumed = this.consumedFinishedPcs(materialId, batches, out);
+    let remaining = Math.max(0, pcsSold - consumed);
+    if (remaining <= 1e-9) return out;
+
+    // 2. Waiting (WIP) buckets, earliest source stage first, then raw —
+    //    oldest batch first, mirroring the finished-bucket FIFO order.
+    const sequenceOf = (stageId: string) => stages.find(s => s.id === stageId)?.sequence ?? Number.MAX_SAFE_INTEGER;
+    const order = out
+      .map((b, index) => ({ b, index }))
+      .filter(({ b }) => b.materialId === materialId && b.status === 'Active')
+      .sort((a, b2) => a.b.date.localeCompare(b2.b.date) || a.index - b2.index);
+
+    for (const { index } of order) {
+      if (remaining <= 1e-9) break;
+      const batch = out[index];
+      const avail = { ...(batch.stageAvailableBySource || {}) };
+      const sourceIds = Object.keys(avail).sort((sa, sb) => sequenceOf(sa) - sequenceOf(sb) || sa.localeCompare(sb));
+      let changed = false;
+      for (const sid of sourceIds) {
+        if (remaining <= 1e-9) break;
+        const take = Math.min(Math.max(0, avail[sid] || 0), remaining);
+        if (take <= 0) continue;
+        avail[sid] = (avail[sid] || 0) - take;
+        if (avail[sid] <= 1e-9) delete avail[sid];
+        remaining -= take;
+        changed = true;
+      }
+      let next = changed ? { ...batch, stageAvailableBySource: avail } : batch;
+      if (remaining > 1e-9) {
+        const raw = Math.max(0, next.remainingPcs || 0);
+        const take = Math.min(raw, remaining);
+        if (take > 0) {
+          next = { ...next, remainingPcs: Math.max(0, raw - take) };
+          remaining -= take;
+        }
+      }
+      out[index] = next;
+    }
+    return out;
+  }
+
+  /** How many finished pcs the FIFO deduction actually took (diagnostic for consumeSaleStockFIFO). */
+  private static consumedFinishedPcs(materialId: string, before: Batch[], after: Batch[]): number {
+    let taken = 0;
+    for (const b of before) {
+      if (b.materialId !== materialId) continue;
+      const a = after.find(x => x.id === b.id);
+      taken += Math.max(0, (b.processedPcs || 0) - (a?.processedPcs || 0));
+    }
+    return taken;
+  }
+
+  /**
    * Consume finished pcs FIFO across batches (oldest batch first) and return the
    * updated batch list with the sold pcs removed from each batch's processedPcs.
    */
@@ -657,10 +728,17 @@ export class InventoryCalculationService {
     // Single-stage materials finish at their ONE fixed stage — the receipt IS
     // the final product regardless of where that stage sits in the chain.
     if (material?.processingPath === 'single_stage') return !!material.fixedStageId && stageId === material.fixedStageId;
-    // Custom-stages materials finish at the LAST selected stage (chain order).
+    // Custom-stages materials finish at the LAST SELECTED stage in CHAIN
+    // order — not at the last ticked in the config array. The config array
+    // preserves tick order and says nothing about chain position, so Machine
+    // receipts were forever marked "finished" whenever Machine happened to be
+    // ticked last despite Press/Acid/Polish/Spot never being reached.
     if (material?.processingPath === 'custom_stages') {
-      const selected = material.allowedStageIds || [];
-      return selected.length > 0 && stageId === selected[selected.length - 1];
+      const selected = (material.allowedStageIds || [])
+        .map(id => stages.find(s => s.id === id))
+        .filter((s): s is ProcessingStage => !!s)
+        .sort((a, b) => a.sequence - b.sequence);
+      return selected.length > 0 && stageId === selected[selected.length - 1].id;
     }
     if (!stageId) return true;
     const stage = stages.find(s => s.id === stageId);
@@ -787,10 +865,14 @@ export class InventoryCalculationService {
     material?: Pick<RawMaterial, 'processingPath' | 'fixedStageId' | 'allowedStageIds'>,
     manufacturingOrders: ManufacturingOrder[] = []
   ): Batch[] {
-    // Batch-carried path snapshot wins: the trail must replay under the path
-    // the pcs were BOUGHT under, even if the material's path was edited later.
-    const pathSource = (batches.find(b => b.materialId === materialId && b.processingPath)) || material;
-    const pathMaterial = pathSource ? { processingPath: pathSource.processingPath, fixedStageId: pathSource.fixedStageId, allowedStageIds: pathSource.allowedStageIds } : undefined;
+    // Batch-carried path snapshot is honoured ONLY to spot ready-made lots
+    // bought ready-made (finished at birth, never re-processed). The replay
+    // trail itself classifies against the material's CURRENT config: a stale
+    // snapshot from an older limited config must not strand pcs in a stage
+    // the material no longer follows ("live recompute of current config").
+    const pathMaterial = material
+      ? { processingPath: material.processingPath, fixedStageId: material.fixedStageId, allowedStageIds: material.allowedStageIds }
+      : undefined;
     const pathOfBatch = (b: Batch): string => b.processingPath ?? pathMaterial?.processingPath ?? 'full_chain';
     // 1. Reset this material's batches to the purchase baseline (all raw).
     //    Ready-made batches are FINISHED at purchase by definition — they are
@@ -848,7 +930,10 @@ export class InventoryCalculationService {
           b.id === oldest.id ? { ...b, remainingPcs: (b.remainingPcs || 0) + (s.pcsSent || 0) } : b
         );
         trail = this.moveRawToProcessor(materialId, s.pcsSent || 0, topped, oldest.id).batches;
-        this.assertConservation(materialId, before, trail);
+        // The top-up ADDS pcs to inventory by design (history is authoritative —
+        // a purchase edited smaller afterwards must not strand the trail).
+        // Conservation is checked INCLUDING the created pcs.
+        this.assertConservation(materialId, before, trail, s.pcsSent || 0);
       }
     }
 
@@ -858,20 +943,35 @@ export class InventoryCalculationService {
       trail = this.attributeLossFIFO(materialId, s.lossQuantity || 0, trail, s.batchId || undefined);
     }
 
-    // 3+4. Receipts and intermediate-stage moves replay in ONE chronological
-    //      stream so per-source availability forms exactly as it did live.
-    const stageEvents = [
+    // 3+4. Receipts and intermediate-stage moves replay in ONE stream.
+    //      Pcs flow FORWARD through the chain, so events are replayed in
+    //      chain order: everything at stage k (sends that draw stage k's
+    //      input, then receipts that complete stage k) happens before stage
+    //      k+1 sees anything. Within a stage, sends replay before receipts —
+    //      a receipt can only drain pcs its own send deposited. Any other
+    //      order force-creates "missing" pcs and inflates inventory by the
+    //      same-stage discrepancy.
+    type StageEvent =
+      | { kind: 'send'; date: string; s: ProcessingSend; r?: undefined; send?: undefined }
+      | { kind: 'receipt'; date: string; r: ProcessingReceipt; send?: ProcessingSend; s?: undefined };
+    const sequenceOf = (stageId?: string) => stages.find(st => st.id === stageId)?.sequence ?? Number.MAX_SAFE_INTEGER;
+    const stageEvents: StageEvent[] = [
       ...orderedSends
         .filter(s => !this.sendConsumesRaw(s.stageId, stages, pathMaterial))
         .map(s => ({ kind: 'send' as const, date: s.date || '', s })),
       ...[...processingReceipts]
         .filter(r => r.materialId === materialId && (r.pcsReceived || 0) > 0)
-        .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
         .map(r => {
           const send = processingSends.find(x => x.id === r.sendId);
           return { kind: 'receipt' as const, date: r.date || '', r, send };
         }),
-    ].sort((a, b) => a.date.localeCompare(b.date));
+    ].sort((a, b) => {
+      const sa = sequenceOf(a.kind === 'send' ? a.s.stageId : a.r.stageId ?? a.send?.stageId);
+      const sb = sequenceOf(b.kind === 'send' ? b.s.stageId : b.r.stageId ?? b.send?.stageId);
+      if (sa !== sb) return sa - sb;
+      if (a.kind !== b.kind) return a.kind === 'send' ? -1 : 1;
+      return a.date.localeCompare(b.date);
+    });
 
     for (const ev of stageEvents) {
       if (ev.kind === 'send') {
@@ -899,7 +999,8 @@ export class InventoryCalculationService {
                 : b
             );
             trail = this.moveAvailableToProcessor(materialId, source, s.pcsSent || 0, trail, host.id).batches;
-            this.assertConservation(materialId, before, trail);
+            // Top-up creates the pcs history overran — conservation holds INCLUDING them.
+            this.assertConservation(materialId, before, trail, s.pcsSent || 0);
           }
         }
       } else {
@@ -937,7 +1038,10 @@ export class InventoryCalculationService {
       )
       .sort((a, b) => a.date.localeCompare(b.date));
     for (const sale of orderedSales) {
-      trail = this.consumeFinishedFIFO(materialId, sale.pcsSold, trail);
+      // Finished FIFO first, then the WIP/raw fallback — history recorded the
+      // sale, so its pcs must leave inventory even if the re-derived trail
+      // offers less finished stock than the sale discharged.
+      trail = this.consumeSaleStockFIFO(materialId, sale.pcsSold, trail, stages);
     }
 
     // 6. Completed manufacturing orders draw their recorded components LAST.

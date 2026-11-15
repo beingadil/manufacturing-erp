@@ -14,9 +14,10 @@ import { formatNumber } from '../lib/utils';
 import { CategoryService } from '../services/CategoryService';
 import { useERPStore } from '../store/useERPStore';
 import { MaterialCategory, ProcessingPath } from '../types/erp';
+import { useShallow } from 'zustand/react/shallow';
 
 export default function Categories() {
-  const { categories, materials, addCategory, updateCategory } = useERPStore();
+  const { categories, materials, addCategory, updateCategory } = useERPStore(useShallow(s => ({ categories: s.categories, materials: s.materials, addCategory: s.addCategory, updateCategory: s.updateCategory })));
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<MaterialCategory | null>(null);

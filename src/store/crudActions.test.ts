@@ -6,8 +6,8 @@ import { createCRUDActions } from './crudActions';
  * (deleteProcessingSend / deleteProcessingReceipt / deleteProcessorBill).
  *
  * The two guarantees that matter:
- *  1. Deleting a dispatch/receipt fully reverses stock AND the batch trail â€”
- *     including legacy no-batch dispatches and FIFO-across-multiple-batches â€”
+ *  1. Deleting a dispatch/receipt fully reverses stock AND the batch trail —
+ *     including legacy no-batch dispatches and FIFO-across-multiple-batches —
  *     so the same pcs are never counted twice and nothing is silently wiped.
  *  2. Deleting a dispatch CASCADES: its receipts are removed with it and any
  *     processor bills covering them are reversed (vouchers deleted) in one
@@ -262,10 +262,10 @@ describe('deleteProcessingReceipt', () => {
     actions.deleteProcessingReceipt('recA');
     const s = getState();
 
-    // Send keeps the OTHER receipt's 600 pcs â€” not zeroed
+    // Send keeps the OTHER receipt's 600 pcs — not zeroed
     expect(s.processingSends[0].pcsReceived).toBe(600);
     expect(s.processingSends[0].status).toBe('Partial');
-    // Material: finished 1000 â†’ 600, WIP back to 400
+    // Material: finished 1000 → 600, WIP back to 400
     expect(s.materials[0].processedStockPcs).toBe(600);
     expect(s.materials[0].atProcessorPcs).toBe(400);
     // Batch trail rebuilt from remaining receipts
@@ -330,14 +330,14 @@ describe('deleteProcessorBill', () => {
     expect(s.processingReceipts[0].billedStatus).toBe('Unbilled');
     // Balance is NOT touched in-state: AccountingEngine.recomputePartyBalances()
     // derives it from the linked account's COMPLETE ledger after every mutation
-    // (spec Â§14), so the record here is left untouched by the delete.
+    // (spec §14), so the record here is left untouched by the delete.
     expect(s.processors[0].balancePayable).toBe(5000);
     expect(s.vouchers).toHaveLength(0);
     expect(s.journalEntries).toHaveLength(0);
   });
 });
 
-describe('updatePurchase â€” material change fallback', () => {
+describe('updatePurchase — material change fallback', () => {
   const purchase = {
     id: 'p1', purchaseNo: 'PUR-1', supplierId: 's1', materialId: 'm1',
     date: '2026-01-01', weight: 1000, weightUnit: 'KG', ratePerUnit: 100,
@@ -363,7 +363,7 @@ describe('updatePurchase â€” material change fallback', () => {
     ...overrides
   });
 
-  it('never dispatched â†’ moves the lot to raw stock of the new material (no confirmation needed)', () => {
+  it('never dispatched → moves the lot to raw stock of the new material (no confirmation needed)', () => {
     const { actions, getState } = setup(baseState({
       inventoryMovements: [
         { id: 'im1', materialId: 'm1', batchId: 'b1', referenceNo: 'PUR-1', module: 'Purchase', transactionType: 'IN', quantity: 4000, runningBalance: 4000, date: '2026-01-01' }
@@ -385,7 +385,7 @@ describe('updatePurchase â€” material change fallback', () => {
     expect(s.inventoryMovements[0].materialId).toBe('m2');
   });
 
-  it('already dispatched â†’ refuses without the confirmation flag', () => {
+  it('already dispatched → refuses without the confirmation flag', () => {
     const withSend = baseState({
       materials: [
         { id: 'm1', stockPcs: 0, atProcessorPcs: 4000, processedStockPcs: 0 },
@@ -409,7 +409,7 @@ describe('updatePurchase â€” material change fallback', () => {
     expect(getState().processingSends).toHaveLength(1);
   });
 
-  it('already dispatched + received â†’ confirmed change deletes dispatch and receipts and falls back to raw', () => {
+  it('already dispatched + received → confirmed change deletes dispatch and receipts and falls back to raw', () => {
     const { actions, getState } = setup(baseState({
       materials: [
         { id: 'm1', stockPcs: 0, atProcessorPcs: 0, processedStockPcs: 4000 },
@@ -482,7 +482,7 @@ describe('updatePurchase â€” material change fallback', () => {
     expect(getState().processingReceipts).toHaveLength(1);
   });
 
-  it('ready-made lot re-headed â†’ automatic fallback (no confirmation demanded)', () => {
+  it('ready-made lot re-headed → automatic fallback (no confirmation demanded)', () => {
     const { actions, getState } = setup(baseState({
       materials: [
         { id: 'm1', name: 'Kalsii', stockPcs: 0, atProcessorPcs: 0, processedStockPcs: 1000, processingPath: 'ready_made' },
@@ -511,7 +511,7 @@ describe('updatePurchase â€” material change fallback', () => {
     expect(s.materials.find((m: any) => m.id === 'm2').processedStockPcs).toBe(1000);
   });
 
-  it('weight edited but material unchanged â†’ ordinary diff path still works', () => {
+  it('weight edited but material unchanged → ordinary diff path still works', () => {
     const { actions, getState } = setup(baseState());
     actions.updatePurchase('p1', {
       supplierId: 's1', materialId: 'm1', date: '2026-01-01',

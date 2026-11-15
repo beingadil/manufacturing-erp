@@ -19,6 +19,7 @@ import { FormSection } from '../form/FormSection';
 import { formHintClass, formInputClass } from '../form/formStyles';
 import { Dropdown } from '../Dropdown';
 import { SearchableSelect } from '../SearchableSelect';
+import { useShallow } from 'zustand/react/shallow';
 
 export interface MaterialFormProps {
   /** Edit mode when a material is supplied; add mode otherwise. */
@@ -51,7 +52,7 @@ const USAGE_OPTIONS = [
 ];
 
 export function MaterialForm({ material, onSaved, onCancel, formId, showFooter = true }: MaterialFormProps) {
-  const { materials, categories, processingStages } = useERPStore();
+  const { materials, categories, processingStages } = useERPStore(useShallow(s => ({ materials: s.materials, categories: s.categories, processingStages: s.processingStages })));
 
   const [name, setName] = useState(material?.name ?? '');
   // The "No." a person reads out with the name — "Circle 12½ Inch, No. 4 No".

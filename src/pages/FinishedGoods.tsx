@@ -16,9 +16,10 @@ import { isManufacturingEnabled, lotAverageCost, lotStockForProduct, buildableQt
 import { cn, formatCurrency, formatNumber } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
 import type { ProductComponent, ProductUsageType } from "../types/erp";
+import { useShallow } from 'zustand/react/shallow';
 
 export function FinishedGoods() {
-  const { products, materials, categories, sales, batches, finishedGoodsLots, manufacturingOrders, stateSchemaVersion, addProduct, updateModuleItem, removeModuleItem, produceForProduct } = useERPStore();
+  const { products, materials, categories, sales, batches, finishedGoodsLots, manufacturingOrders, stateSchemaVersion, addProduct, updateModuleItem, removeModuleItem, produceForProduct } = useERPStore(useShallow(s => ({ products: s.products, materials: s.materials, categories: s.categories, sales: s.sales, batches: s.batches, finishedGoodsLots: s.finishedGoodsLots, manufacturingOrders: s.manufacturingOrders, stateSchemaVersion: s.stateSchemaVersion, addProduct: s.addProduct, updateModuleItem: s.updateModuleItem, removeModuleItem: s.removeModuleItem, produceForProduct: s.produceForProduct })));
   const navigate = useNavigate();
 
   const v4 = isManufacturingEnabled({ stateSchemaVersion });

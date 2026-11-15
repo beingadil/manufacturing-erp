@@ -20,6 +20,7 @@ import { useERPStore } from '../../store/useERPStore';
 import { QuickAddProcessor } from '../../components/QuickAddModals';
 import { SearchableSelect } from '../../components/SearchableSelect';
 import { DatePicker } from '../../components/ui/date-picker';
+import { useShallow } from 'zustand/react/shallow';
 
 const control =
   'w-full min-w-0 rounded-xl border border-border bg-card px-3 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none';
@@ -43,7 +44,7 @@ export default function ReceiveFormPage() {
   const navigate = useNavigate();
   const isEdit = Boolean(editId);
 
-  const { materials, processors, processingSends, processingReceipts, processingStages } = useERPStore();
+  const { materials, processors, processingSends, processingReceipts, processingStages } = useERPStore(useShallow(s => ({ materials: s.materials, processors: s.processors, processingSends: s.processingSends, processingReceipts: s.processingReceipts, processingStages: s.processingStages })));
 
   const [processorId, setProcessorId] = useState('');
   const [lines, setLines] = useState<ReceiveLine[]>([newLine()]);

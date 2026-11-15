@@ -7,9 +7,10 @@ import { ErrorManagement } from '../lib/validation';
 import { useERPStore } from '../store/useERPStore';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import { ModalOverlay } from './ui/ModalOverlay';
+import { useShallow } from 'zustand/react/shallow';
 
 export function VoucherDetailModal({ voucherId, onClose }: { voucherId: string, onClose: () => void }) {
-  const { vouchers, journalEntries, accounts } = useERPStore();
+  const { vouchers, journalEntries, accounts } = useERPStore(useShallow(s => ({ vouchers: s.vouchers, journalEntries: s.journalEntries, accounts: s.accounts })));
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'entries' | 'audit'>('entries');
   const [confirmOpen, setConfirmOpen] = useState(false);

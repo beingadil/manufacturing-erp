@@ -5,6 +5,7 @@ import { AccountType, } from '../types/erp';
 import { Dropdown } from './Dropdown';
 import { SearchableSelect } from './SearchableSelect';
 import { ModalOverlay } from './ui/ModalOverlay';
+import { useShallow } from 'zustand/react/shallow';
 
 interface Props {
   isOpen: boolean;
@@ -17,7 +18,7 @@ interface Props {
 const TYPES: AccountType[] = ["Assets", "Liabilities", "Equity", "Revenue", "Cost of Goods Sold", "Expenses", "Other Income", "Other Expenses"];
 
 export function AddAccountModal({ isOpen, onClose, onSave, editAccountId, quickAddType }: Props) {
-  const { addAccount, updateAccount, accountSubtypes, accounts } = useERPStore();
+  const { addAccount, updateAccount, accountSubtypes, accounts } = useERPStore(useShallow(s => ({ addAccount: s.addAccount, updateAccount: s.updateAccount, accountSubtypes: s.accountSubtypes, accounts: s.accounts })));
   
   const [name, setName] = useState('');
   const [type, setType] = useState<AccountType>('Assets');

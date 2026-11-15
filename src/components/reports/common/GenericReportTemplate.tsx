@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { exportToCSV, exportToExcel } from '../../../lib/exportUtils';
 import { generateEnterpriseDocument } from '../../../lib/pdfEngine';
+import type { PrintSummaryRow } from '../../../lib/print/documentSpec';
 import { Column, DataTable } from '../../DataTable';
 import { ReportFilterBar } from './ReportFilterBar';
 import { ReportKPICard } from './ReportKPICard';
@@ -22,7 +23,8 @@ export interface GenericReportTemplateProps<T extends Record<string, any>> {
   onSearch: (q: string) => void;
   exportColumns?: { header: string; dataKey: string }[];
   exportDataMapping?: (item: T) => any;
-  summaryRows?: any[][];
+  /** Flat rows preferred; the legacy nested shape is accepted and normalized. */
+  summaryRows?: Array<PrintSummaryRow | PrintSummaryRow[]>;
   /** Hide the date-range filter when the report is point-in-time (e.g. stock levels). */
   showDateRange?: boolean;
   /** Title shown above the table card; defaults to "Detailed Report". */

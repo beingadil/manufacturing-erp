@@ -28,6 +28,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { cn } from "../lib/utils";
 import { MODULE_WIPE_KEYS, useERPStore, WIPE_MODULE_LABELS } from "../store/useERPStore";
 import { useSettingsStore } from "../store/useSettingsStore";
+import { useShallow } from 'zustand/react/shallow';
 
 export function Settings() {
   const [activeTab, setActiveTab] = useState('profile');
@@ -114,7 +115,7 @@ export function Settings() {
 // ----------------------------------------------------------------------
 
 function ProfileTab({ onSave, showSavedToast }: { onSave: () => void, showSavedToast: boolean }) {
-  const { userName, userEmail, profilePhoto, setProfile } = useSettingsStore();
+  const { userName, userEmail, profilePhoto, setProfile } = useSettingsStore(useShallow(s => ({ userName: s.userName, userEmail: s.userEmail, profilePhoto: s.profilePhoto, setProfile: s.setProfile })));
   const [name, setName] = useState(userName);
   const [email, setEmail] = useState(userEmail);
   const [photo, setPhoto] = useState(profilePhoto);
@@ -215,7 +216,7 @@ function BrandingTab({ onSave, showSavedToast }: { onSave: () => void, showSaved
   // change -> infinite re-render -> "Maximum update depth exceeded" crash on
   // this tab. Destructuring the full store is the same stable pattern the other
   // settings tabs use.
-  const { dashboardName, tagline, logo, logoPosition, favicon, primaryColor, secondaryColor, setBranding, resetLogo } = useSettingsStore();
+  const { dashboardName, tagline, logo, logoPosition, favicon, primaryColor, secondaryColor, setBranding, resetLogo } = useSettingsStore(useShallow(s => ({ dashboardName: s.dashboardName, tagline: s.tagline, logo: s.logo, logoPosition: s.logoPosition, favicon: s.favicon, primaryColor: s.primaryColor, secondaryColor: s.secondaryColor, setBranding: s.setBranding, resetLogo: s.resetLogo })));
 
   const [local, setLocal] = useState({ dashboardName, tagline, logo, logoPosition, favicon, primaryColor, secondaryColor });
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -411,7 +412,7 @@ function BrandingTab({ onSave, showSavedToast }: { onSave: () => void, showSaved
 }
 
 function PreferencesTab() {
-  const { theme, setTheme } = useSettingsStore();
+  const { theme, setTheme } = useSettingsStore(useShallow(s => ({ theme: s.theme, setTheme: s.setTheme })));
 
   // Theme applies instantly on click (platform convention for appearance
   // switches, same model as the AI tab) — so this tab deliberately has no
@@ -706,10 +707,7 @@ function AdvancedTab() {
 
 
 function VoucherNumberingTab({ onSave, showSavedToast }: { onSave: () => void, showSavedToast: boolean }) {
-  const {
-    voucherYearlyReset, voucherPrefixes, setVoucherPrefixes, setVoucherYearlyReset,
-    documentPrefixes, setDocumentPrefixes, batchNoMode, setBatchNoMode,
-  } = useSettingsStore();
+  const { voucherYearlyReset, voucherPrefixes, setVoucherPrefixes, setVoucherYearlyReset, documentPrefixes, setDocumentPrefixes, batchNoMode, setBatchNoMode } = useSettingsStore(useShallow(s => ({ voucherYearlyReset: s.voucherYearlyReset, voucherPrefixes: s.voucherPrefixes, setVoucherPrefixes: s.setVoucherPrefixes, setVoucherYearlyReset: s.setVoucherYearlyReset, documentPrefixes: s.documentPrefixes, setDocumentPrefixes: s.setDocumentPrefixes, batchNoMode: s.batchNoMode, setBatchNoMode: s.setBatchNoMode })));
 
   const [localPrefixes, setLocalPrefixes] = useState<Record<string, string>>({ ...voucherPrefixes });
   const [localYearlyReset, setLocalYearlyReset] = useState(voucherYearlyReset);
@@ -912,7 +910,7 @@ function VoucherNumberingTab({ onSave, showSavedToast }: { onSave: () => void, s
 }
 
 function AboutUpdatesTab() {
-  const { dashboardName, tagline, logo } = useSettingsStore();
+  const { dashboardName, tagline, logo } = useSettingsStore(useShallow(s => ({ dashboardName: s.dashboardName, tagline: s.tagline, logo: s.logo })));
   const [updateStatus, setUpdateStatus] = useState<{
     status: string;
     message: string;

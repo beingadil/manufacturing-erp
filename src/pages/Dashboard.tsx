@@ -14,16 +14,13 @@ import { DashboardSummaryService } from '../lib/dashboard/DashboardSummaryServic
 import { FinancialReportService } from '../lib/reporting/FinancialReportService';
 import { adaptiveAmountClass, cn, formatCurrency, } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
+import { useShallow } from 'zustand/react/shallow';
 
 type Preset = 'today' | 'week' | 'month' | 'year' | 'custom';
 
 export function Dashboard() {
   const { profile, isAdmin, dataPolicies } = useAuth();
-  const {
-    materials, processors, suppliers, customers, processorBills,
-    sales, purchases, products, accounts, journalEntries, vouchers, accountSubtypes,
-    batches, processingSends, processingReceipts, processingStages,
-  } = useERPStore();
+  const { materials, processors, suppliers, customers, processorBills, sales, purchases, products, accounts, journalEntries, vouchers, accountSubtypes, batches, processingSends, processingReceipts, processingStages } = useERPStore(useShallow(s => ({ materials: s.materials, processors: s.processors, suppliers: s.suppliers, customers: s.customers, processorBills: s.processorBills, sales: s.sales, purchases: s.purchases, products: s.products, accounts: s.accounts, journalEntries: s.journalEntries, vouchers: s.vouchers, accountSubtypes: s.accountSubtypes, batches: s.batches, processingSends: s.processingSends, processingReceipts: s.processingReceipts, processingStages: s.processingStages })));
   const navigate = useNavigate();
 
   const arControlAccount = getSystemAccountBySubtype(accounts, accountSubtypes, 'Accounts Receivable');

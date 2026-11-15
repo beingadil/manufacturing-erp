@@ -2,33 +2,23 @@ import { format } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Desktop } from './desktop/DesktopInterop';
-import { formatPrintCurrency, formatPrintDate, getPrintSettings } from './print/printSettings';
+import { formatPrintCurrency, formatPrintDate, formatPrintNumber, getPrintSettings } from './print/printSettings';
+import {
+  normalizeSummaryRows,
+  type PrintColumn,
+  type PrintDocument,
+  type PrintTable,
+  type PrintValueFormat,
+} from './print/documentSpec';
 
-export interface PDFTableColumn {
-  header: string;
-  dataKey: string;
-  align?: 'left' | 'center' | 'right';
-  width?: number;
-}
+export type { PrintColumn, PrintDocument, PrintTable, PrintValueFormat };
 
-export interface PDFTableConfig {
-  columns: PDFTableColumn[];
-  rows: any[];
-  summaryRows?: any[];
-  theme?: 'striped' | 'grid' | 'plain';
-}
-
-export interface PDFDocumentConfig {
-  title: string;
-  documentNo?: string;
-  subtitle?: string;
-  filters?: { label: string; value: string }[];
-  tables: PDFTableConfig[];
-  orientation?: 'portrait' | 'landscape';
-  action?: 'download' | 'print' | 'blob';
-  filename?: string;
-  infoBlock?: { label: string; value: string }[][];
-}
+/** @deprecated Use PrintColumn from ./print/documentSpec — the format field is new. */
+export interface PDFTableColumn extends PrintColumn {}
+/** @deprecated Use PrintTable from ./print/documentSpec. */
+export interface PDFTableConfig extends PrintTable {}
+/** @deprecated Use PrintDocument from ./print/documentSpec. */
+export interface PDFDocumentConfig extends PrintDocument {}
 
 export async function generateEnterpriseDocument(config: PDFDocumentConfig) {
   const {
@@ -98,22 +88,33 @@ export async function generateEnterpriseDocument(config: PDFDocumentConfig) {
 
   const fullWidth = pageWidth - margins.left - margins.right;
 
+  // The document title is right-aligned. Its width is reserved FIRST so the
+  // company identity block can never grow into it — measured, not guessed.
+  const isCenter = logoPosition === 'center';
+  const titleX = logoPosition === 'left' ? pageWidth - margins.right : pageWidth / 2;
+  const titleAlign = logoPosition === 'left' ? 'right' : 'center';
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(17);
+  const titleWidth = doc.getTextWidth(title.toUpperCase());
+  const titleReserve = titleAlign === 'right' ? titleWidth + 16 : 0;
+
   let companyX = margins.left;
-  let companyMaxW = fullWidth;
+  let companyMaxW = Math.max(120, fullWidth - titleReserve);
   if (logoDrawn && logoPosition === 'left') {
     companyX = logoSize + margins.left + 12;
-    companyMaxW = fullWidth - logoSize - 12;
+    companyMaxW = Math.max(120, fullWidth - titleReserve - logoSize - 12);
   } else if (logoDrawn && logoPosition === 'right') {
-    companyMaxW = fullWidth - logoSize - 12;
+    companyMaxW = Math.max(120, fullWidth - titleReserve - logoSize - 12);
   }
-  const isCenter = logoPosition === 'center';
-  const companyAlign = isCenter ? 'center' : 'left';
   const textAlignX = isCenter ? pageWidth / 2 : companyX;
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(15);
   doc.setTextColor(...accentRgb);
-  doc.text(company.name, textAlignX, currentY + (isCenter ? logoSize + 12 : 0), { align: companyAlign, maxWidth: companyMaxW });
+  doc.text(company.name, textAlignX, currentY + (isCenter ? logoSize + 12 : 0), {
+    align: isCenter ? 'center' : 'left',
+    maxWidth: companyMaxW,
+  });
 
   // Address lines under the company name
   let identityY = currentY + (isCenter ? logoSize + 22 : 12);
@@ -129,14 +130,12 @@ export async function generateEnterpriseDocument(config: PDFDocumentConfig) {
       .filter(Boolean);
     if (webTax.length) lines.push(webTax.join('  |  '));
     lines.forEach((line, i) => {
-      doc.text(line, textAlignX, identityY + i * 10, { align: companyAlign, maxWidth: companyMaxW });
+      doc.text(line, textAlignX, identityY + i * 10, { align: isCenter ? 'center' : 'left', maxWidth: companyMaxW });
     });
     identityY += lines.length * 10 + 8;
   }
 
   // Document title. Placement follows the logo column layout.
-  const titleX = logoPosition === 'left' ? pageWidth - margins.right : pageWidth / 2;
-  const titleAlign = logoPosition === 'left' ? 'right' : 'center';
   const titleTop = isCenter ? currentY + logoSize + 12 : currentY;
   const titleY = logoDrawn && !isCenter ? currentY + logoSize + 14 : titleTop + 6;
   doc.setFont('helvetica', 'bold');
@@ -213,32 +212,33 @@ export async function generateEnterpriseDocument(config: PDFDocumentConfig) {
     if (idx > 0) currentY += 18;
 
     const head = [tableConfig.columns.map(c => c.header)];
-    const body = tableConfig.rows.map((row) =>
-      tableConfig.columns.map((c) => {
-        const val = row[c.dataKey];
-        if (val === undefined || val === null) return '';
-        // Currency columns: always 2 decimals
-        const lowerKey = c.dataKey.toLowerCase();
-        const isCurrency = ['amount', 'total', 'balance', 'debit', 'credit', 'rate', 'value', 'pcs', 'price'].some(
-          (k) => lowerKey.includes(k)
-        );
-        if (isCurrency && typeof val === 'number') return formatPrintCurrency(val);
-        return String(val);
-      })
-    );
-    const foot = tableConfig.summaryRows
-      ? tableConfig.summaryRows.map((row) =>
-          tableConfig.columns.map((c) => {
-            const val = row[c.dataKey];
-            if (val === undefined || val === null) return '';
-            const lowerKey = c.dataKey.toLowerCase();
-            const isCurrency = ['amount', 'total', 'balance', 'debit', 'credit', 'rate', 'value', 'pcs', 'price'].some(
-              (k) => lowerKey.includes(k)
-            );
-            if (isCurrency && typeof val === 'number') return formatPrintCurrency(val);
-            return String(val);
-          })
-        )
+
+    // A column's value is formatted by its declared format, so the document
+    // obeys the Print & PDF output settings (currency, decimals, locale, date
+    // format) instead of every generator pre-formatting with its own
+    // hardcoded formatter. Columns with no format keep their raw text.
+    const renderCell = (row: Record<string, unknown>, column: PrintColumn): string => {
+      const val = row[column.dataKey];
+      if (val === undefined || val === null || val === '') return '';
+      const format: PrintValueFormat | undefined =
+        column.format ??
+        // Legacy columns carry no format: fall back to the old heuristic so
+        // documents that pre-format their own numbers keep working.
+        (typeof val === 'number' && isCurrencyKey(column.dataKey) ? 'currency' : undefined);
+      if (format === 'currency' && typeof val === 'number') return formatPrintCurrency(val);
+      if (format === 'number' && typeof val === 'number') return formatPrintNumber(val);
+      if (format === 'date') return formatPrintDate(val as string | Date);
+      return String(val);
+    };
+
+    const body = tableConfig.rows.map((row) => tableConfig.columns.map((c) => renderCell(row, c)));
+
+    // The totals block. normalizeSummaryRows accepts the legacy nested shape
+    // ([[{...}]]) that every report used to pass — which made the TOTAL row
+    // render blank because row[dataKey] was read off an array.
+    const normalizedSummary = normalizeSummaryRows(tableConfig.summaryRows);
+    const foot = normalizedSummary
+      ? normalizedSummary.map((row) => tableConfig.columns.map((c) => renderCell(row as Record<string, unknown>, c)))
       : undefined;
 
     const columnStyles: Record<number, any> = {};
@@ -281,10 +281,21 @@ export async function generateEnterpriseDocument(config: PDFDocumentConfig) {
   });
 
   // ── FOOTER (all pages) ──
+  //
+  // Three items share one baseline: who printed it (left), the disclaimer
+  // (centre) and the page number (right). Placing them by eye made the
+  // left and centre items print on top of each other — "Printed By: … on
+  // 12-Nov-2026" ran 20pt into the disclaimer on A4 portrait and the text
+  // was unreadable. So every item is MEASURED first, then placed, and the
+  // disclaimer moves onto its own line when it cannot fit beside the
+  // printed-by text without touching it.
   const pageCount = (doc.internal as any).getNumberOfPages();
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(120, 120, 120);
+
+  const printedByText = `Printed By: ${printedBy.name} on ${formatPrintDate(new Date())}`;
+  const disclaimerText = document.showSignatureDisclaimer ? document.footerText : '';
 
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
@@ -293,17 +304,40 @@ export async function generateEnterpriseDocument(config: PDFDocumentConfig) {
     doc.line(margins.left, pageHeight - margins.bottom + 10, pageWidth - margins.right, pageHeight - margins.bottom + 10);
 
     const footerY = pageHeight - margins.bottom + 25;
+    const pageLabel = `Page ${i} of ${pageCount}`;
 
-    // Left: Printed by real user + date
-    doc.text(`Printed By: ${printedBy.name} on ${formatPrintDate(new Date())}`, margins.left, footerY);
+    const printedByWidth = doc.getTextWidth(printedByText);
+    const disclaimerWidth = disclaimerText ? doc.getTextWidth(disclaimerText) : 0;
+    const pageWidthPt = doc.getTextWidth(pageLabel);
 
-    // Center: disclaimer
-    if (document.showSignatureDisclaimer && document.footerText) {
-      doc.text(document.footerText, pageWidth / 2, footerY, { align: 'center' });
+    const printedByEnd = margins.left + printedByWidth;
+    const pageStart = pageWidth - margins.right - pageWidthPt;
+    const disclaimerStart = pageWidth / 2 - disclaimerWidth / 2;
+
+    // The disclaimer fits on the shared baseline only if there is clear air
+    // on BOTH sides of it. Otherwise it gets a line of its own underneath.
+    const fitsOnBaseline =
+      !!disclaimerText &&
+      printedByEnd + 12 <= disclaimerStart &&
+      disclaimerStart + disclaimerWidth + 12 <= pageStart;
+
+    // Left: who printed it, and when.
+    doc.text(printedByText, margins.left, footerY);
+
+    // Right: the page number.
+    doc.text(pageLabel, pageWidth - margins.right, footerY, { align: 'right' });
+
+    if (disclaimerText) {
+      if (fitsOnBaseline) {
+        doc.text(disclaimerText, pageWidth / 2, footerY, { align: 'center' });
+      } else {
+        // Its own line, below the baseline, centred and allowed to wrap.
+        const lines = doc.splitTextToSize(disclaimerText, pageWidth - margins.left - margins.right);
+        lines.forEach((line: string, lineIndex: number) => {
+          doc.text(line, pageWidth / 2, footerY + 11 + lineIndex * 10, { align: 'center' });
+        });
+      }
     }
-
-    // Right: Page number
-    doc.text(`Page ${i} of ${pageCount}`, pageWidth - margins.right, footerY, { align: 'right' });
   }
 
   // ── ACTION ──
@@ -339,4 +373,15 @@ function hexToRgb(hex: string): [number, number, number] {
   const h = hex.replace('#', '');
   const bigint = parseInt(h, 16);
   return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
+}
+
+/**
+ * Legacy currency heuristic for columns that pre-date the `format` field.
+ * New code declares `format: 'currency'` explicitly.
+ */
+const CURRENCY_KEY_PARTS = ['amount', 'total', 'balance', 'debit', 'credit', 'rate', 'value', 'pcs', 'price'];
+
+function isCurrencyKey(dataKey: string): boolean {
+  const lower = dataKey.toLowerCase();
+  return CURRENCY_KEY_PARTS.some(part => lower.includes(part));
 }

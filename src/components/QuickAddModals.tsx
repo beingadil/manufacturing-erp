@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { useERPStore } from "../store/useERPStore";
 import { SearchableSelect } from "./SearchableSelect";
+import { useShallow } from 'zustand/react/shallow';
 
 interface BaseModalProps {
   isOpen: boolean;
@@ -11,7 +12,7 @@ interface BaseModalProps {
 }
 
 export function QuickAddCustomer({ isOpen, onClose, onSuccess }: BaseModalProps) {
-  const { addCustomer } = useERPStore();
+  const { addCustomer } = useERPStore(useShallow(s => ({ addCustomer: s.addCustomer })));
   const [name, setName] = useState("");
   const [_companyName, _setCompanyName] = useState("");
   const [phone, setPhone] = useState("");
@@ -59,7 +60,7 @@ export function QuickAddCustomer({ isOpen, onClose, onSuccess }: BaseModalProps)
 }
 
 export function QuickAddSupplier({ isOpen, onClose, onSuccess }: BaseModalProps) {
-  const { addSupplier } = useERPStore();
+  const { addSupplier } = useERPStore(useShallow(s => ({ addSupplier: s.addSupplier })));
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
 
@@ -103,7 +104,7 @@ export function QuickAddSupplier({ isOpen, onClose, onSuccess }: BaseModalProps)
 }
 
 export function QuickAddProcessor({ isOpen, onClose, onSuccess }: BaseModalProps) {
-  const { addProcessor, processingStages } = useERPStore();
+  const { addProcessor, processingStages } = useERPStore(useShallow(s => ({ addProcessor: s.addProcessor, processingStages: s.processingStages })));
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   // The processing stage this processor works at (empty = any stage).
@@ -162,7 +163,7 @@ export function QuickAddProcessor({ isOpen, onClose, onSuccess }: BaseModalProps
 }
 
 export function QuickAddProduct({ isOpen, onClose, onSuccess }: BaseModalProps) {
-  const { addProduct, materials } = useERPStore();
+  const { addProduct, materials } = useERPStore(useShallow(s => ({ addProduct: s.addProduct, materials: s.materials })));
   const [name, setName] = useState("");
   const [materialId, setMaterialId] = useState("");
   const [sellingPrice, setSellingPrice] = useState("");
@@ -217,7 +218,7 @@ export function QuickAddProduct({ isOpen, onClose, onSuccess }: BaseModalProps) 
 }
 
 export function QuickAddMaterial({ isOpen, onClose, onSuccess }: BaseModalProps) {
-  const { addRawMaterial, categories } = useERPStore();
+  const { addRawMaterial, categories } = useERPStore(useShallow(s => ({ addRawMaterial: s.addRawMaterial, categories: s.categories })));
   const [name, setName] = useState("");
   const [categoryId, setCategoryId] = useState("");
 

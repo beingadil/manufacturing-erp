@@ -9,6 +9,7 @@ import { LedgerStatement, ledgerBalanceSide, type LedgerStatementRow } from '../
 import { SearchableSelect } from '../../SearchableSelect';
 import { VoucherDetailModal } from '../../VoucherDetailModal';
 import { GenericReportTemplate } from '../common/GenericReportTemplate';
+import { useShallow } from 'zustand/react/shallow';
 
 const STATEMENT_COLUMNS = [
   { header: 'Date', dataKey: 'date' },
@@ -30,15 +31,7 @@ const REGISTER_COLUMNS = [
 ];
 
 export function GeneralLedgerReport() {
-  const {
-    accounts,
-    journalEntries,
-    vouchers,
-    customers,
-    suppliers,
-    processors,
-    accountSubtypes,
-  } = useERPStore();
+  const { accounts, journalEntries, vouchers, customers, suppliers, processors, accountSubtypes } = useERPStore(useShallow(s => ({ accounts: s.accounts, journalEntries: s.journalEntries, vouchers: s.vouchers, customers: s.customers, suppliers: s.suppliers, processors: s.processors, accountSubtypes: s.accountSubtypes })));
 
   const [dateRange, setDateRange] = useState({ start: '', end: '', label: 'This Month' });
   const [search, setSearch] = useState('');
@@ -102,7 +95,7 @@ export function GeneralLedgerReport() {
           {row.voucher.voucherNo}
         </button>
       ) : '—',
-      description: row.narration || row.voucher?.narration || '—',
+      description: row.narration?.trim() || '—',
       badges: row.voucher?.type ? [{ label: row.voucher.type, tone: 'neutral' as const }] : [],
       debit: row.debit,
       credit: row.credit,
@@ -171,7 +164,7 @@ export function GeneralLedgerReport() {
       ...ledger.rows.map(row => ({
         date: row.voucher?.date ? formatDate(row.voucher.date) : '-',
         referenceNo: row.voucher?.voucherNo || '-',
-        description: row.narration || row.voucher?.narration || '-',
+        description: row.narration?.trim() || '-',
         debit: row.debit,
         credit: row.credit,
         balance: row.runningBalance,

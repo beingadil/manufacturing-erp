@@ -21,6 +21,7 @@ import {
   saleTotal,
   sumInRange,
 } from '../../lib/monitor/monitorMetrics';
+import { useShallow } from 'zustand/react/shallow';
 
 
 /* ────────────────────────────────────────────── helpers ─────────────────── */
@@ -98,7 +99,7 @@ function Stat({ label, value, hint, tone, delta }: {
 /* ────────────────────────────────────────── revenue detail ───────────────── */
 
 export function RevenueDetail({ range }: { range: MonitorRange }) {
-  const { sales, customers, products } = useERPStore();
+  const { sales, customers, products } = useERPStore(useShallow(s => ({ sales: s.sales, customers: s.customers, products: s.products })));
 
   const rows = useMemo(() => sales
     .filter(s => inRange(s.date, range.from, range.to))
@@ -148,7 +149,7 @@ export function RevenueDetail({ range }: { range: MonitorRange }) {
 /* ──────────────────────────────────────── purchases detail ──────────────── */
 
 export function PurchasesDetail({ range }: { range: MonitorRange }) {
-  const { purchases, suppliers, materials } = useERPStore();
+  const { purchases, suppliers, materials } = useERPStore(useShallow(s => ({ purchases: s.purchases, suppliers: s.suppliers, materials: s.materials })));
 
   const rows = useMemo(() => purchases
     .filter(p => inRange(p.date, range.from, range.to))
@@ -198,7 +199,7 @@ export function PurchasesDetail({ range }: { range: MonitorRange }) {
 /* ────────────────────────────────────────────── stock detail ───────────── */
 
 export function StockDetail(_: { range: MonitorRange }) {
-  const { materials, batches } = useERPStore();
+  const { materials, batches } = useERPStore(useShallow(s => ({ materials: s.materials, batches: s.batches })));
 
   const rows = useMemo(() => materials.map(m => {
     const stages = InventoryCalculationService.getMaterialStageValues(m.id, batches || []);
@@ -257,7 +258,7 @@ export function StockDetail(_: { range: MonitorRange }) {
 /* ────────────────────────────────────────────── wip detail ─────────────── */
 
 export function WipDetail({ range }: { range: MonitorRange }) {
-  const { processingSends, processors } = useERPStore();
+  const { processingSends, processors } = useERPStore(useShallow(s => ({ processingSends: s.processingSends, processors: s.processors })));
 
   const sendsInRange = useMemo(
     () => processingSends.filter(s => inRange(s.date, range.from, range.to)),
@@ -313,7 +314,7 @@ export function WipDetail({ range }: { range: MonitorRange }) {
 /* ────────────────────────────────────────────── a/r detail ─────────────── */
 
 export function ArDetail({ range }: { range: MonitorRange }) {
-  const { customers, sales } = useERPStore();
+  const { customers, sales } = useERPStore(useShallow(s => ({ customers: s.customers, sales: s.sales })));
 
   const rows = useMemo(() => customers
     .filter(c => (c.balanceReceivable || 0) > 0)
@@ -365,7 +366,7 @@ export function ArDetail({ range }: { range: MonitorRange }) {
 /* ────────────────────────────────────────────── a/p detail ─────────────── */
 
 export function ApDetail({ range }: { range: MonitorRange }) {
-  const { suppliers, processors, purchases, processingReceipts } = useERPStore();
+  const { suppliers, processors, purchases, processingReceipts } = useERPStore(useShallow(s => ({ suppliers: s.suppliers, processors: s.processors, purchases: s.purchases, processingReceipts: s.processingReceipts })));
 
   const rows = useMemo(() => {
     const supplierRows = suppliers
@@ -432,7 +433,7 @@ export function ApDetail({ range }: { range: MonitorRange }) {
 /* ────────────────────────────────────────── activity detail ────────────── */
 
 export function ActivityDetail({ range }: { range: MonitorRange }) {
-  const { vouchers, journalEntries, accounts } = useERPStore();
+  const { vouchers, journalEntries, accounts } = useERPStore(useShallow(s => ({ vouchers: s.vouchers, journalEntries: s.journalEntries, accounts: s.accounts })));
   const [moduleFilter, setModuleFilter] = useState<'' | string>('');
   const [viewVoucherId, setViewVoucherId] = useState<string | null>(null);
 
@@ -516,7 +517,7 @@ export function ActivityDetail({ range }: { range: MonitorRange }) {
 /* ────────────────────────────────────────── rankings detail ───────────── */
 
 export function RankingsDetail({ range }: { range: MonitorRange }) {
-  const { sales, purchases, customers, suppliers, products } = useERPStore();
+  const { sales, purchases, customers, suppliers, products } = useERPStore(useShallow(s => ({ sales: s.sales, purchases: s.purchases, customers: s.customers, suppliers: s.suppliers, products: s.products })));
 
   const productRows = useMemo(() => {
     const map = new Map<string, { id: string; name: string; revenue: number; pcs: number }>();

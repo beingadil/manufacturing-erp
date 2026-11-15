@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { lotAverageCost, lotStockForProduct, buildableQty, consumeComponentsForManufacturing } from '../lib/business/ManufacturingService';
 import { cn, formatCurrency, formatNumber } from '../lib/utils';
 import { useERPStore } from '../store/useERPStore';
+import { useShallow } from 'zustand/react/shallow';
 
 /**
  * A single product — everything about it on one page: what it is, what it takes
@@ -17,7 +18,7 @@ export default function ProductDetail() {
   const { id } = useParams<{ id: string }>();
   const productId = id ?? '';
   const navigate = useNavigate();
-  const { products, materials, categories, finishedGoodsLots, manufacturingOrders, sales, batches, produceForProduct } = useERPStore();
+  const { products, materials, categories, finishedGoodsLots, manufacturingOrders, sales, batches, produceForProduct } = useERPStore(useShallow(s => ({ products: s.products, materials: s.materials, categories: s.categories, finishedGoodsLots: s.finishedGoodsLots, manufacturingOrders: s.manufacturingOrders, sales: s.sales, batches: s.batches, produceForProduct: s.produceForProduct })));
 
   const [tab, setTab] = useState<'overview' | 'production' | 'lots' | 'sales'>('overview');
   const [produceOpen, setProduceOpen] = useState(false);

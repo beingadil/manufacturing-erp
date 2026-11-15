@@ -17,6 +17,7 @@ import { useERPStore } from '../../store/useERPStore';
 import { QuickAddProcessor } from '../../components/QuickAddModals';
 import { SearchableSelect } from '../../components/SearchableSelect';
 import { DatePicker } from '../../components/ui/date-picker';
+import { useShallow } from 'zustand/react/shallow';
 
 const label = 'mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70';
 const headCell = 'text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60';
@@ -26,7 +27,7 @@ export default function BillFormPage() {
   const navigate = useNavigate();
   const isEdit = Boolean(editId);
 
-  const { materials, processors, processingReceipts, processorBills, processingStages, processingSends, batches } = useERPStore();
+  const { materials, processors, processingReceipts, processorBills, processingStages, processingSends, batches } = useERPStore(useShallow(s => ({ materials: s.materials, processors: s.processors, processingReceipts: s.processingReceipts, processorBills: s.processorBills, processingStages: s.processingStages, processingSends: s.processingSends, batches: s.batches })));
 
   const [processorId, setProcessorId] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);

@@ -8,6 +8,7 @@ import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { cn, } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
 import { useSettingsStore } from "../store/useSettingsStore";
+import { useShallow } from 'zustand/react/shallow';
 
 const NavAccordionItem: React.FC<{ item: any, onClose?: () => void }> = ({ item, onClose }) => {
   const location = useLocation();
@@ -244,7 +245,7 @@ function CommandPalette() {
   const [query, setQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
-  const { materials, products, processingSends, vouchers, customers, suppliers, processors } = useERPStore();
+  const { materials, products, processingSends, vouchers, customers, suppliers, processors } = useERPStore(useShallow(s => ({ materials: s.materials, products: s.products, processingSends: s.processingSends, vouchers: s.vouchers, customers: s.customers, suppliers: s.suppliers, processors: s.processors })));
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -370,7 +371,7 @@ function CommandPalette() {
 function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const { vouchers, materials } = useERPStore();
+  const { vouchers, materials } = useERPStore(useShallow(s => ({ vouchers: s.vouchers, materials: s.materials })));
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -479,7 +480,7 @@ export function DashboardLayout() {
   // Icon-rail collapse (desktop): sidebar shrinks to a 68px glass rail;
   // expanding it to full width shows labels. Persisted per user.
   const [isRailMode, setIsRailMode] = useState(() => localStorage.getItem('sidebar-rail') === '1');
-  const { dashboardName, tagline, logo, profilePhoto, theme, setTheme } = useSettingsStore();
+  const { dashboardName, tagline, logo, profilePhoto, theme, setTheme } = useSettingsStore(useShallow(s => ({ dashboardName: s.dashboardName, tagline: s.tagline, logo: s.logo, profilePhoto: s.profilePhoto, theme: s.theme, setTheme: s.setTheme })));
 
   const toggleRail = () => {
     setIsRailMode(prev => {

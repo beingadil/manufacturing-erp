@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Check } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { ProcessingStage } from '../../types/erp';
@@ -18,8 +19,10 @@ interface StageProgressStepperProps {
  * A horizontal chain stepper showing where a batch sits across the processing
  * stages. Complete legs are green, the current stage is highlighted, and the
  * next stage pulses — the visual answer to "how far along is this batch?".
+ * Memoized: the stage array arrives with a stable useMemo reference and the
+ * id list is compared by value, so parent re-renders don't repaint the chip.
  */
-export function StageProgressStepper({
+export const StageProgressStepper = memo(function StageProgressStepper({
   stages,
   completedStageIds = [],
   currentStageId,
@@ -65,4 +68,11 @@ export function StageProgressStepper({
       })}
     </div>
   );
-}
+},
+(prev, next) =>
+  prev.stages === next.stages &&
+  (prev.completedStageIds ?? []).join(',') === (next.completedStageIds ?? []).join(',') &&
+  prev.currentStageId === next.currentStageId &&
+  prev.nextStageId === next.nextStageId &&
+  prev.compact === next.compact
+);

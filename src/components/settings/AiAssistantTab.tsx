@@ -12,6 +12,7 @@ import { cn } from '../../lib/utils';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { Dropdown } from '../Dropdown';
 import { ToggleSwitch } from '../ui/toggle-switch';
+import { useShallow } from 'zustand/react/shallow';
 
 function SettingsCard({ title, subtitle, icon: Icon, children }: {
   title: string;
@@ -36,12 +37,7 @@ function SettingsCard({ title, subtitle, icon: Icon, children }: {
 }
 
 export function AiAssistantTab({ showSavedToast }: { showSavedToast: boolean }) {
-  const {
-    aiAssistantEnabled,
-    aiVoiceEnabled,
-    setAiAssistantEnabled,
-    setAiVoiceEnabled,
-  } = useSettingsStore();
+  const { aiAssistantEnabled, aiVoiceEnabled, setAiAssistantEnabled, setAiVoiceEnabled } = useSettingsStore(useShallow(s => ({ aiAssistantEnabled: s.aiAssistantEnabled, aiVoiceEnabled: s.aiVoiceEnabled, setAiAssistantEnabled: s.setAiAssistantEnabled, setAiVoiceEnabled: s.setAiVoiceEnabled })));
 
   const [hasKey, setHasKey] = useState(false);
   const [keyDraft, setKeyDraft] = useState('');

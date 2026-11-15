@@ -4,6 +4,7 @@ import { AnchoredOverlay } from '../../components/ui/AnchoredOverlay';
 import { cn } from '../../lib/utils';
 import { useERPStore } from '../../store/useERPStore';
 import type { Account, AccountSubtype, AccountType } from '../../types/erp';
+import { useShallow } from 'zustand/react/shallow';
 
 interface SearchableAccountTreeProps {
   value: string;
@@ -39,7 +40,7 @@ export function SearchableAccountTree({
   allowParents = false,
   required,
 }: SearchableAccountTreeProps) {
-  const { accounts, accountSubtypes } = useERPStore();
+  const { accounts, accountSubtypes } = useERPStore(useShallow(s => ({ accounts: s.accounts, accountSubtypes: s.accountSubtypes })));
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set());

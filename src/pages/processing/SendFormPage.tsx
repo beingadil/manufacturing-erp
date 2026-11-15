@@ -12,7 +12,7 @@ import { AlertTriangle, ArrowLeft, ArrowRight, Check, ChevronDown, Layers, Plus,
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { InventoryCalculationService, batchAvailableAtSource, batchRawAvailableOf } from '../../lib/business/InventoryCalculationService';
+import { InventoryCalculationService, batchAvailableAtSource, batchAvailableTotal, batchRawAvailableOf } from '../../lib/business/InventoryCalculationService';
 import { batchCanSendToStage, getMaterialBatchProgress, getSortedStages, visibleStagesForMaterial } from '../../lib/processing/stageProgress';
 import { adaptiveAmountClass, cn, formatCurrency, formatNumber } from '../../lib/utils';
 import { ProcessingService } from '../../services/ProcessingService';
@@ -21,6 +21,7 @@ import { QuickAddMaterial, QuickAddProcessor } from '../../components/QuickAddMo
 import { SearchableSelect } from '../../components/SearchableSelect';
 import { DatePicker } from '../../components/ui/date-picker';
 import { StageProgressStepper } from '../../components/processing/StageProgressStepper';
+import { useShallow } from 'zustand/react/shallow';
 
 /** Matches the SearchableSelect trigger exactly, so every control on a row lines up. */
 const control =
@@ -48,7 +49,7 @@ export default function SendFormPage() {
   const navigate = useNavigate();
   const isEdit = Boolean(editId);
 
-  const { materials, processors, processingSends, batches, processingStages } = useERPStore();
+  const { materials, processors, processingSends, batches, processingStages } = useERPStore(useShallow(s => ({ materials: s.materials, processors: s.processors, processingSends: s.processingSends, batches: s.batches, processingStages: s.processingStages })));
 
   const [processorId, setProcessorId] = useState('');
   const [materialId, setMaterialId] = useState('');
@@ -101,10 +102,17 @@ export default function SendFormPage() {
   ), [isCustomStages, sortedStages, selectedMaterial]);
   const firstAllowedStage = allowedOrderedStages[0] || null;
 
-  const dispatchableMaterials = useMemo(
-    () => materials.filter(m => (m.processingPath ?? 'full_chain') !== 'ready_made'),
-    [materials]
-  );
+  const dispatchableMaterials = useMemo(() => {
+    // Every dispatch sends real pcs: ready-made materials never enter
+    // processing, and a material with NO pcs left anywhere on its path has
+    // nothing to send at all — don't list it.
+    return (materials || []).filter(m => {
+      if ((m.processingPath ?? 'full_chain') === 'ready_made') return false;
+      const raw = (batches || []).filter(b => b.materialId === m.id).reduce((s, b) => s + batchRawAvailableOf(b), 0);
+      if (raw > 0) return true;
+      return (batches || []).filter(b => b.materialId === m.id).some(b => batchAvailableTotal(b) > 0);
+    });
+  }, [materials, batches]);
 
   // Auto stage resolution: the material's pcs sit at MULTIPLE stages at once.
   // AUTO picks the earliest stage with pcs waiting; the user can override by
@@ -140,8 +148,8 @@ export default function SendFormPage() {
   );
 
   const batchProgress = useMemo(
-    () => (materialId ? getMaterialBatchProgress(materialId, batches || [], stepperStages) : []),
-    [materialId, batches, stepperStages]
+    () => (materialId ? getMaterialBatchProgress(materialId, batches || [], stepperStages, selectedMaterial) : []),
+    [materialId, batches, stepperStages, selectedMaterial]
   );
 
   const effectiveStageId = useMemo(() => {
@@ -671,11 +679,25 @@ export default function SendFormPage() {
                     id="sf-pcs"
                     type="number"
                     min="1"
+                    max={totalAvailable > 0 ? totalAvailable : undefined}
                     inputMode="numeric"
                     required
                     placeholder="0"
                     value={pcs}
-                    onChange={e => { setPcs(e.target.value); setError(null); }}
+                    onChange={e => {
+                      const raw = e.target.value;
+                      // Clamp at the stock ceiling instead of waiting for the
+                      // submit guard to reject it — the field can never hold
+                      // more than exists.
+                      const entered = parseInt(raw, 10);
+                      if (totalAvailable > 0 && Number.isFinite(entered) && entered > totalAvailable) {
+                        setPcs(String(totalAvailable));
+                        setError(`Only ${totalAvailable} PCS are available${effectiveStage ? ` for ${effectiveStage.name}` : ''}.`);
+                        return;
+                      }
+                      setPcs(raw);
+                      setError(null);
+                    }}
                     aria-label="Pieces to send"
                     className={cn(control, 'pr-12 text-right tabular-nums')}
                   />

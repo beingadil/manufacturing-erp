@@ -1,5 +1,4 @@
 import { generateLedgerStatementPDF } from '../../lib/documentGenerators';
-import { formatDate } from '../../lib/utils';
 
 export interface LedgerStatementExportRow {
   /** Voucher date (YYYY-MM-DD). */
@@ -51,7 +50,9 @@ export function exportLedgerStatementPdf({
         }]
       : []),
     ...rows.map(row => ({
-      date: row.date ? formatDate(row.date) : '-',
+      // The raw date goes through — the print engine formats it with the
+      // configured date format.
+      date: row.date || '-',
       referenceNo: row.voucherNo || '-',
       description: row.narration || '-',
       debit: row.debit,

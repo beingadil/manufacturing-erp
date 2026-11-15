@@ -3,6 +3,7 @@ packages:
 allowBuilds:
   better-sqlite3: true
   core-js: true
+  electron-winstaller: false
 catalog:
   "@react-three/drei": 10.7.9
   "@react-three/fiber": 9.8.1

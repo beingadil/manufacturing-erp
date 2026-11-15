@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { cn, formatNumber } from '../../lib/utils';
 
 export interface BucketShare {
@@ -17,8 +18,10 @@ const SEGMENTS: Array<{ key: keyof BucketShare; label: string; color: string }> 
 /**
  * One-click read of where a batch's pieces sit: a single segmented track,
  * labelled by the shares beneath it. No boxes — the proportion is the data.
+ * Memoized on the four bucket numbers (the object wrapper is recreated by
+ * parents every render — identity compare would defeat the point).
  */
-export function BucketBar({ buckets, className }: { buckets: BucketShare; className?: string }) {
+export const BucketBar = memo(function BucketBar({ buckets, className }: { buckets: BucketShare; className?: string }) {
   const total = buckets.raw + buckets.inTransit + buckets.available + buckets.finished;
   if (total <= 0) {
     return (
@@ -58,4 +61,10 @@ export function BucketBar({ buckets, className }: { buckets: BucketShare; classN
       </div>
     </div>
   );
-}
+}, (prev, next) =>
+  prev.buckets.raw === next.buckets.raw &&
+  prev.buckets.inTransit === next.buckets.inTransit &&
+  prev.buckets.available === next.buckets.available &&
+  prev.buckets.finished === next.buckets.finished &&
+  prev.className === next.className
+);

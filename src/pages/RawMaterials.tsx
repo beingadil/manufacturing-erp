@@ -13,6 +13,7 @@ import { InventoryCalculationService } from '../lib/business/InventoryCalculatio
 import { cn, formatCurrency, formatNumber } from "../lib/utils";
 import { MaterialService } from '../services/MaterialService';
 import { useERPStore } from "../store/useERPStore";
+import { useShallow } from 'zustand/react/shallow';
 
 /**
  * Raw Materials — the plant's movement ledger.
@@ -34,7 +35,7 @@ import { useERPStore } from "../store/useERPStore";
 type SortKey = 'name' | 'value' | 'stock';
 
 export function RawMaterials() {
-  const { materials, categories, purchases, processingSends, processingReceipts, batches } = useERPStore();
+  const { materials, categories, purchases, processingSends, processingReceipts, batches } = useERPStore(useShallow(s => ({ materials: s.materials, categories: s.categories, purchases: s.purchases, processingSends: s.processingSends, processingReceipts: s.processingReceipts, batches: s.batches })));
 
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);

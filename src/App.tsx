@@ -3,48 +3,54 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import RouteFallback from './components/RouteFallback';
 import UpdateManager from '@/components/UpdateManager';
 import UpdateMigrationNotice from '@/components/UpdateMigrationNotice';
 import { Toaster } from '@/components/ui/sonner';
 import { RouteGuard } from './components/common/RouteGuard';
 import { AuthProvider } from './contexts/AuthContext';
 import { DashboardLayout } from './layouts/DashboardLayout';
-import { Accounting } from './pages/Accounting';
-import Categories from './pages/Categories';
-import { Customers } from './pages/Customers';
-import { Dashboard } from './pages/Dashboard';
-import { FinishedGoods } from './pages/FinishedGoods';
-import ProductDetail from './pages/ProductDetail';
-import ProductionOrderDetail from './pages/products/ProductionOrderDetail';
-import { BankPaymentVoucher } from './pages/finance/BankPaymentVoucher';
-import { BankReceiptVoucher } from './pages/finance/BankReceiptVoucher';
-import { CashBookPage } from './pages/finance/CashBookPage';
-import { CashPaymentVoucher } from './pages/finance/CashPaymentVoucher';
-import { CashReceiptVoucher } from './pages/finance/CashReceiptVoucher';
-import { JournalVoucher } from './pages/finance/JournalVoucher';
-import { VoucherFormPage } from './pages/finance/VoucherFormPage';
-import { JobWork } from './pages/JobWork';
-import { Ledgers } from './pages/Ledgers';
-import BillFormPage from './pages/processing/BillFormPage';
-import SendFormPage from './pages/processing/SendFormPage';
-import ReceiveFormPage from './pages/processing/ReceiveFormPage';
 import { Login } from './pages/Login';
 
-import { MaterialDetail } from './pages/MaterialDetail';
-import { MonitorMetric } from './pages/monitor/MonitorMetric';
-import { MonitorScreen } from './pages/MonitorScreen';
-import { Processors } from './pages/Processors';
-import { PurchaseDetail } from './pages/PurchaseDetail';
-import PurchaseFormPage from './pages/PurchaseFormPage';
-import { Purchases } from './pages/Purchases';
-import { RawMaterials } from './pages/RawMaterials';
-import { Reports } from './pages/Reports';
-import { Sales } from './pages/Sales';
-import SalesFormPage from './pages/SalesFormPage';
-import { Settings } from './pages/Settings';
-import { Suppliers } from './pages/Suppliers';
+// Route-level code splitting — every page ships as its own chunk and loads
+// on first navigation. The Dashboard is preloaded at idle so the landing
+// view appears instantly without holding 2.9 MB in the critical path.
+const Accounting = lazy(() => import('@/pages/Accounting').then(m => ({ default: m.Accounting })));
+const Categories = lazy(() => import('@/pages/Categories'));
+const Customers = lazy(() => import('@/pages/Customers').then(m => ({ default: m.Customers })));
+const Dashboard = lazy(() => import('@/pages/Dashboard').then(m => ({ default: m.Dashboard })));
+const FinishedGoods = lazy(() => import('@/pages/FinishedGoods').then(m => ({ default: m.FinishedGoods })));
+const ProductDetail = lazy(() => import('@/pages/ProductDetail'));
+const ProductionOrderDetail = lazy(() => import('@/pages/products/ProductionOrderDetail'));
+const BankPaymentVoucher = lazy(() => import('@/pages/finance/BankPaymentVoucher').then(m => ({ default: m.BankPaymentVoucher })));
+const BankReceiptVoucher = lazy(() => import('@/pages/finance/BankReceiptVoucher').then(m => ({ default: m.BankReceiptVoucher })));
+const CashBookPage = lazy(() => import('@/pages/finance/CashBookPage').then(m => ({ default: m.CashBookPage })));
+const CashPaymentVoucher = lazy(() => import('@/pages/finance/CashPaymentVoucher').then(m => ({ default: m.CashPaymentVoucher })));
+const CashReceiptVoucher = lazy(() => import('@/pages/finance/CashReceiptVoucher').then(m => ({ default: m.CashReceiptVoucher })));
+const JournalVoucher = lazy(() => import('@/pages/finance/JournalVoucher').then(m => ({ default: m.JournalVoucher })));
+const VoucherFormPage = lazy(() => import('@/pages/finance/VoucherFormPage').then(m => ({ default: m.VoucherFormPage })));
+const JobWork = lazy(() => import('@/pages/JobWork').then(m => ({ default: m.JobWork })));
+const Ledgers = lazy(() => import('@/pages/Ledgers').then(m => ({ default: m.Ledgers })));
+const BillFormPage = lazy(() => import('@/pages/processing/BillFormPage'));
+const SendFormPage = lazy(() => import('@/pages/processing/SendFormPage'));
+const ReceiveFormPage = lazy(() => import('@/pages/processing/ReceiveFormPage'));
+const MaterialDetail = lazy(() => import('@/pages/MaterialDetail').then(m => ({ default: m.MaterialDetail })));
+const MonitorMetric = lazy(() => import('@/pages/monitor/MonitorMetric').then(m => ({ default: m.MonitorMetric })));
+const MonitorScreen = lazy(() => import('@/pages/MonitorScreen').then(m => ({ default: m.MonitorScreen })));
+const ProcessorDetail = lazy(() => import('@/pages/ProcessorDetail').then(m => ({ default: m.ProcessorDetail })));
+const Processors = lazy(() => import('@/pages/Processors').then(m => ({ default: m.Processors })));
+const PurchaseDetail = lazy(() => import('@/pages/PurchaseDetail').then(m => ({ default: m.PurchaseDetail })));
+const PurchaseFormPage = lazy(() => import('@/pages/PurchaseFormPage'));
+const Purchases = lazy(() => import('@/pages/Purchases').then(m => ({ default: m.Purchases })));
+const RawMaterials = lazy(() => import('@/pages/RawMaterials').then(m => ({ default: m.RawMaterials })));
+const Reports = lazy(() => import('@/pages/Reports').then(m => ({ default: m.Reports })));
+const Sales = lazy(() => import('@/pages/Sales').then(m => ({ default: m.Sales })));
+const SalesFormPage = lazy(() => import('@/pages/SalesFormPage'));
+const Settings = lazy(() => import('@/pages/Settings').then(m => ({ default: m.Settings })));
+const Suppliers = lazy(() => import('@/pages/Suppliers').then(m => ({ default: m.Suppliers })));
+
 import { useSettingsStore } from './store/useSettingsStore';
 
 export default function App() {
@@ -130,9 +136,22 @@ export default function App() {
     }
   }, [theme]);
 
+  useEffect(() => {
+    // Warm the landing route's chunk at idle so the first paint needs no
+    // network round-trip for it.
+    const preload = () => void import('@/pages/Dashboard');
+    if ('requestIdleCallback' in window) {
+      (window as any).requestIdleCallback(preload);
+    } else {
+      const t = setTimeout(preload, 300);
+      return () => clearTimeout(t);
+    }
+  }, []);
+
   return (
     <AuthProvider>
       <HashRouter>
+        <Suspense fallback={<RouteFallback />}>
         <Routes>
         <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Navigate to="/login" replace />} />
@@ -161,6 +180,7 @@ export default function App() {
 <Route path="products/:id/mo/:moId" element={<RouteGuard requireModule="Master Data" requireAction="View"><ProductionOrderDetail /></RouteGuard>} />
           
           <Route path="ledgers" element={<RouteGuard requireModule="Ledgers" requireAction="View"><Ledgers /></RouteGuard>} />
+          <Route path="processors/:processorId" element={<RouteGuard requireModule="Master Data" requireAction="View"><ProcessorDetail /></RouteGuard>} />
           <Route path="processors" element={<RouteGuard requireModule="Master Data" requireAction="View"><Processors /></RouteGuard>} />
           <Route path="suppliers" element={<RouteGuard requireModule="Master Data" requireAction="View"><Suppliers /></RouteGuard>} />
           <Route path="customers" element={<RouteGuard requireModule="Master Data" requireAction="View"><Customers /></RouteGuard>} />
@@ -197,7 +217,8 @@ export default function App() {
         </Route>
         <Route path="/monitor" element={<MonitorScreen />} />
         <Route path="/monitor/:metric" element={<MonitorMetric />} />
-      </Routes>
+        </Routes>
+        </Suspense>
       </HashRouter>
       <Toaster position="top-right" richColors />
       <UpdateManager />

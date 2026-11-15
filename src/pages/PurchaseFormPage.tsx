@@ -17,6 +17,7 @@ import { DatePicker } from '../components/ui/date-picker';
 import { adaptiveAmountClass, cn, formatCurrency } from '../lib/utils';
 import { PurchaseService } from '../services/PurchaseService';
 import { useERPStore } from '../store/useERPStore';
+import { useShallow } from 'zustand/react/shallow';
 
 type Line = {
   id: string;
@@ -45,7 +46,7 @@ export default function PurchaseFormPage() {
   const isEdit = Boolean(editId);
   const deepNew = searchParams.get('new') === '1';
 
-  const { purchases, materials, suppliers, batches, processingSends, processingReceipts, processorBills } = useERPStore();
+  const { purchases, materials, suppliers, batches, processingSends, processingReceipts, processorBills } = useERPStore(useShallow(s => ({ purchases: s.purchases, materials: s.materials, suppliers: s.suppliers, batches: s.batches, processingSends: s.processingSends, processingReceipts: s.processingReceipts, processorBills: s.processorBills })));
 
   const [supplierId, setSupplierId] = useState('');
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);

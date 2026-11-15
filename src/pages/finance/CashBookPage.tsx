@@ -5,6 +5,7 @@ import { getCashAccounts } from '../../lib/accounting/accountClassification';
 import { CashBookEngine, CashBookRow } from '../../lib/finance/CashBookEngine';
 import { cn } from '../../lib/utils';
 import { useERPStore } from '../../store/useERPStore';
+import { useShallow } from 'zustand/react/shallow';
 
 /**
  * Cash Book (spec §22–23).
@@ -15,7 +16,7 @@ import { useERPStore } from '../../store/useERPStore';
  * bank ledgers).
  */
 export function CashBookPage() {
-  const { accounts, journalEntries, vouchers, accountSubtypes } = useERPStore();
+  const { accounts, journalEntries, vouchers, accountSubtypes } = useERPStore(useShallow(s => ({ accounts: s.accounts, journalEntries: s.journalEntries, vouchers: s.vouchers, accountSubtypes: s.accountSubtypes })));
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
 
   const cashAccountIds = useMemo(

@@ -9,9 +9,10 @@ import { formatCurrency } from "../lib/utils";
 import { ErrorManagement } from '../lib/validation';
 import { SalesService } from '../services/SalesService';
 import { useERPStore } from "../store/useERPStore";
+import { useShallow } from 'zustand/react/shallow';
 
 export function Sales() {
-  const { sales, products, customers, vouchers } = useERPStore();
+  const { sales, products, customers, vouchers } = useERPStore(useShallow(s => ({ sales: s.sales, products: s.products, customers: s.customers, vouchers: s.vouchers })));
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<'data' | 'vouchers'>(() => (searchParams.get('tab') === 'vouchers' ? 'vouchers' : 'data'));
   const navigate = useNavigate();

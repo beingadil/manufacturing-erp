@@ -1,6 +1,6 @@
 import { MapPin, Pencil, Plus, Trash2, UserCog, } from "lucide-react";
 import React, { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { SafeDeleteDialog } from "../components/common/SafeDeleteDialog";
 import { Column, DataTable, RowActionButton } from "../components/DataTable";
@@ -15,9 +15,11 @@ import { Dropdown } from "../components/Dropdown";
 import { PartyLedgerModal } from "../components/PartyLedgerModal";
 import { cn, formatCurrency, formatNumber } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
+import { InventoryCalculationService, batchAvailableAtSource, batchRawAvailableOf } from "../lib/business/InventoryCalculationService";
+import { useShallow } from 'zustand/react/shallow';
 
 export function Processors() {
-  const { processors, addProcessor, updateProcessor, deleteProcessor, processingStages, processingSends, processingReceipts, processorBills } = useERPStore();
+  const { processors, addProcessor, updateProcessor, deleteProcessor, processingStages, processingSends, processingReceipts, processorBills, materials, batches } = useERPStore(useShallow(s => ({ processors: s.processors, addProcessor: s.addProcessor, updateProcessor: s.updateProcessor, deleteProcessor: s.deleteProcessor, processingStages: s.processingStages, processingSends: s.processingSends, processingReceipts: s.processingReceipts, processorBills: s.processorBills, materials: s.materials, batches: s.batches })));
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -82,6 +84,58 @@ export function Processors() {
     const s = sortedStages.find(x => x.id === stageId);
     return s ? `${s.name}${s.isFinalStage ? ' (Final)' : ''}` : 'General';
   };
+
+  const amountReadyForStage = (stageId: string | undefined) => {
+    if (!stageId) {
+      // General worker — only count PCS waiting at each material's entry point
+      // (its first stage) so nothing double counts.
+      let total = 0;
+      for (const m of materials || []) {
+        const path = m.processingPath ?? 'full_chain';
+        if (path === 'ready_made') continue;
+        const sorted = sortedStages;
+        const firstId = path === 'single_stage'
+          ? m.fixedStageId
+          : path === 'custom_stages'
+            ? ([...(m.allowedStageIds || [])].map(id => sorted.find(s => s.id === id)).filter(Boolean).sort((a,b) => a!.sequence - b!.sequence)[0]?.id || sorted[0]?.id)
+            : sorted[0]?.id;
+        if (!firstId) continue;
+        const matBatches = (batches || []).filter(b => b.materialId === m.id);
+        total += matBatches.reduce((sum, b) => sum + batchRawAvailableOf(b), 0);
+      }
+      return total;
+    }
+    const stage = sortedStages.find(s => s.id === stageId);
+    if (!stage) return 0;
+    // Walk every material that can reach this stage through its own chain and sum what's actually waiting.
+    let total = 0;
+    for (const m of materials || []) {
+      const path = m.processingPath ?? 'full_chain';
+      if (path === 'ready_made') continue;
+      const matBatches = (batches || []).filter(b => b.materialId === m.id);
+      if (matBatches.length === 0) continue;
+      const source = InventoryCalculationService.requiredSourceForTargetForPath(stageId, sortedStages, { processingPath: path, fixedStageId: m.fixedStageId, allowedStageIds: m.allowedStageIds });
+      total += source === 'raw'
+        ? matBatches.reduce((sum, b) => sum + batchRawAvailableOf(b), 0)
+        : matBatches.reduce((sum, b) => sum + batchAvailableAtSource(b, source), 0);
+    }
+    return total;
+  };
+
+  const receivedThisMonthByProcessor = new Map<string, number>();
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  for (const r of processingReceipts || []) {
+    if (new Date(r.date) < monthStart) continue;
+    receivedThisMonthByProcessor.set(r.processorId, (receivedThisMonthByProcessor.get(r.processorId) || 0) + (r.pcsReceived || 0));
+  }
+
+  const sentThisMonthByProcessor = new Map<string, number>();
+  for (const s of processingSends || []) {
+    if (new Date(s.date) < monthStart) continue;
+    sentThisMonthByProcessor.set(s.processorId, (sentThisMonthByProcessor.get(s.processorId) || 0) + (s.pcsSent || 0));
+  }
 
   const openEditModal = (processor: any) => {
     setEditingProcessor(processor);
@@ -159,13 +213,13 @@ export function Processors() {
       label: "Processor Name",
       sortable: true,
       render: (item) => (
-        <div className="flex items-center gap-3">
-          <UserCog className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <div>
-            <span className="font-medium text-foreground">{item.name}</span>
+        <Link to={`/processors/${item.id}`} className="flex items-center gap-3 group" aria-label={`Open ${item.name}'s workbench`}>
+          <UserCog className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
+          <div className="min-w-0">
+            <span className="font-medium text-foreground transition-colors group-hover:text-primary">{item.name}</span>
             {item.contactPerson && <div className="text-xs text-muted-foreground">{item.contactPerson}</div>}
           </div>
-        </div>
+        </Link>
       )
     },
     {
@@ -182,6 +236,37 @@ export function Processors() {
           {stageNameOf(item.stageId)}
         </span>
       )
+    },
+    {
+      key: "readyToWork",
+      label: "Ready to Work",
+      align: "right",
+      sortable: true,
+      render: (item) => {
+        const ready = amountReadyForStage(item.stageId);
+        return (
+          <span className="font-semibold tabular-nums text-foreground">
+            {formatNumber(ready)} <span className="text-[10px] uppercase text-muted-foreground">pcs</span>
+          </span>
+        );
+      }
+    },
+    {
+      key: "activity",
+      label: "This Month",
+      align: "right",
+      sortable: true,
+      render: (item) => {
+        const sent = sentThisMonthByProcessor.get(item.id) || 0;
+        const received = receivedThisMonthByProcessor.get(item.id) || 0;
+        return (
+          <span className="text-xs tabular-nums text-muted-foreground">
+            <span className="text-foreground">{formatNumber(received)}</span> in
+            {" · "}
+            <span className="text-foreground">{formatNumber(sent)}</span> out
+          </span>
+        );
+      }
     },
     { key: "phone", label: "Contact", sortable: true, render: (item) => <span className="text-muted-foreground">{item.phone || '-'}</span> },
     {

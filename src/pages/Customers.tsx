@@ -13,9 +13,10 @@ import { formInputClass } from "../components/form/formStyles";
 import { PartyLedgerModal } from "../components/PartyLedgerModal";
 import { cn, formatCurrency, formatNumber } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
+import { useShallow } from 'zustand/react/shallow';
 
 export function Customers() {
-  const { customers, addCustomer, updateCustomer } = useERPStore();
+  const { customers, addCustomer, updateCustomer } = useERPStore(useShallow(s => ({ customers: s.customers, addCustomer: s.addCustomer, updateCustomer: s.updateCustomer })));
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [ledgerParty, setLedgerParty] = useState<{ id: string; name: string; kind: 'Customer' } | null>(null);

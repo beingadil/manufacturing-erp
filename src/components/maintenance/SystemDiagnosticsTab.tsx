@@ -6,11 +6,25 @@ import { SQLiteStorageAdapter } from '@/database/sqlite/SQLiteStorageAdapter';
 import { Desktop } from '@/lib/desktop/DesktopInterop';
 import { useERPStore } from '@/store/useERPStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import { useShallow } from 'zustand/react/shallow';
 
 export function SystemDiagnosticsTab() {
   const [dbSize, setDbSize] = useState<string>('Calculating…');
 
-  const state = useERPStore();
+  const state = useERPStore(useShallow(s => ({
+    customers: s.customers,
+    suppliers: s.suppliers,
+    processors: s.processors,
+    materials: s.materials,
+    products: s.products,
+    vouchers: s.vouchers,
+    journalEntries: s.journalEntries,
+    inventoryMovements: s.inventoryMovements,
+    purchases: s.purchases,
+    sales: s.sales,
+    processingSends: s.processingSends,
+    processingReceipts: s.processingReceipts,
+  })));
   const settings = useSettingsStore();
   
   useEffect(() => {

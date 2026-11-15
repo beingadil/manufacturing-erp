@@ -40,6 +40,7 @@ import {
   sumInRange,
 } from '../lib/monitor/monitorMetrics';
 import { useERPStore } from '../store/useERPStore';
+import { useShallow } from 'zustand/react/shallow';
 
 const PRESETS: Array<{ id: MonitorRangeId; label: string }> = [
   { id: 'today', label: 'Today' },
@@ -56,10 +57,7 @@ export function MonitorScreen() {
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  const {
-    sales, purchases, materials, customers, suppliers, processors,
-    processingSends, processingReceipts, products, vouchers, journalEntries,
-  } = useERPStore();
+  const { sales, purchases, materials, customers, suppliers, processors, processingSends, processingReceipts, products, vouchers, journalEntries } = useERPStore(useShallow(s => ({ sales: s.sales, purchases: s.purchases, materials: s.materials, customers: s.customers, suppliers: s.suppliers, processors: s.processors, processingSends: s.processingSends, processingReceipts: s.processingReceipts, products: s.products, vouchers: s.vouchers, journalEntries: s.journalEntries })));
 
   const updateRange = (patch: Record<string, string>) => {
     const next = new URLSearchParams(searchParams);

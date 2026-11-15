@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { AccountingEngine } from '../lib/accounting/AccountingEngine';
 import { getBankAccounts, getCashAccounts } from '../lib/accounting/accountClassification';
+import { buildJournalEntries, voucherNarrationOf } from '../lib/vouchers/journalEntries';
 import { DocumentNumberingService } from '../lib/business/DocumentNumberingService';
 import { cn, formatCurrency } from '../lib/utils';
 import { ErrorManagement } from '../lib/validation';
@@ -14,6 +15,7 @@ import type { SourceModule, VoucherType } from '../types/erp';
 import { Dropdown } from './Dropdown';
 import { SearchableSelect } from './SearchableSelect';
 import { DatePicker } from './ui/date-picker';
+import { useShallow } from 'zustand/react/shallow';
 
 /**
  * Purpose-specific voucher form (spec §4–8).
@@ -121,7 +123,7 @@ const ROW_TYPES: Record<'payment' | 'receipt', { value: RowType; label: string }
 };
 
 export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sourceModule, onSaved, onCancel }: CashbookVoucherFormProps) {
-  const { accounts, suppliers, customers, processors, accountSubtypes, vouchers, journalEntries } = useERPStore();
+  const { accounts, suppliers, customers, processors, accountSubtypes, vouchers, journalEntries } = useERPStore(useShallow(s => ({ accounts: s.accounts, suppliers: s.suppliers, customers: s.customers, processors: s.processors, accountSubtypes: s.accountSubtypes, vouchers: s.vouchers, journalEntries: s.journalEntries })));
 
   const isJournal = mode === 'journal';
   const direction: 'payment' | 'receipt' = mode.endsWith('payment') ? 'payment' : 'receipt';
@@ -332,19 +334,20 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
     if (!isValid) return;
 
     if (isJournal) {
-      const derivedNarration = journalRows.map(r => r.narration?.trim() || '').find(Boolean) || '';
-      const entries = filledJournal.map(r => ({
+      const filled = filledJournal.map(r => ({
         accountId: r.accountId,
         debit: Number(r.debit) || 0,
         credit: Number(r.credit) || 0,
-        narration: r.narration?.trim() || derivedNarration,
+        narration: r.narration?.trim() || '',
       }));
+      const entries = buildJournalEntries(filled);
+      const voucherNarration = voucherNarrationOf(filled);
       ErrorManagement.safeExecuteSync(() => {
         if (isEditing) {
-          AccountingEngine.updateVoucher(editVoucherId, { date, narration: derivedNarration }, entries as any);
+          AccountingEngine.updateVoucher(editVoucherId, { date, narration: voucherNarration }, entries as any);
         } else {
           AccountingEngine.createVoucher({
-            date, type: meta.voucherType, sourceModule: sourceModule || 'Manual', narration: derivedNarration,
+            date, type: meta.voucherType, sourceModule: sourceModule || 'Manual', narration: voucherNarration,
           }, entries as any);
         }
         toast.success("Journal Voucher posted!", { description: voucherNo });
@@ -388,8 +391,7 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
 
     // The voucher's own narration comes from the first line that carries one —
     // the line narrations are the only place a description is typed.
-    const voucherNarration = counterpartyRows.map(r => r.narration?.trim() || '').find(Boolean) || '';
-
+    const voucherNarration = voucherNarrationOf(counterpartyRows);
     const entries: { accountId: string; debit: number; credit: number; narration: string }[] = [];
     for (const row of counterpartyRows) {
       const amt = Number(row.amount) || 0;
@@ -405,7 +407,7 @@ export function CashbookVoucherForm({ mode, editVoucherId, defaultAccountId, sou
         accountId: accId,
         debit: rowsAreDebit ? amt : 0,
         credit: rowsAreDebit ? 0 : amt,
-        narration: row.narration?.trim() || voucherNarration,
+        narration: row.narration?.trim() || '',
       });
     }
 

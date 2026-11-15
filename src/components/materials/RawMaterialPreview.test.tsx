@@ -73,13 +73,16 @@ const renderPreview = (props?: Partial<React.ComponentProps<typeof RawMaterialPr
   );
 
 describe('RawMaterialPreview', () => {
-  it('shows the material identity and stock split', () => {
+  it('shows the material identity and the all-batches totals', () => {
     renderPreview();
     expect(screen.getByText('Steel Sheet 2mm')).toBeTruthy();
     expect(screen.getByText(/No\. S-1/)).toBeTruthy();
+    expect(screen.getByText('All batches — totals')).toBeTruthy();
     expect(screen.getByText('Raw')).toBeTruthy();
-    expect(screen.getByText('At processor')).toBeTruthy();
+    expect(screen.getByText('Waiting')).toBeTruthy();
+    expect(screen.getByText('WIP')).toBeTruthy();
     expect(screen.getByText('Finished')).toBeTruthy();
+    expect(screen.getByText('Every batch — newest first')).toBeTruthy();
   });
 
   it('renders a not-found state for missing materials', () => {

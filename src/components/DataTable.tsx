@@ -9,7 +9,7 @@ import {
   Search,
   X
 } from "lucide-react";
-import React, { memo, useEffect, useMemo, useState } from "react";
+import React, { memo, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { cn } from "../lib/utils";
 import { Dropdown } from "./Dropdown";
 
@@ -84,6 +84,9 @@ function DataTableInner<T extends Record<string, any>>({
   };
 
   const [searchTerm, setSearchTerm] = useState(() => loadState('search', ''));
+  // Search input stays keystroke-cheap; the expensive filter runs on a
+  // deferred snapshot, keeping the table responsive as the dataset grows.
+  const deferredSearch = useDeferredValue(searchTerm);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(() => 
     loadState('sort', defaultSortKey ? { key: defaultSortKey, direction: defaultSortDirection ?? 'desc' } : null)
   );
@@ -114,16 +117,16 @@ function DataTableInner<T extends Record<string, any>>({
   };
 
   const filteredData = useMemo(() => {
-    if (!searchTerm || !searchKeys || searchKeys.length === 0) return data;
-    const lowerSearch = searchTerm.toLowerCase();
-    
+    if (!deferredSearch || !searchKeys || searchKeys.length === 0) return data;
+    const lowerSearch = deferredSearch.toLowerCase();
+
     return data.filter((item) => {
       return searchKeys.some((key) => {
         const val = item[key];
         return val != null && String(val).toLowerCase().includes(lowerSearch);
       });
     });
-  }, [data, searchTerm, searchKeys]);
+  }, [data, deferredSearch, searchKeys]);
 
   const sortedData = useMemo(() => {
     if (!sortConfig) return filteredData;

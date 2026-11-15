@@ -18,14 +18,12 @@ import { formatCurrency, formatNumber } from "../lib/utils";
 import { ErrorManagement } from '../lib/validation';
 import { ProcessingService } from '../services/ProcessingService';
 import { useERPStore } from "../store/useERPStore";
+import { useShallow } from 'zustand/react/shallow';
 
 type JobWorkTab = "Board" | "Send" | "Receive" | "Billing" | "Vouchers" | "Timeline" | "Stages";
 
 export function JobWork() {
-  const {
-    materials, processors, processingSends, processingReceipts, processorBills, vouchers,
-    batches, processingStages, processingLosses
-  } = useERPStore();
+  const { materials, processors, processingSends, processingReceipts, processorBills, vouchers, batches, processingStages, processingLosses } = useERPStore(useShallow(s => ({ materials: s.materials, processors: s.processors, processingSends: s.processingSends, processingReceipts: s.processingReceipts, processorBills: s.processorBills, vouchers: s.vouchers, batches: s.batches, processingStages: s.processingStages, processingLosses: s.processingLosses })));
 
   const [activeTab, setActiveTab] = useState<JobWorkTab>("Board");
 

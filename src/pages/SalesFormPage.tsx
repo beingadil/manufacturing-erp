@@ -28,6 +28,7 @@ import {
 import { adaptiveAmountClass, cn, formatCurrency } from '../lib/utils';
 import { SalesService } from '../services/SalesService';
 import { useERPStore } from '../store/useERPStore';
+import { useShallow } from 'zustand/react/shallow';
 
 type Line = {
   id: string;
@@ -56,8 +57,7 @@ export default function SalesFormPage() {
   const isEdit = Boolean(editId);
   const deepNew = searchParams.get('new') === '1';
 
-  const { sales, products, materials, customers, batches, finishedGoodsLots, stateSchemaVersion } =
-    useERPStore();
+  const { sales, products, materials, customers, batches, finishedGoodsLots, stateSchemaVersion } = useERPStore(useShallow(s => ({ sales: s.sales, products: s.products, materials: s.materials, customers: s.customers, batches: s.batches, finishedGoodsLots: s.finishedGoodsLots, stateSchemaVersion: s.stateSchemaVersion })));
   const v4 = isManufacturingEnabled({ stateSchemaVersion });
 
   const [customerId, setCustomerId] = useState('');

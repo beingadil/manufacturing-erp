@@ -22,6 +22,41 @@ import type { Account, AccountSubtype, ProcessingStage, Voucher, VoucherType } f
  *     send/receipt/sale history. Unconditional and idempotent — runs every
  *     startup so the batch trail can never drift from the material counters.
  */
+/**
+ * Double-mojibake repair. Strings saved by an old build were UTF-8 decoded as
+ * Latin-1 (or cp1252) and re-encoded, sometimes more than once — a plain
+ * em-dash (E2 80 94) became "Ã¢ÂÂ" in the database. The signature is C1
+ * control characters (U+0080–U+009F) sitting inside otherwise plain text,
+ * which no correct Latin-1/UTF-8 string ever contains.
+ *
+ * Only strings consisting entirely of code points ≤ U+00FF are repaired
+ * (encode to Latin-1 bytes, decode as UTF-8); anything mixed with genuine
+ * non-Latin text is left exactly as the user saved it. Idempotent — a second
+ * pass is a no-op because the repaired text has no C1 controls left.
+ */
+function unmojibake(s: string): string {
+  if (typeof s !== 'string' || s.length === 0) return s;
+  if (!/[\u0080-\u009F]/.test(s)) return s;
+  for (let i = 0; i < s.length; i++) {
+    if (s.charCodeAt(i) > 0xff) return s; // mixed-language string — never rewrite it
+  }
+  try {
+    const bytes = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i);
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return s; // not recoverable as UTF-8 — keep the user's bytes untouched
+  }
+}
+
+/**
+ * Trail replay engine version. Bump whenever the replay's semantics change in a
+ * way that must re-derive every batch once more (e.g. the chain-order fix of
+ * 2026-11). A state stamped with this version boots without replaying the
+ * trail at all — the rebuilt batches are authoritative by then.
+ */
+const TRAIL_VERSION = 1;
+
 export function migrateERPState(state: any): any {
   if (!state || typeof state !== 'object') return state;
 
@@ -158,6 +193,40 @@ export function migrateERPState(state: any): any {
     }
   }
 
+  // 4c. Repair stage descriptions written by the old double-encoding bug
+  //     (see unmojibake above). Only the free-text description is touched —
+  //     ids, names and billing config are byte-identical after the pass.
+  processingStages = processingStages.map(s =>
+    s?.description && /[\u0080-\u009F]/.test(s.description)
+      ? { ...s, description: unmojibake(s.description) }
+      : s
+  );
+
+  // 4d. Collapse the narration copies written by the old voucher form. Before
+  //     2026-11, a non-empty line narration was copied into every line left
+  //     empty — every line of a voucher ended up with the same text. For
+  //     each voucher, keep the narration on the FIRST entry carrying that
+  //     exact text (the line the user actually typed into, per the old
+  //     derivation order) and clear the rest. The voucher's own summary
+  //     narration is untouched.
+  //     One-time, guarded by `narrationCopyFixVersion`: after the first clean
+  //     run, deliberately identical narrations typed by the user in the new
+  //     form are preserved forever.
+  const narrationCopyFixDone = Number(state.narrationCopyFixVersion) === 1;
+  let migratedJournalEntries = journalEntries;
+  if (!narrationCopyFixDone) {
+    const seenByVoucher = new Map<string, Set<string>>();
+    migratedJournalEntries = journalEntries.map((je: any) => {
+      const text = (je?.narration ?? '').trim();
+      if (!text) return je;
+      const seen = seenByVoucher.get(je.voucherId) ?? new Set<string>();
+      if (seen.has(text)) return { ...je, narration: '' };
+      seen.add(text);
+      seenByVoucher.set(je.voucherId, seen);
+      return je;
+    });
+  }
+
   // 5. Reconstruct per-batch stages (raw → WIP → finished) from the
   //    authoritative send/receipt/sale history. This runs on EVERY startup and
   //    is fully idempotent: batches are reset to their purchase baseline and the
@@ -187,7 +256,13 @@ export function migrateERPState(state: any): any {
   let processingLosses = Array.isArray(state.processingLosses) ? state.processingLosses : [];
 
   let migratedBatches = batches;
-  if (batches.length > 0) {
+  let trailFailures = 0;
+  // Full trail replay runs whenever the persisted marker is missing or from an
+  // older replay engine. Once every material replays cleanly we stamp the
+  // marker, and the next startup skips the replay entirely — boot stays flat
+  // no matter how large the history grows.
+  const alreadyBuilt = Number(state.trailVersion) === TRAIL_VERSION;
+  if (batches.length > 0 && !alreadyBuilt) {
     // Replay each material's full trail through the SAME bucket engine the
     // live handlers use (disjoint per-source availability, movement-map
     // enforced, conservation-checked). One code path for startup migration,
@@ -213,6 +288,7 @@ export function migrateERPState(state: any): any {
           manufacturingOrders
         );
       } catch (e: any) {
+        trailFailures += 1;
         // One material whose history cannot be safely replayed (stage-chain
         // gap, a corrupt batch record, a malformed date) must NEVER take the
         // whole ERP state down with it. Keep the material's stored trail
@@ -387,6 +463,9 @@ export function migrateERPState(state: any): any {
     finishedGoodsLots,
     processingLosses,
     stateSchemaVersion: Math.max(priorSchemaVersion, 4),
+    trailVersion: alreadyBuilt || trailFailures === 0 ? TRAIL_VERSION : undefined,
+    narrationCopyFixVersion: 1,
+    journalEntries: migratedJournalEntries,
     processingStages,
     customers: migratedCustomers,
     suppliers: migratedSuppliers,

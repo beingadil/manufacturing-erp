@@ -11,13 +11,10 @@ import { isDebitNormalAccount } from "../lib/accounting/accountClassification";
 import { exportLedgerStatementPdf } from "../components/ledger/exportLedgerStatement";
 import { cn, formatCurrency, formatDateISO } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
+import { useShallow } from 'zustand/react/shallow';
 
 export function Ledgers() {
-  const {
-    processors, suppliers, customers, materials,
-    processingSends, processingReceipts,
-    accounts, journalEntries, vouchers, accountSubtypes
-  } = useERPStore();
+  const { processors, suppliers, customers, materials, processingSends, processingReceipts, accounts, journalEntries, vouchers, accountSubtypes } = useERPStore(useShallow(s => ({ processors: s.processors, suppliers: s.suppliers, customers: s.customers, materials: s.materials, processingSends: s.processingSends, processingReceipts: s.processingReceipts, accounts: s.accounts, journalEntries: s.journalEntries, vouchers: s.vouchers, accountSubtypes: s.accountSubtypes })));
 
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -139,7 +136,7 @@ export function Ledgers() {
           {row.voucher.voucherNo}
         </button>
       ) : "—",
-      description: row.narration || row.voucher?.narration || "—",
+      description: row.narration?.trim() || "—",
       badges: row.voucher?.type ? [{ label: row.voucher.type, tone: "neutral" as const }] : [],
       debit: row.debit,
       credit: row.credit,
@@ -159,7 +156,7 @@ export function Ledgers() {
       rows: ledger.rows.map(row => ({
         date: row.voucher?.date || '',
         voucherNo: row.voucher?.voucherNo || '-',
-        narration: row.narration || row.voucher?.narration || '-',
+        narration: row.narration?.trim() || '-',
         debit: row.debit,
         credit: row.credit,
         runningBalance: row.runningBalance,

@@ -7,6 +7,7 @@ import type { ProcessingStage } from '../../types/erp';
 import { DataTable } from '../DataTable';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog';
 import { PageModal } from '../ui/PageModal';
+import { useShallow } from 'zustand/react/shallow';
 
 /**
  * Processing Stage Master — configure the manufacturing chain. The chain order
@@ -14,7 +15,7 @@ import { PageModal } from '../ui/PageModal';
  * only the final stage (★) produces saleable Finished Goods.
  */
 export function StageManagerPanel() {
-  const { processingStages } = useERPStore();
+  const { processingStages } = useERPStore(useShallow(s => ({ processingStages: s.processingStages })));
   const [modalOpen, setModalOpen] = useState(false);
   const [editStageId, setEditStageId] = useState<string | undefined>();
   const [name, setName] = useState('');
@@ -26,7 +27,7 @@ export function StageManagerPanel() {
   const [description, setDescription] = useState('');
   const [stageToDelete, setStageToDelete] = useState<string | null>(null);
 
-  const { processingSends } = useERPStore();
+  const { processingSends } = useERPStore(useShallow(s => ({ processingSends: s.processingSends })));
   const hasInFlightWork = processingSends.some(s => (s.pcsSent || 0) > (s.pcsReceived || 0) && s.status === 'Pending');
 
   const sorted = useMemo(() => [...(processingStages || [])].sort((a, b) => a.sequence - b.sequence), [processingStages]);

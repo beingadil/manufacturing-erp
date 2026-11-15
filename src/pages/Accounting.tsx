@@ -21,6 +21,7 @@ import { FinancialReportService } from "../lib/reporting/FinancialReportService"
 import { cn, formatCurrency, formatDateISO } from "../lib/utils";
 import { useERPStore } from "../store/useERPStore";
 import { Account, AccountType, JournalEntry, Voucher } from "../types/erp";
+import { useShallow } from 'zustand/react/shallow';
 
 /**
  * Shared report helper (spec §14, §24): returns only journal entries whose
@@ -66,7 +67,7 @@ export function Accounting() {
 
 
 function GeneralLedger() {
-  const { accounts, vouchers, journalEntries, suppliers, customers, processors, accountSubtypes } = useERPStore();
+  const { accounts, vouchers, journalEntries, suppliers, customers, processors, accountSubtypes } = useERPStore(useShallow(s => ({ accounts: s.accounts, vouchers: s.vouchers, journalEntries: s.journalEntries, suppliers: s.suppliers, customers: s.customers, processors: s.processors, accountSubtypes: s.accountSubtypes })));
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedAccountId, setSelectedAccountId] = useState<string>(() => searchParams.get('id') || "");
   // The ledger opens only when Preview is pressed; a deep link (?id=) counts
@@ -134,7 +135,7 @@ function GeneralLedger() {
           {entry.voucher.voucherNo}
         </button>
       ) : "—",
-      description: entry.narration || entry.voucher?.narration || "—",
+      description: entry.narration?.trim() || "—",
       badges: entry.voucher?.type ? [{ label: entry.voucher.type, tone: "neutral" as const }] : [],
       debit: entry.debit,
       credit: entry.credit,
@@ -154,7 +155,7 @@ function GeneralLedger() {
       rows: processedEntries.map(entry => ({
         date: entry.voucher?.date || '',
         voucherNo: entry.voucher?.voucherNo || '-',
-        narration: entry.narration || entry.voucher?.narration || '-',
+        narration: entry.narration?.trim() || '-',
         debit: entry.debit,
         credit: entry.credit,
         runningBalance: entry.runningBalance,
@@ -300,7 +301,7 @@ function BalanceSheet() {
 }
 
 function ChartOfAccounts() {
-  const { accounts, accountSubtypes, addAccountSubtype, deleteAccountSubtype } = useERPStore();
+  const { accounts, accountSubtypes, addAccountSubtype, deleteAccountSubtype } = useERPStore(useShallow(s => ({ accounts: s.accounts, accountSubtypes: s.accountSubtypes, addAccountSubtype: s.addAccountSubtype, deleteAccountSubtype: s.deleteAccountSubtype })));
   const [search, setSearch] = useState("");
   const [isAddAccountModalOpen, setIsAddAccountModalOpen] = useState(false);
   const [editAccountId, setEditAccountId] = useState<string | undefined>();
@@ -569,7 +570,7 @@ function ChartOfAccounts() {
 }
 
 function TrialBalance() {
-  const { accounts, journalEntries, vouchers, accountSubtypes } = useERPStore();
+  const { accounts, journalEntries, vouchers, accountSubtypes } = useERPStore(useShallow(s => ({ accounts: s.accounts, journalEntries: s.journalEntries, vouchers: s.vouchers, accountSubtypes: s.accountSubtypes })));
   const [asOfDate, setAsOfDate] = useState('');
 
   // Single engine source (spec §19, §24)
@@ -689,7 +690,7 @@ function ProfitAndLoss() {
 }
 
 function CashFlow() {
-  const { accounts, journalEntries, vouchers, accountSubtypes } = useERPStore();
+  const { accounts, journalEntries, vouchers, accountSubtypes } = useERPStore(useShallow(s => ({ accounts: s.accounts, journalEntries: s.journalEntries, vouchers: s.vouchers, accountSubtypes: s.accountSubtypes })));
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 

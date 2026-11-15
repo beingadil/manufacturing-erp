@@ -85,9 +85,30 @@ export function getPrintSettings(): PrintSettings {
   const bs = useSettingsStore.getState();
   const cu = useERPStore.getState().currentUser ?? { name: '', email: '' };
 
+  // The company identity and the person who printed the document were read
+  // from two stores that the app never keeps in step: the ERP store still
+  // held the seed placeholders ("W-RAW ERP PROFESSIONAL", "System Admin")
+  // while the real values — the business name and the signed-in user — live in
+  // the settings store. So a PDF printed the placeholder identity.
+  //
+  // The rule now: a value that is still the untouched seed placeholder is
+  // treated as "not set" and the live value wins. Anything the user has
+  // actually edited is always respected.
+  const companyName = isPlaceholder(cs.name, PLACEHOLDER_COMPANY_NAME)
+    ? bs.dashboardName || PLACEHOLDER_COMPANY_NAME
+    : cs.name || bs.dashboardName || PLACEHOLDER_COMPANY_NAME;
+
+  const printedByName = isPlaceholder(cu.name, PLACEHOLDER_USER_NAME)
+    ? bs.userName || PLACEHOLDER_USER_NAME
+    : cu.name || bs.userName || PLACEHOLDER_USER_NAME;
+
+  const printedByEmail = isPlaceholder(cu.email, PLACEHOLDER_USER_EMAIL)
+    ? bs.userEmail || PLACEHOLDER_USER_EMAIL
+    : cu.email || bs.userEmail || PLACEHOLDER_USER_EMAIL;
+
   return {
     company: {
-      name: cs.name ?? DEFAULT_PRINT_SETTINGS.company.name,
+      name: companyName,
       address: cs.address ?? DEFAULT_PRINT_SETTINGS.company.address,
       phone: cs.phone ?? DEFAULT_PRINT_SETTINGS.company.phone,
       email: cs.email ?? DEFAULT_PRINT_SETTINGS.company.email,
@@ -110,12 +131,34 @@ export function getPrintSettings(): PrintSettings {
     },
     output: {
       ...DEFAULT_PRINT_SETTINGS.output,
+      currency: ds.currency ?? DEFAULT_PRINT_SETTINGS.output.currency,
+      currencyFractionDigits:
+        ds.currencyFractionDigits ?? DEFAULT_PRINT_SETTINGS.output.currencyFractionDigits,
+      numberLocale: ds.numberLocale ?? DEFAULT_PRINT_SETTINGS.output.numberLocale,
+      dateFormat: ds.dateFormat ?? DEFAULT_PRINT_SETTINGS.output.dateFormat,
     },
     printedBy: {
-      name: cu.name ?? DEFAULT_PRINT_SETTINGS.printedBy.name,
-      email: cu.email ?? DEFAULT_PRINT_SETTINGS.printedBy.email,
+      name: printedByName,
+      email: printedByEmail,
     },
   };
+}
+
+/** The seed values the app starts with — never a real company or user. */
+const PLACEHOLDER_COMPANY_NAME = 'W-RAW ERP PROFESSIONAL';
+const PLACEHOLDER_USER_NAME = 'System Admin';
+const PLACEHOLDER_USER_EMAIL = 'admin@miaoda.com';
+
+/**
+ * True when a value is still the untouched seed placeholder. Used to decide
+ * whether a setting has actually been set by the user — the ERP store keeps
+ * its placeholders forever because nothing writes to them, so "is it the
+ * placeholder" is the only honest test for "was this ever edited?".
+ */
+function isPlaceholder(value: string | undefined, placeholder: string): boolean {
+  if (value === undefined || value === null) return true;
+  const trimmed = value.trim();
+  return trimmed === '' || trimmed === placeholder;
 }
 
 /** Format money for print/screen — always 2 decimal places (paisa preserved). */

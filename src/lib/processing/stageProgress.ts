@@ -3,20 +3,9 @@ import {
   batchAvailableAtSource,
   batchAvailableTotal,
   batchRawAvailableOf,
-  InventoryCalculationService,
   stageAvailableEntries,
+  InventoryCalculationService,
 } from '../business/InventoryCalculationService';
-
-/**
- * Batch-scoped stage progress — the building block for multi-stage display.
- *
- * Buckets are DISJOINT (raw / atProcessor / per-source availability / finished),
- * so any sum of them is the true on-hand total and can never double-count.
- * A batch is multi-position: its pcs can sit in several buckets at once, and
- * availability is tracked PER SOURCE STAGE — pcs that came back from Machine
- * and pcs that came back from Initial coexist as separate entries and can
- * never merge or mislabel (the 600+100 collapse bug).
- */
 
 export interface BatchStageProgress {
   batch: Batch;
@@ -59,17 +48,30 @@ export function visibleStagesForMaterial(
   }
   if (path === 'custom_stages') {
     const allowed = new Set(material.allowedStageIds || []);
+    // Chain order — the ALLOWED list's tick order is irrelevant.
     return allowed.size > 0 ? sorted.filter(s => allowed.has(s.id)) : sorted;
   }
   return sorted;
 }
 
+/** Honest "everything is finished": finished stock exists and nothing else does. */
+export function isFullyFinished(batch: Batch): boolean {
+  return (batch.processedPcs || 0) > 0
+    && (batch.atProcessorPcs || 0) <= 0
+    && batchAvailableTotal(batch) <= 0
+    && batchRawAvailableOf(batch) <= 0;
+}
+
 /** Derive one batch's progress from its own disjoint buckets. */
 export function getBatchStageProgress(
   batch: Batch,
-  stages: ProcessingStage[]
+  stages: ProcessingStage[],
+  material?: Pick<RawMaterial, 'processingPath' | 'fixedStageId' | 'allowedStageIds'> | null
 ): BatchStageProgress {
-  const sorted = getSortedStages(stages);
+  // The chain THIS material travels — a material limited to some stages
+  // never shows a "next stage" outside its own chain, and finishes at
+  // ITS OWN final stage, not at whatever is globally marked final.
+  const sorted = visibleStagesForMaterial(stages, material ?? undefined);
   const currentStage = batch.currentStageId
     ? sorted.find(s => s.id === batch.currentStageId) || null
     : null;
@@ -86,7 +88,7 @@ export function getBatchStageProgress(
 
   const activeStage = waitingSources[0] || currentStage;
   const nextStage = activeStage
-    ? sorted.find(s => s.sequence === activeStage.sequence + 1) || null
+    ? sorted.find(s => s.sequence > activeStage.sequence) || null
     : sorted[0] || null;
 
   const availablePcs = batchAvailableTotal(batch);
@@ -94,12 +96,12 @@ export function getBatchStageProgress(
   const finishedPcs = batch.processedPcs || 0;
   const rawPcs = batchRawAvailableOf(batch);
   const isRaw = !activeStage;
-  const isFinished = !!currentStage && !!sorted.find(s => s.id === currentStage.id)?.isFinalStage
-    && inTransitPcs <= 0 && availablePcs <= 0 && rawPcs <= 0;
+  const isFinished = isFullyFinished(batch);
 
-  const lastRelevantSeq = isFinished
-    ? (currentStage?.sequence || 0)
-    : (nextStage?.sequence || 0) - 1;
+  const lastRelevantSeq =
+    isFinished || sorted.length === 0
+      ? (currentStage?.sequence || 0)
+      : (nextStage?.sequence || 0) - 1;
   const progressRatio = sorted.length > 0
     ? Math.max(0, Math.min(1, lastRelevantSeq / sorted.length))
     : 0;
@@ -125,12 +127,13 @@ export function getBatchStageProgress(
 export function getMaterialBatchProgress(
   materialId: string,
   batches: Batch[],
-  stages: ProcessingStage[]
+  stages: ProcessingStage[],
+  material?: Pick<RawMaterial, 'processingPath' | 'fixedStageId' | 'allowedStageIds'> | null
 ): BatchStageProgress[] {
   return batches
     .filter(b => b.materialId === materialId)
     .sort((a, b) => b.date.localeCompare(a.date))
-    .map(b => getBatchStageProgress(b, stages));
+    .map(b => getBatchStageProgress(b, stages, material));
 }
 
 /**

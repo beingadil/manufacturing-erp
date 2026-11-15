@@ -12,6 +12,7 @@ import { CashbookEntryModal } from './CashbookEntryModal';
 import { DatePicker } from './ui/date-picker';
 import { SearchInput } from './ui/SearchInput';
 import { VoucherDetailModal } from './VoucherDetailModal';
+import { useShallow } from 'zustand/react/shallow';
 
 interface VoucherHistoryTabProps {
   sourceModule: SourceModule;
@@ -19,7 +20,7 @@ interface VoucherHistoryTabProps {
 
 export function VoucherHistoryTab({ sourceModule }: VoucherHistoryTabProps) {
   const { profile, isAdmin, dataPolicies } = useAuth();
-  const { vouchers } = useERPStore();
+  const { vouchers } = useERPStore(useShallow(s => ({ vouchers: s.vouchers })));
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');

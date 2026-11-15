@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { useERPStore } from '../store/useERPStore';
 import { CashbookVoucherForm, VoucherFormMode } from './CashbookVoucherForm';
 import { ModalOverlay } from './ui/ModalOverlay';
+import { useShallow } from 'zustand/react/shallow';
 
 interface Props {
   isOpen: boolean;
@@ -24,7 +25,7 @@ function resolveMode(voucherType: string | undefined): VoucherFormMode {
 }
 
 export function CashbookEntryModal({ isOpen, onClose, onSave, defaultAccountId, editVoucherId }: Props) {
-  const { vouchers } = useERPStore();
+  const { vouchers } = useERPStore(useShallow(s => ({ vouchers: s.vouchers })));
 
   const mode = useMemo<VoucherFormMode>(() => {
     if (!editVoucherId) return 'journal';

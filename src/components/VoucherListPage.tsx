@@ -14,6 +14,7 @@ import { KpiCard } from './ui/KpiCard';
 import { SearchInput } from './ui/SearchInput';
 import { VoucherDetailModal } from './VoucherDetailModal';
 import type { VoucherFormMode } from './CashbookVoucherForm';
+import { useShallow } from 'zustand/react/shallow';
 
 interface VoucherListPageProps {
   kind: VoucherFormMode;
@@ -22,7 +23,7 @@ interface VoucherListPageProps {
 }
 
 export function VoucherListPage({ kind, title, subtitle }: VoucherListPageProps) {
-  const { vouchers, journalEntries, accounts } = useERPStore();
+  const { vouchers, journalEntries, accounts } = useERPStore(useShallow(s => ({ vouchers: s.vouchers, journalEntries: s.journalEntries, accounts: s.accounts })));
   const today = new Date().toISOString().split('T')[0];
   const navigate = useNavigate();
 

@@ -14,6 +14,7 @@ import { FormFooter } from '../form/FormFooter';
 import { FormGrid } from '../form/FormGrid';
 import { FormSection } from '../form/FormSection';
 import { formInputClass } from '../form/formStyles';
+import { useShallow } from 'zustand/react/shallow';
 
 export interface SupplierFormProps {
   /** Edit mode when a supplier is supplied; add mode otherwise. */
@@ -30,7 +31,7 @@ export interface SupplierFormProps {
 }
 
 export function SupplierForm({ supplier, onSaved, onCancel, formId, showFooter = true }: SupplierFormProps) {
-  const { addSupplier, updateSupplier } = useERPStore();
+  const { addSupplier, updateSupplier } = useERPStore(useShallow(s => ({ addSupplier: s.addSupplier, updateSupplier: s.updateSupplier })));
 
   const [name, setName] = useState(supplier?.name ?? '');
   const [contactPerson, setContactPerson] = useState(supplier?.contactPerson ?? '');
