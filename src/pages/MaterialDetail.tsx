@@ -9,7 +9,9 @@ import {
   Clock,
   Package,
   PackageCheck,
+  ShoppingCart,
   Truck,
+  Users,
   Pencil,
   Wallet,
 } from 'lucide-react';
@@ -68,6 +70,52 @@ export function MaterialDetail() {
     return sales.filter(s => productIds.includes(s.productId)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sales, productIds.join('|')]);
+
+  // Purchase summary (headline)
+  const purchaseSummary = useMemo(() => ({
+    pcs: materialBatches.reduce((s, b) => s + (b.initialPcs || 0), 0),
+    amount: materialBatches.reduce((s, b) => s + (b.amount || 0), 0),
+    lots: materialBatches.length,
+    suppliers: new Set(materialBatches.map(b => b.supplierId).filter(Boolean)).size,
+  }), [materialBatches]);
+
+  // Per-stage chain breakdown (every stage that this material moves through)
+  const chainRows = useMemo(() => {
+    const rows: Array<{
+      stage: typeof sortedStages[number];
+      sent: number;
+      returned: number;
+      losses: number;
+      holding: number;
+      dispatchCount: number;
+      available: number;
+    }> = [];
+    const stagePcsAvailable = new Map<string, number>();
+    for (const b of materialBatches) {
+      for (const e of stageAvailableEntries(b)) {
+        stagePcsAvailable.set(e.stageId, (stagePcsAvailable.get(e.stageId) || 0) + e.pcs);
+      }
+    }
+    for (const stage of sortedStages) {
+      const stageSends = materialSends.filter(s => s.stageId === stage.id);
+      const sent = stageSends.reduce((s, x) => s + (x.pcsSent || 0), 0);
+      const returned = stageSends.reduce((s, x) => s + (x.pcsReceived || 0), 0);
+      const losses = stageSends.reduce((s, x) => s + (x.lossQuantity || 0), 0);
+      const holding = Math.max(0, sent - returned - losses);
+      const dispatchCount = stageSends.length;
+      const available = stagePcsAvailable.get(stage.id) || 0;
+      // Only show rows relevant to this material's path
+      const pathOk = (
+        (material?.processingPath === 'ready_made' && stage.sequence === 1) ||
+        (material?.processingPath === 'single_stage' && stage.id === material?.fixedStageId) ||
+        (material?.processingPath === 'custom_stages' && (material?.allowedStageIds || []).includes(stage.id)) ||
+        !material?.processingPath || material.processingPath === 'full_chain'
+      );
+      if (!pathOk && sent === 0 && available === 0) continue;
+      rows.push({ stage, sent, returned, losses, holding, dispatchCount, available });
+    }
+    return rows;
+  }, [sortedStages, materialSends, materialBatches, material]);
 
   // ── Derived quantities (single source: batches + history) ─────────────────
   const stageValues = useMemo(
@@ -295,6 +343,106 @@ export function MaterialDetail() {
 
         {/* ── Overview — where the pieces sit + stage cost ── */}
         <TabsContent value="overview" className="mt-5 space-y-5">
+          {/* ── Purchase snapshot (headline figures) ── */}
+          <section>
+            <h3 className="mb-2 text-sm font-semibold text-foreground">Purchased</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="rounded-xl border border-border bg-card p-3">
+                <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground mb-1"><ShoppingCart className="h-3.5 w-3.5" /> Total purchased</div>
+                <div className="text-xl font-bold tabular-nums text-foreground">{formatNumber(purchaseSummary.pcs)} <span className="text-[11px] font-medium text-muted-foreground">PCS</span></div>
+                <div className="mt-0.5 text-xs text-muted-foreground">{formatCurrency(purchaseSummary.amount)} · {purchaseSummary.lots} {purchaseSummary.lots === 1 ? 'lot' : 'lots'}</div>
+              </div>
+              <div className="rounded-xl border border-border bg-card p-3">
+                <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground mb-1"><Users className="h-3.5 w-3.5" /> Suppliers</div>
+                <div className="text-xl font-bold tabular-nums text-foreground">{formatNumber(purchaseSummary.suppliers)}</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">Distinct suppliers in this material</div>
+              </div>
+              <div className="rounded-xl border border-border bg-card p-3">
+                <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground mb-1"><Truck className="h-3.5 w-3.5" /> Dispatched</div>
+                <div className="text-xl font-bold tabular-nums text-foreground">{formatNumber(totals.sent)} <span className="text-[11px] font-medium text-muted-foreground">PCS</span></div>
+                <div className="mt-0.5 text-xs text-muted-foreground">Total pcs sent to processors</div>
+              </div>
+              <div className="rounded-xl border border-border bg-card p-3">
+                <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground mb-1"><PackageCheck className="h-3.5 w-3.5" /> Returned</div>
+                <div className="text-xl font-bold tabular-nums text-foreground">{formatNumber(totals.received)} <span className="text-[11px] font-medium text-muted-foreground">PCS</span></div>
+                <div className="mt-0.5 text-xs text-muted-foreground">{totals.yieldPct != null ? `Return yield ${totals.yieldPct}%` : 'Received back from processors'}</div>
+              </div>
+            </div>
+          </section>
+
+          {/* ── Per-stage chain: where the pieces actually are ── */}
+          <section>
+            <h3 className="mb-2 text-sm font-semibold text-foreground">Chain — where this material is</h3>
+            <p className="mb-3 text-xs text-muted-foreground">Every stage this material passes through — delivered, held, returned, ready for the next one.</p>
+            <div className="overflow-x-auto rounded-xl border border-border bg-muted/20">
+              <table className="w-full min-w-[40rem] text-sm text-left">
+                <thead className="text-xs text-muted-foreground bg-muted/60 border-b border-border/60">
+                  <tr>
+                    <th className="px-5 py-3 font-medium">Stage / Processor</th>
+                    <th className="px-5 py-3 font-medium text-right">Delivered</th>
+                    <th className="px-5 py-3 font-medium text-right">Holding</th>
+                    <th className="px-5 py-3 font-medium text-right">Returned</th>
+                    <th className="px-5 py-3 font-medium text-right">Awaiting next</th>
+                    <th className="px-5 py-3 font-medium text-right">Dispatches</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {chainRows.length === 0 ? (
+                    <tr><td colSpan={6} className="px-5 py-8 text-center text-muted-foreground">Nothing has been dispatched yet.</td></tr>
+                  ) : chainRows.map(({ stage, sent, returned, losses, holding, dispatchCount, available }) => (
+                    <tr key={stage.id} className="hover:bg-muted/80 transition-colors">
+                      <td className="px-5 py-3 text-foreground">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex h-2 w-2 rounded-full bg-amber-500" />
+                          <span className="font-medium">{stage.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3 text-right tabular-nums text-foreground">{formatNumber(sent)}<span className="text-[10px] text-muted-foreground ml-1">PCS</span></td>
+                      <td className="px-5 py-3 text-right tabular-nums text-amber-600 font-medium">{formatNumber(holding)}<span className="text-[10px] text-muted-foreground ml-1">PCS</span></td>
+                      <td className="px-5 py-3 text-right tabular-nums text-muted-foreground">{formatNumber(returned)}<span className="text-[10px] text-muted-foreground ml-1">PCS</span></td>
+                      <td className="px-5 py-3 text-right tabular-nums text-success font-medium">{formatNumber(available)}<span className="text-[10px] text-muted-foreground ml-1">PCS</span></td>
+                      <td className="px-5 py-3 text-right tabular-nums text-muted-foreground">{formatNumber(dispatchCount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                {chainRows.length > 0 && (
+                  <tfoot className="border-t border-border/60 bg-muted/40">
+                    <tr>
+                      <th className="px-5 py-3 font-medium text-foreground">Total</th>
+                      <th className="px-5 py-3 text-right font-medium text-foreground tabular-nums">{formatNumber(chainRows.reduce((s, r) => s + r.sent, 0))}</th>
+                      <th className="px-5 py-3 text-right font-bold text-amber-600 tabular-nums">{formatNumber(chainRows.reduce((s, r) => s + r.holding, 0))}</th>
+                      <th className="px-5 py-3 text-right font-medium text-foreground tabular-nums">{formatNumber(chainRows.reduce((s, r) => s + r.returned, 0))}</th>
+                      <th className="px-5 py-3 text-right font-medium text-success tabular-nums">{formatNumber(chainRows.reduce((s, r) => s + r.available, 0))}</th>
+                      <th className="px-5 py-3 text-right font-medium text-foreground tabular-nums">{formatNumber(chainRows.reduce((s, r) => s + r.dispatchCount, 0))}</th>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </section>
+
+          {/* ── Unprocessed — what never reached a processor ── */}
+          {(() => {
+            const notProcessed = positions.raw;
+            if (notProcessed <= 0) return null;
+            return (
+              <section>
+                <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground"><Package className="h-4 w-4" /> Not processed yet</h3>
+                <div className="rounded-xl border border-border/60 bg-muted/20 px-5 py-4 flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <div className="text-xs uppercase tracking-wider text-muted-foreground">Still in raw stock</div>
+                    <div className="mt-1 text-2xl font-bold tabular-nums text-foreground">{formatNumber(notProcessed)} <span className="text-sm font-medium text-muted-foreground">PCS</span></div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">Ready — awaiting dispatch to the first stage</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs uppercase tracking-wider text-muted-foreground">Value</div>
+                    <div className="mt-1 text-lg font-semibold tabular-nums text-foreground">{formatCurrency(stageValues?.raw.value ?? 0)}</div>
+                  </div>
+                </div>
+              </section>
+            );
+          })()}
+
           <section>
             <h3 className="mb-2 text-sm font-semibold text-foreground">Where the pieces are right now</h3>
             <p className="mb-3 text-xs text-muted-foreground">

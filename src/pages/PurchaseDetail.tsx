@@ -1,5 +1,7 @@
 import {
   ArrowLeft,
+  ArrowDown,
+  ArrowUp,
   ArrowUpRight,
   CalendarDays,
   CheckCircle2,
@@ -181,6 +183,15 @@ export function PurchaseDetail() {
   // Compact filters riding in the section header strips.
   const [ledgerTypeFilter, setLedgerTypeFilter] = useState<string>('__all__');
   const [dispatchStageFilter, setDispatchStageFilter] = useState<string>('__all__');
+  // Movement ledger sort — each column header is a button cycling asc -> desc -> clear.
+  const [ledgerSort, setLedgerSort] = useState<{ key: 'date' | 'ref' | 'type' | 'qty' | 'balance'; dir: 'asc' | 'desc' } | null>({ key: 'date', dir: 'desc' });
+  const toggleLedgerSort = (key: 'date' | 'ref' | 'type' | 'qty' | 'balance') => {
+    setLedgerSort(prev => {
+      if (!prev || prev.key !== key) return { key, dir: 'asc' };
+      if (prev.dir === 'asc') return { key, dir: 'desc' };
+      return null;
+    });
+  };
 
   // Per-stage ledger for this batch: sent / received / lost / LEFT BEHIND out
   // with processors — the honest "where are the pcs" answer per leg.
@@ -200,6 +211,19 @@ export function PurchaseDetail() {
     () => (ledgerTypeFilter === '__all__' ? ledgerBalance : ledgerBalance.filter(e => e.type === ledgerTypeFilter)),
     [ledgerBalance, ledgerTypeFilter],
   );
+  // Apply the sort the user picked from a column header — secondary key: date desc.
+  const sortedLedger = useMemo(() => {
+    if (!ledgerSort) return filteredLedger;
+    return [...filteredLedger].sort((a, b) => {
+      let av = (a as any)[ledgerSort.key];
+      let bv = (b as any)[ledgerSort.key];
+      if (typeof av === 'string') av = av.toLowerCase();
+      if (typeof bv === 'string') bv = bv.toLowerCase();
+      if (av < bv) return ledgerSort.dir === 'asc' ? -1 : 1;
+      if (av > bv) return ledgerSort.dir === 'asc' ? 1 : -1;
+      return (b.date || '').localeCompare(a.date || '');
+    });
+  }, [filteredLedger, ledgerSort]);
 
   if (!batch || !material || !cost) {
     return (
@@ -557,12 +581,12 @@ export function PurchaseDetail() {
             />
             <span className="text-xs text-muted-foreground tabular-nums">
               {ledgerTypeFilter !== '__all__'
-                ? `${filteredLedger.length} of ${ledgerBalance.length} ${ledgerBalance.length === 1 ? 'event' : 'events'}`
+                ? `${sortedLedger.length} of ${ledgerBalance.length} ${ledgerBalance.length === 1 ? 'event' : 'events'}`
                 : `${ledgerBalance.length} ${ledgerBalance.length === 1 ? 'event' : 'events'} · real sends, receipts & losses`}
             </span>
           </div>
         </div>
-        {filteredLedger.length === 0 ? (
+        {sortedLedger.length === 0 ? (
           <div className="px-5 py-8 text-center text-sm text-muted-foreground">
             No {ledgerTypeFilter.toLowerCase()} events on this purchase.
           </div>
@@ -571,15 +595,50 @@ export function PurchaseDetail() {
         <table className="w-full text-sm text-left min-w-[560px]">
           <thead className="text-xs text-muted-foreground bg-muted/60 sticky top-0 border-b border-border/60">
             <tr>
-              <th className="px-5 py-3 font-medium">Date</th>
-              <th className="px-5 py-3 font-medium">Ref</th>
-              <th className="px-5 py-3 font-medium">Type</th>
-              <th className="px-5 py-3 font-medium text-right">Qty</th>
-              <th className="px-5 py-3 font-medium text-right">Balance</th>
+              <th className="px-5 py-3 font-medium">
+                <button type="button" onClick={() => toggleLedgerSort('date')} aria-label="Sort by Date" className="inline-flex items-center gap-1.5 -mx-2 -my-1 rounded-md px-2 py-1 text-left text-inherit hover:bg-muted/60">
+                  Date
+                  {ledgerSort?.key === 'date'
+                    ? (ledgerSort.dir === 'asc' ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />)
+                    : <ArrowDown className="h-3.5 w-3.5 text-muted-foreground/40" />}
+                </button>
+              </th>
+              <th className="px-5 py-3 font-medium">
+                <button type="button" onClick={() => toggleLedgerSort('ref')} aria-label="Sort by Ref" className="inline-flex items-center gap-1.5 -mx-2 -my-1 rounded-md px-2 py-1 text-left text-inherit hover:bg-muted/60">
+                  Ref
+                  {ledgerSort?.key === 'ref'
+                    ? (ledgerSort.dir === 'asc' ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />)
+                    : <ArrowDown className="h-3.5 w-3.5 text-muted-foreground/40" />}
+                </button>
+              </th>
+              <th className="px-5 py-3 font-medium">
+                <button type="button" onClick={() => toggleLedgerSort('type')} aria-label="Sort by Type" className="inline-flex items-center gap-1.5 -mx-2 -my-1 rounded-md px-2 py-1 text-left text-inherit hover:bg-muted/60">
+                  Type
+                  {ledgerSort?.key === 'type'
+                    ? (ledgerSort.dir === 'asc' ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />)
+                    : <ArrowDown className="h-3.5 w-3.5 text-muted-foreground/40" />}
+                </button>
+              </th>
+              <th className="px-5 py-3 font-medium text-right">
+                <button type="button" onClick={() => toggleLedgerSort('qty')} aria-label="Sort by Qty" className="inline-flex items-center gap-1.5 -mx-2 -my-1 rounded-md px-2 py-1 text-inherit hover:bg-muted/60">
+                  Qty
+                  {ledgerSort?.key === 'qty'
+                    ? (ledgerSort.dir === 'asc' ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />)
+                    : <ArrowDown className="h-3.5 w-3.5 text-muted-foreground/40" />}
+                </button>
+              </th>
+              <th className="px-5 py-3 font-medium text-right">
+                <button type="button" onClick={() => toggleLedgerSort('balance')} aria-label="Sort by Balance" className="inline-flex items-center gap-1.5 -mx-2 -my-1 ml-auto rounded-md px-2 py-1 text-inherit hover:bg-muted/60">
+                  Balance
+                  {ledgerSort?.key === 'balance'
+                    ? (ledgerSort.dir === 'asc' ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />)
+                    : <ArrowDown className="h-3.5 w-3.5 text-muted-foreground/40" />}
+                </button>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
-            {filteredLedger.map(e => (
+            {sortedLedger.map(e => (
               <tr key={e.id} className="hover:bg-muted/80 transition-colors">
                 <td className="px-5 py-3 text-muted-foreground tabular-nums">{formatDocDate(e.date)}</td>
                 <td className="px-5 py-3 font-medium text-foreground">{e.ref}</td>
