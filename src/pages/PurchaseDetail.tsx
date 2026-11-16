@@ -417,32 +417,32 @@ export function PurchaseDetail() {
         <table className="w-full text-sm text-left min-w-[640px]">
           <thead className="text-xs text-muted-foreground bg-muted/60 sticky top-0 border-b border-border/60">
             <tr>
-              <th className="px-5 py-3 font-medium">Stage</th>
-              <th className="px-5 py-3 font-medium text-right">Sent</th>
-              <th className="px-5 py-3 font-medium text-right">Received</th>
-              <th className="px-5 py-3 font-medium text-right">Lost</th>
-              <th className="px-5 py-3 font-medium text-right">Left behind</th>
-              <th className="px-5 py-3 font-medium text-right">Bill amount</th>
-              <th className="px-5 py-3 font-medium text-right">Cost / PCS</th>
+              <th className="px-4 py-2 font-medium">Stage</th>
+              <th className="px-4 py-2 font-medium text-right">Sent</th>
+              <th className="px-4 py-2 font-medium text-right">Received</th>
+              <th className="px-4 py-2 font-medium text-right">Lost</th>
+              <th className="px-4 py-2 font-medium text-right">Left behind</th>
+              <th className="px-4 py-2 font-medium text-right">Bill amount</th>
+              <th className="px-4 py-2 font-medium text-right">Cost / PCS</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
             {perStage.rows.length > 0 ? (
               perStage.rows.map(l => (
                 <tr key={`${l.sequence}-${l.name}`} className="hover:bg-muted/80 transition-colors">
-                  <td className="px-5 py-3 text-foreground">{l.name}</td>
-                  <td className="px-5 py-3 text-right text-foreground tabular-nums">{formatNumber(l.sent)}</td>
-                  <td className="px-5 py-3 text-right text-success tabular-nums">{formatNumber(l.received)}</td>
+                  <td className="px-4 py-2 text-foreground">{l.name}</td>
+                  <td className="px-4 py-2 text-right text-foreground tabular-nums">{formatNumber(l.sent)}</td>
+                  <td className="px-4 py-2 text-right text-success tabular-nums">{formatNumber(l.received)}</td>
                   <td className={cn(
-                    "px-5 py-3 text-right tabular-nums",
+                    "px-4 py-2 text-right tabular-nums",
                     l.loss > 0 ? 'text-destructive font-medium' : 'text-muted-foreground',
                   )}>{l.loss > 0 ? formatNumber(l.loss) : '—'}</td>
                   <td className={cn(
-                    "px-5 py-3 text-right tabular-nums font-semibold",
+                    "px-4 py-2 text-right tabular-nums font-semibold",
                     l.pending > 0 ? 'text-amber-600' : 'text-muted-foreground',
                   )}>{l.pending > 0 ? formatNumber(l.pending) : '—'}</td>
-                  <td className="px-5 py-3 text-right font-medium text-foreground tabular-nums">{l.billed > 0 ? formatCurrency(l.billed) : '—'}</td>
-                  <td className="px-5 py-3 text-right font-medium text-foreground tabular-nums">{l.received > 0 && l.billed > 0 ? formatCurrency(l.billed / l.received) : '—'}</td>
+                  <td className="px-4 py-2 text-right font-medium text-foreground tabular-nums">{l.billed > 0 ? formatCurrency(l.billed) : '—'}</td>
+                  <td className="px-4 py-2 text-right font-medium text-foreground tabular-nums">{l.received > 0 && l.billed > 0 ? formatCurrency(l.billed / l.received) : '—'}</td>
                 </tr>
               ))
             ) : (
@@ -454,13 +454,13 @@ export function PurchaseDetail() {
           {perStage.rows.length > 0 && (
             <tfoot className="border-t border-border/60 bg-muted/40">
               <tr>
-                <th className="px-5 py-3 font-medium text-foreground">Total</th>
-                <th className="px-5 py-3 text-right font-bold text-foreground tabular-nums">{formatNumber(perStage.totals.sent)}</th>
-                <th className="px-5 py-3 text-right font-medium text-success tabular-nums">{formatNumber(perStage.totals.received)}</th>
-                <th className="px-5 py-3 text-right font-medium text-foreground tabular-nums">{formatNumber(perStage.totals.loss)}</th>
-                <th className="px-5 py-3 text-right font-medium text-amber-600 tabular-nums">{perStage.totals.pending > 0 ? formatNumber(perStage.totals.pending) : '—'}</th>
-                <th className="px-5 py-3 text-right font-bold text-foreground tabular-nums">{formatCurrency(perStage.totals.billed)}</th>
-                <th className="px-5 py-3 text-right font-medium text-foreground tabular-nums">{formatCurrency(batch.initialPcs > 0 ? cost.processingCost / batch.initialPcs : 0)}</th>
+                <th className="px-4 py-2 font-medium text-foreground">Total</th>
+                <th className="px-4 py-2 text-right font-bold text-foreground tabular-nums">{formatNumber(perStage.totals.sent)}</th>
+                <th className="px-4 py-2 text-right font-medium text-success tabular-nums">{formatNumber(perStage.totals.received)}</th>
+                <th className="px-4 py-2 text-right font-medium text-foreground tabular-nums">{formatNumber(perStage.totals.loss)}</th>
+                <th className="px-4 py-2 text-right font-medium text-amber-600 tabular-nums">{perStage.totals.pending > 0 ? formatNumber(perStage.totals.pending) : '—'}</th>
+                <th className="px-4 py-2 text-right font-bold text-foreground tabular-nums">{formatCurrency(perStage.totals.billed)}</th>
+                <th className="px-4 py-2 text-right font-medium text-foreground tabular-nums">{formatCurrency(batch.initialPcs > 0 ? cost.processingCost / batch.initialPcs : 0)}</th>
               </tr>
             </tfoot>
           )}
@@ -516,13 +516,13 @@ export function PurchaseDetail() {
           <table className="w-full text-sm text-left min-w-[640px]">
             <thead className="text-xs text-muted-foreground bg-muted/60 sticky top-0 border-b border-border/60">
               <tr>
-                <th className="px-5 py-3 font-medium">Dispatch</th>
-                <th className="px-5 py-3 font-medium">Stage</th>
-                <th className="px-5 py-3 font-medium">Processor</th>
-                <th className="px-5 py-3 font-medium text-right">Sent</th>
-                <th className="px-5 py-3 font-medium text-right">Received</th>
-                <th className="px-5 py-3 font-medium text-right">Loss</th>
-                <th className="px-5 py-3 font-medium text-right">Bill</th>
+                <th className="px-4 py-2 font-medium">Dispatch</th>
+                <th className="px-4 py-2 font-medium">Stage</th>
+                <th className="px-4 py-2 font-medium">Processor</th>
+                <th className="px-4 py-2 font-medium text-right">Sent</th>
+                <th className="px-4 py-2 font-medium text-right">Received</th>
+                <th className="px-4 py-2 font-medium text-right">Loss</th>
+                <th className="px-4 py-2 font-medium text-right">Bill</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
@@ -534,10 +534,10 @@ export function PurchaseDetail() {
                 const processorName = processors.find(p => p.id === send.processorId)?.name ?? 'Unknown';
                 return (
                   <tr key={send.id} className="hover:bg-muted/80 transition-colors">
-                    <td className="px-5 py-3 font-medium text-foreground tabular-nums">{send.dispatchNo}</td>
-                    <td className="px-5 py-3 text-muted-foreground">{stage?.name ?? '—'}</td>
-                    <td className="px-5 py-3 text-muted-foreground">{processorName}</td>
-                    <td className="px-5 py-3 text-right text-foreground tabular-nums">
+                    <td className="px-4 py-2 font-medium text-foreground tabular-nums">{send.dispatchNo}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{stage?.name ?? '—'}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{processorName}</td>
+                    <td className="px-4 py-2 text-right text-foreground tabular-nums">
                       {formatNumber(send.pcsSent)}
                       {(() => {
                         const split = stageOneSplit.get(send.id);
@@ -549,12 +549,12 @@ export function PurchaseDetail() {
                         );
                       })()}
                     </td>
-                    <td className="px-5 py-3 text-right text-success tabular-nums">{formatNumber(recv)}</td>
+                    <td className="px-4 py-2 text-right text-success tabular-nums">{formatNumber(recv)}</td>
                     <td className={cn(
-                      "px-5 py-3 text-right tabular-nums",
+                      "px-4 py-2 text-right tabular-nums",
                       (send.lossQuantity || 0) > 0 ? 'text-destructive font-medium' : 'text-muted-foreground',
                     )}>{(send.lossQuantity || 0) > 0 ? formatNumber(send.lossQuantity || 0) : '—'}</td>
-                    <td className="px-5 py-3 text-right text-muted-foreground tabular-nums">{bill > 0 ? formatCurrency(bill) : '—'}</td>
+                    <td className="px-4 py-2 text-right text-muted-foreground tabular-nums">{bill > 0 ? formatCurrency(bill) : '—'}</td>
                   </tr>
                 );
               })}
@@ -601,7 +601,7 @@ export function PurchaseDetail() {
         <table className="w-full text-sm text-left min-w-[560px]">
           <thead className="text-xs text-muted-foreground bg-muted/60 sticky top-0 border-b border-border/60">
             <tr>
-              <th className="px-5 py-3 font-medium">
+              <th className="px-4 py-2 font-medium">
                 <button type="button" onClick={() => toggleLedgerSort('date')} aria-label="Sort by Date" className="inline-flex items-center gap-1.5 -mx-2 -my-1 rounded-md px-2 py-1 text-left text-inherit hover:bg-muted/60">
                   Date
                   {ledgerSort?.key === 'date'
@@ -609,7 +609,7 @@ export function PurchaseDetail() {
                     : <ArrowDown className="h-3.5 w-3.5 text-muted-foreground/40" />}
                 </button>
               </th>
-              <th className="px-5 py-3 font-medium">
+              <th className="px-4 py-2 font-medium">
                 <button type="button" onClick={() => toggleLedgerSort('ref')} aria-label="Sort by Ref" className="inline-flex items-center gap-1.5 -mx-2 -my-1 rounded-md px-2 py-1 text-left text-inherit hover:bg-muted/60">
                   Ref
                   {ledgerSort?.key === 'ref'
@@ -617,7 +617,7 @@ export function PurchaseDetail() {
                     : <ArrowDown className="h-3.5 w-3.5 text-muted-foreground/40" />}
                 </button>
               </th>
-              <th className="px-5 py-3 font-medium">
+              <th className="px-4 py-2 font-medium">
                 <button type="button" onClick={() => toggleLedgerSort('type')} aria-label="Sort by Type" className="inline-flex items-center gap-1.5 -mx-2 -my-1 rounded-md px-2 py-1 text-left text-inherit hover:bg-muted/60">
                   Type
                   {ledgerSort?.key === 'type'
@@ -625,7 +625,7 @@ export function PurchaseDetail() {
                     : <ArrowDown className="h-3.5 w-3.5 text-muted-foreground/40" />}
                 </button>
               </th>
-              <th className="px-5 py-3 font-medium text-right">
+              <th className="px-4 py-2 font-medium text-right">
                 <button type="button" onClick={() => toggleLedgerSort('qty')} aria-label="Sort by Qty" className="inline-flex items-center gap-1.5 -mx-2 -my-1 rounded-md px-2 py-1 text-inherit hover:bg-muted/60">
                   Qty
                   {ledgerSort?.key === 'qty'
@@ -633,7 +633,7 @@ export function PurchaseDetail() {
                     : <ArrowDown className="h-3.5 w-3.5 text-muted-foreground/40" />}
                 </button>
               </th>
-              <th className="px-5 py-3 font-medium text-right">
+              <th className="px-4 py-2 font-medium text-right">
                 <button type="button" onClick={() => toggleLedgerSort('balance')} aria-label="Sort by Balance" className="inline-flex items-center gap-1.5 -mx-2 -my-1 ml-auto rounded-md px-2 py-1 text-inherit hover:bg-muted/60">
                   Balance
                   {ledgerSort?.key === 'balance'
@@ -646,9 +646,9 @@ export function PurchaseDetail() {
           <tbody className="divide-y divide-border/60">
             {sortedLedger.map(e => (
               <tr key={e.id} className="hover:bg-muted/80 transition-colors">
-                <td className="px-5 py-3 text-muted-foreground tabular-nums">{formatDocDate(e.date)}</td>
-                <td className="px-5 py-3 font-medium text-foreground">{e.ref}</td>
-                <td className="px-5 py-3">
+                <td className="px-4 py-2 text-muted-foreground tabular-nums">{formatDocDate(e.date)}</td>
+                <td className="px-4 py-2 font-medium text-foreground">{e.ref}</td>
+                <td className="px-4 py-2">
                   <span className={cn(
                     "inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wider",
                     e.type === 'Purchase' && "bg-success/10 text-success",
@@ -663,19 +663,19 @@ export function PurchaseDetail() {
                   </span>
                 </td>
                 <td className={cn(
-                  "px-5 py-3 text-right font-bold tabular-nums",
+                  "px-4 py-2 text-right font-bold tabular-nums",
                   e.qty >= 0 ? 'text-success' : 'text-destructive',
                 )}>
                   {e.qty >= 0 ? '+' : ''}{formatNumber(e.qty)}
                 </td>
-                <td className="px-5 py-3 text-right text-muted-foreground tabular-nums">{formatNumber(e.balance)}</td>
+                <td className="px-4 py-2 text-right text-muted-foreground tabular-nums">{formatNumber(e.balance)}</td>
               </tr>
             ))}
           </tbody>
         </table>
         </div>
         )}
-        <p className="border-t border-border/60 px-5 py-3 text-[11px] text-muted-foreground">
+        <p className="border-t border-border/60 px-4 py-2 text-[11px] text-muted-foreground">
           Signed pcs of pieces that left and returned. Balance is the running net of purchase inflows and processing outflows — it reaches 0 only when every purchased piece is either finished, lost, or still pending out with a processor.
         </p>
       </div>
