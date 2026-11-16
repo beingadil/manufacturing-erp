@@ -83,6 +83,22 @@ export default function SendFormPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingSend?.id]);
 
+  // Auto-fill the rate with the exact rate used on the last dispatch of this
+  // material to this processor — the usual price for this job pair. Edit mode
+  // keeps the rate stored on the send itself.
+  const lastRateForPair = useMemo(() => {
+    if (isEdit || !materialId || !processorId) return undefined;
+    const matches = (processingSends || [])
+      .filter(s => s.materialId === materialId && s.processorId === processorId && s.status !== 'Adjusted')
+      .slice()
+      .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.id || '').localeCompare(a.id || ''));
+    return matches[0]?.ratePerPiece;
+  }, [isEdit, materialId, processorId, processingSends]);
+
+  useEffect(() => {
+    if (lastRateForPair != null) setRate(String(lastRateForPair));
+  }, [lastRateForPair]);
+
   const sortedStages = useMemo(() => getSortedStages(processingStages || []), [processingStages]);
 
   // Processing-path gating: ready-made materials never dispatch; single-stage
@@ -705,11 +721,25 @@ export default function SendFormPage() {
                     PCS
                   </span>
                 </div>
-                <p className={cn('mt-1.5 text-right text-[10px] tabular-nums', overRequested ? 'font-semibold text-destructive' : 'text-muted-foreground/70')}>
-                  {overRequested
-                    ? `Only ${formatNumber(totalAvailable)} available`
-                    : `${formatNumber(totalAvailable)} available${effectiveStage ? ` → ${effectiveStage.name}` : ''}`}
-                </p>
+                {(() => {
+                  const enteredQty = parseInt(pcs, 10);
+                  const spent = Number.isFinite(enteredQty) && enteredQty > 0 ? enteredQty : 0;
+                  const remaining = Math.max(0, totalAvailable - spent);
+                  if (overRequested) {
+                    return (
+                      <p className="mt-1.5 text-right text-[10px] tabular-nums font-semibold text-destructive">
+                        {`Only ${formatNumber(totalAvailable)} available`}
+                      </p>
+                    );
+                  }
+                  return (
+                    <p className={cn('mt-1.5 text-right text-[10px] tabular-nums', spent > 0 ? 'font-medium text-foreground/80' : 'text-muted-foreground/70')}>
+                      {spent > 0
+                        ? `${formatNumber(remaining)} left after send${effectiveStage ? ` → ${effectiveStage.name}` : ''}`
+                        : `${formatNumber(totalAvailable)} available${effectiveStage ? ` → ${effectiveStage.name}` : ''}`}
+                    </p>
+                  );
+                })()}
               </div>
 
               {/* Rate */}
