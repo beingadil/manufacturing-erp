@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   ArrowRightLeft,
   ArrowUp,
-  CheckCircle2,
   Clock,
   Package,
   PackageCheck,
@@ -451,27 +450,6 @@ export function MaterialDetail() {
               {totals.yieldPct != null && <> · Return yield {totals.yieldPct}%</>}
               {totals.lossPct != null && totals.loss > 0 && <> · <span className="text-destructive font-medium">Loss {formatNumber(totals.loss)} PCS ({totals.lossPct}%)</span></>}
             </p>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="rounded-xl border border-border bg-muted/30 p-3">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1"><Package className="h-3.5 w-3.5" /> Raw — ready for stage 1</div>
-                <div className="text-xl font-bold text-foreground">{formatNumber(positions.raw)} <span className="text-xs font-medium text-muted-foreground">PCS</span></div>
-              </div>
-              <div className="rounded-xl border border-border bg-muted/30 p-3">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1"><Truck className="h-3.5 w-3.5" /> Out with processors</div>
-                <div className="text-xl font-bold text-foreground">{formatNumber(positions.inTransit)} <span className="text-xs font-medium text-muted-foreground">PCS</span></div>
-              </div>
-              <div className="rounded-xl border border-border bg-muted/30 p-3">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Received — awaiting next stage
-                  {positions.availableFromStage && <span className="font-medium text-foreground/70"> (from {positions.availableFromStage})</span>}
-                </div>
-                <div className="text-xl font-bold text-foreground">{formatNumber(positions.available)} <span className="text-xs font-medium text-muted-foreground">PCS</span></div>
-              </div>
-              <div className="rounded-xl border border-border bg-muted/30 p-3">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1"><PackageCheck className="h-3.5 w-3.5" /> Finished — sellable</div>
-                <div className="text-xl font-bold text-foreground">{formatNumber(positions.finished)} <span className="text-xs font-medium text-muted-foreground">PCS</span></div>
-              </div>
-            </div>
             {stageWip.some(s => s.pcs > 0) && (
               <div className="mt-4 flex flex-wrap gap-2">
                 {stageWip.filter(s => s.pcs > 0).map(({ stage, pcs }) => (
