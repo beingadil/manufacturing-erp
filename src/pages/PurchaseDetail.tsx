@@ -307,86 +307,92 @@ export function PurchaseDetail() {
         )}
       </section>
 
-      {/* ── Supplier / PO meta ───────────────────────────────────────────── */}
-      <div className="rounded-xl border border-border bg-muted/20 p-5">
-        <div className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-[1fr_1fr_1.1fr_1.35fr]">
-          {/* Supplier — links straight into the party's own sub-ledger */}
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              <Factory className="h-3.5 w-3.5 shrink-0" aria-hidden /> Supplier
-            </div>
-            <button
-              type="button"
-              onClick={() => supplier && setLedgerParty({ id: supplier.id, name: supplier.name, kind: 'Supplier' })}
-              className="group/link mt-1 inline-flex max-w-full items-center gap-1 rounded-md -mx-1 px-1 py-0.5 text-left transition-colors hover:bg-muted"
-              title="Open supplier ledger"
-            >
-              <span className="truncate text-[15px] font-semibold text-foreground transition-colors group-hover/link:text-primary">
-                {supplier?.name || 'Unknown'}
-              </span>
-              <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50 transition-transform group-hover/link:-translate-y-0.5 group-hover/link:translate-x-0.5 group-hover/link:text-primary" />
-            </button>
-          </div>
+      {/* ── Supplier / PO meta — one inline line, not a card ─────────────── */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-border bg-muted/20 px-4 py-3 text-sm">
+        {/* Supplier — links straight into the party's own sub-ledger */}
+        <span className="inline-flex min-w-0 items-center gap-1.5">
+          <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <Factory className="h-3.5 w-3.5 shrink-0" aria-hidden /> Supplier
+          </span>
+          <button
+            type="button"
+            onClick={() => supplier && setLedgerParty({ id: supplier.id, name: supplier.name, kind: 'Supplier' })}
+            className="group/link inline-flex max-w-full items-center gap-1 rounded-md -mx-1 px-1 py-0.5 transition-colors hover:bg-muted"
+            title="Open supplier ledger"
+          >
+            <span className="truncate text-sm font-semibold text-foreground transition-colors group-hover/link:text-primary">
+              {supplier?.name || 'Unknown'}
+            </span>
+            <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50 transition-transform group-hover/link:-translate-y-0.5 group-hover/link:translate-x-0.5 group-hover/link:text-primary" />
+          </button>
+        </span>
 
-          {/* Purchase date — house date language (dd-MMM-yyyy) */}
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              <CalendarDays className="h-3.5 w-3.5 shrink-0" aria-hidden /> Purchase date
-            </div>
-            <div className="mt-1 text-[15px] font-semibold tabular-nums text-foreground" title={batch.date}>
-              {formatDocDate(batch.date)}
-            </div>
-          </div>
+        <span aria-hidden className="hidden h-4 w-px bg-border sm:block" />
 
-          {/* Path — humanised, never the raw enum */}
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              <Workflow className="h-3.5 w-3.5 shrink-0" aria-hidden /> Path
-            </div>
-            <div className="mt-1 truncate text-[15px] font-semibold text-foreground" title={pathInfo}>{pathInfo}</div>
-          </div>
+        {/* Purchase date — house date language (dd-MMM-yyyy) */}
+        <span className="inline-flex items-center gap-1.5">
+          <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <CalendarDays className="h-3.5 w-3.5 shrink-0" aria-hidden /> Date
+          </span>
+          <span className="text-sm font-semibold tabular-nums text-foreground" title={batch.date}>{formatDocDate(batch.date)}</span>
+        </span>
 
-          {/* Weight & unit cost */}
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              <Scale className="h-3.5 w-3.5 shrink-0" aria-hidden /> Weight &amp; unit cost
-            </div>
-            <div className="mt-1 truncate text-[15px] font-semibold tabular-nums text-foreground"
-                 title={batch.weight > 0 ? `${formatNumber(batch.weight)} ${batch.weightUnit}` : undefined}>
-              {batch.weight > 0
-                ? <>{formatNumber(batch.weight)} {batch.weightUnit} <span className="font-normal text-muted-foreground">· {formatCurrency(batch.ratePerUnit)} /unit</span></>
-                : <span className="text-muted-foreground">—</span>}
-            </div>
-          </div>
-        </div>
+        <span aria-hidden className="hidden h-4 w-px bg-border sm:block" />
+
+        {/* Path — humanised, never the raw enum */}
+        <span className="inline-flex min-w-0 items-center gap-1.5">
+          <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <Workflow className="h-3.5 w-3.5 shrink-0" aria-hidden /> Path
+          </span>
+          <span className="truncate text-sm font-semibold text-foreground" title={pathInfo}>{pathInfo}</span>
+        </span>
+
+        <span aria-hidden className="hidden h-4 w-px bg-border sm:block" />
+
+        {/* Weight & unit cost */}
+        <span className="inline-flex min-w-0 items-center gap-1.5">
+          <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <Scale className="h-3.5 w-3.5 shrink-0" aria-hidden /> Weight
+          </span>
+          <span className="text-sm font-semibold tabular-nums text-foreground"
+               title={batch.weight > 0 ? `${formatNumber(batch.weight)} ${batch.weightUnit}` : undefined}>
+            {batch.weight > 0
+              ? <>{formatNumber(batch.weight)} {batch.weightUnit} <span className="font-normal text-muted-foreground">· {formatCurrency(batch.ratePerUnit)} /unit</span></>
+              : <span className="text-muted-foreground">—</span>}
+          </span>
+        </span>
       </div>
       {ledgerParty && <PartyLedgerModal party={ledgerParty} onClose={() => setLedgerParty(null)} />}
 
-      {/* ── Bucket KPIs for this purchase ───────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="rounded-xl border border-border bg-muted/20 p-5 flex flex-col justify-between">
-          <div className="flex items-center gap-3 text-muted-foreground mb-2">
-            <Package className="h-5 w-5" />
-            <span className="text-sm font-medium">Purchased</span>
+      {/* ── Bucket KPIs for this purchase — one strip, not three cards ───── */}
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border lg:grid-cols-4">
+        <div className="bg-card px-4 py-3">
+          <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <Package className="h-3.5 w-3.5 shrink-0" /> Purchased
           </div>
-          <div className="text-3xl font-bold text-foreground">{formatNumber(batch.initialPcs)} <span className="text-sm font-medium text-muted-foreground">PCS</span></div>
-          <div className="text-xs text-muted-foreground mt-1">{formatCurrency(cost.purchaseCost)} purchase cost</div>
+          <div className="mt-0.5 text-lg font-bold tabular-nums leading-6 text-foreground">{formatNumber(batch.initialPcs)} <span className="text-xs font-medium text-muted-foreground">PCS</span></div>
+          <div className="text-[11px] leading-4 text-muted-foreground">{formatCurrency(cost.purchaseCost)} purchase</div>
         </div>
-        <div className="rounded-xl border border-border bg-muted/20 p-5 flex flex-col justify-between">
-          <div className="flex items-center gap-3 text-muted-foreground mb-2">
-            <PackageCheck className="h-5 w-5 text-emerald-500" />
-            <span className="text-sm font-medium">Finished stock</span>
+        <div className="bg-card px-4 py-3">
+          <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <Workflow className="h-3.5 w-3.5 shrink-0" /> Processing
           </div>
-          <div className="text-3xl font-bold text-foreground">{formatNumber(finishedPcs)} <span className="text-sm font-medium text-muted-foreground">PCS</span></div>
-          <div className="text-xs text-muted-foreground mt-1">{finishedPcs > 0 ? formatCurrency(finishedPcs * cost.totalCostPerPcs) + ' value on hand' : 'no finished pcs yet'}</div>
+          <div className="mt-0.5 text-lg font-bold tabular-nums leading-6 text-foreground">{formatCurrency(cost.processingCost)}</div>
+          <div className="text-[11px] leading-4 text-muted-foreground">{formatCurrency(batch.initialPcs > 0 ? cost.processingCost / batch.initialPcs : 0)} / PCS</div>
         </div>
-        <div className="rounded-xl border border-border bg-muted/20 p-5 flex flex-col justify-between">
-          <div className="flex items-center gap-3 text-muted-foreground mb-2">
-            <Wallet className="h-5 w-5 text-info" />
-            <span className="text-sm font-medium">True cost / PCS</span>
+        <div className="bg-card px-4 py-3">
+          <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-info">
+            <Wallet className="h-3.5 w-3.5 shrink-0" /> True cost / PCS
           </div>
-          <div className="text-3xl font-bold text-foreground">{formatCurrency(cost.totalCostPerPcs)}</div>
-          <div className="text-xs text-muted-foreground mt-1">{cost.purchaseCostPerPcs > 0 ? formatCurrency(cost.purchaseCostPerPcs) + ' purchase + ' + formatCurrency(batch.initialPcs > 0 ? cost.processingCost / batch.initialPcs : 0) + ' processing' : ''}</div>
+          <div className="mt-0.5 text-lg font-bold tabular-nums leading-6 text-foreground">{formatCurrency(cost.totalCostPerPcs)}</div>
+          <div className="text-[11px] leading-4 text-muted-foreground">{cost.purchaseCostPerPcs > 0 ? `${formatCurrency(cost.purchaseCostPerPcs)} purchase + processing` : 'purchase + processing'}</div>
+        </div>
+        <div className="bg-card px-4 py-3">
+          <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <PackageCheck className="h-3.5 w-3.5 shrink-0 text-emerald-500" /> Finished stock
+          </div>
+          <div className="mt-0.5 text-lg font-bold tabular-nums leading-6 text-foreground">{formatNumber(finishedPcs)} <span className="text-xs font-medium text-muted-foreground">PCS</span></div>
+          <div className="text-[11px] leading-4 text-muted-foreground">{finishedPcs > 0 ? `${formatCurrency(finishedPcs * cost.totalCostPerPcs)} on hand` : 'no finished pcs yet'}</div>
         </div>
       </div>
 
@@ -441,7 +447,7 @@ export function PurchaseDetail() {
               ))
             ) : (
               <tr>
-                <td colSpan={7} className="px-5 py-8 text-center text-muted-foreground">No processing bills on this purchase</td>
+                <td colSpan={7} className="px-5 py-4 text-xs text-muted-foreground">No processing bills on this purchase yet.</td>
               </tr>
             )}
           </tbody>
@@ -502,7 +508,7 @@ export function PurchaseDetail() {
           </div>
         </div>
         {filteredSends.length === 0 ? (
-          <div className="px-5 py-8 text-center text-sm text-muted-foreground">
+          <div className="px-5 py-4 text-xs text-muted-foreground">
             {dispatchStageFilter !== '__all__' ? 'No dispatches at this stage.' : 'No dispatches recorded for this batch yet.'}
           </div>
         ) : (
@@ -587,7 +593,7 @@ export function PurchaseDetail() {
           </div>
         </div>
         {sortedLedger.length === 0 ? (
-          <div className="px-5 py-8 text-center text-sm text-muted-foreground">
+          <div className="px-5 py-4 text-xs text-muted-foreground">
             No {ledgerTypeFilter.toLowerCase()} events on this purchase.
           </div>
         ) : (
