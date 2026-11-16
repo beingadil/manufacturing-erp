@@ -6,6 +6,7 @@ import { Column, DataTable } from "../components/DataTable";
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
 import { SearchableSelect } from "../components/SearchableSelect";
 import { DispatchDetailModal } from '../components/processing/DispatchDetailModal';
+import { DatePicker } from '../components/ui/date-picker';
 import { StageManagerPanel } from '../components/processing/StageManagerPanel';
 import { StageTimelinePanel } from '../components/processing/StageTimelinePanel';
 import { WipBoard } from '../components/processing/WipBoard';
@@ -401,7 +402,7 @@ export function JobWork() {
             })()}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3 sm:gap-3 sm:p-4 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3 lg:grid-cols-6">
           {sortedStages.map(stage => {
             const wip = stageWip.find(w => w.stageId === stage.id);
             const pcs = wip?.pcs || 0;
@@ -409,7 +410,7 @@ export function JobWork() {
             return (
               <div
                 key={stage.id}
-                className={`flex min-h-[104px] flex-col justify-between rounded-xl border p-3 transition-colors sm:min-h-[112px] ${
+                className={`flex flex-col justify-between rounded-xl border p-2.5 transition-colors ${
                   active ? 'border-warning/40 bg-warning/[0.06]' : 'border-border/50 bg-muted/20'
                 }`}
               >
@@ -427,7 +428,7 @@ export function JobWork() {
                   </span>
                 </div>
                 <div className="mt-2">
-                  <div className={`text-xl font-bold tabular-nums tracking-tight ${active ? 'text-warning' : 'text-foreground/30'}`}>
+                  <div className={`text-lg font-bold tabular-nums leading-6 tracking-tight ${active ? 'text-warning' : 'text-foreground/30'}`}>
                     {formatNumber(pcs)}<span className="ml-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">PCS</span>
                   </div>
                   {totalWipPcs > 0 && (
@@ -503,8 +504,8 @@ export function JobWork() {
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">{filteredSends.length} {filteredSends.length === 1 ? 'dispatch' : 'dispatches'}</span>
             <div className="flex flex-wrap items-center gap-2">
-              <input type="date" value={sendDateFrom} onChange={e => setSendDateFrom(e.target.value)} className="rounded-lg border border-border bg-background/60 px-2 py-1.5 text-xs text-foreground" aria-label="From date" />
-              <input type="date" value={sendDateTo} onChange={e => setSendDateTo(e.target.value)} className="rounded-lg border border-border bg-background/60 px-2 py-1.5 text-xs text-foreground" aria-label="To date" />
+              <DatePicker value={sendDateFrom} onChange={setSendDateFrom} size="sm" className="w-36" placeholder="From date" />
+              <DatePicker value={sendDateTo} onChange={setSendDateTo} size="sm" className="w-36" placeholder="To date" />
               <SearchableSelect
                 options={[
                   { id: '', label: 'All stages' },
@@ -531,7 +532,7 @@ export function JobWork() {
                   <button
                     type="button"
                     onClick={handleReceiveAll}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
                   >
                     <Check className="h-3.5 w-3.5" />
                     Receive all
@@ -554,8 +555,8 @@ export function JobWork() {
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">{filteredReceipts.length} {filteredReceipts.length === 1 ? 'receipt' : 'receipts'}</span>
             <div className="flex flex-wrap items-center gap-2">
-              <input type="date" value={receiveDateFrom} onChange={e => setReceiveDateFrom(e.target.value)} className="rounded-lg border border-border bg-background/60 px-2 py-1.5 text-xs text-foreground" aria-label="From date" />
-              <input type="date" value={receiveDateTo} onChange={e => setReceiveDateTo(e.target.value)} className="rounded-lg border border-border bg-background/60 px-2 py-1.5 text-xs text-foreground" aria-label="To date" />
+              <DatePicker value={receiveDateFrom} onChange={setReceiveDateFrom} size="sm" className="w-36" placeholder="From date" />
+              <DatePicker value={receiveDateTo} onChange={setReceiveDateTo} size="sm" className="w-36" placeholder="To date" />
               <SearchableSelect
                 options={[
                   { id: '', label: 'All stages' },
@@ -582,8 +583,8 @@ export function JobWork() {
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs text-muted-foreground">{filteredBills.length} bills</span>
             <div className="flex flex-wrap items-center gap-2">
-              <input type="date" value={billDateFrom} onChange={e => setBillDateFrom(e.target.value)} className="rounded-lg border border-border bg-background/60 px-2 py-1.5 text-xs text-foreground" aria-label="From date" />
-              <input type="date" value={billDateTo} onChange={e => setBillDateTo(e.target.value)} className="rounded-lg border border-border bg-background/60 px-2 py-1.5 text-xs text-foreground" aria-label="To date" />
+              <DatePicker value={billDateFrom} onChange={setBillDateFrom} size="sm" className="w-36" placeholder="From date" />
+              <DatePicker value={billDateTo} onChange={setBillDateTo} size="sm" className="w-36" placeholder="To date" />
             </div>
           </div>
           <DataTable

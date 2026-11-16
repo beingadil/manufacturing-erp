@@ -124,15 +124,15 @@ export function VoucherHistoryTab({ sourceModule }: VoucherHistoryTabProps) {
           className="flex-1"
         />
         <div className="flex items-center gap-2">
-          <DatePicker value={dateFrom} onChange={setDateFrom} size="sm" className="w-40" placeholder="From" />
+          <DatePicker value={dateFrom} onChange={setDateFrom} size="sm" className="h-10 w-40" placeholder="From" />
           <span className="text-muted-foreground">to</span>
-          <DatePicker value={dateTo} onChange={setDateTo} size="sm" className="w-40" placeholder="To" />
+          <DatePicker value={dateTo} onChange={setDateTo} size="sm" className="h-10 w-40" placeholder="To" />
         </div>
         <div className="flex items-center gap-2">
-           <button onClick={handleExportCSV} className="p-2 rounded-lg border border-border bg-background hover:bg-muted text-muted-foreground transition-colors" title="Export CSV" aria-label="Export CSV">
+           <button onClick={handleExportCSV} className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-background hover:bg-muted text-muted-foreground transition-colors" title="Export CSV" aria-label="Export CSV">
              <Download className="h-4 w-4" />
            </button>
-           <button onClick={handlePrint} className="p-2 rounded-lg border border-border bg-background hover:bg-muted text-muted-foreground transition-colors" title="Print" aria-label="Print">
+           <button onClick={handlePrint} className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-background hover:bg-muted text-muted-foreground transition-colors" title="Print" aria-label="Print">
              <Printer className="h-4 w-4" />
            </button>
         </div>
