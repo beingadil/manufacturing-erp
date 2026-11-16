@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
 import { CalendarIcon } from 'lucide-react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -31,9 +32,12 @@ export function DatePicker({
   size = 'default',
 }: DatePickerProps) {
   const selected = value ? new Date(value) : undefined;
+  // Controlled so selecting a day closes the popover (users asked for this in
+  // every module). Outside clicks still close it via Radix as before.
+  const [open, setOpen] = useState(false);
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           id={id}
@@ -53,11 +57,20 @@ export function DatePicker({
           {selected ? format(selected, 'dd-MMM-yyyy') : placeholder}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
+      <PopoverContent
+        className="w-auto p-0"
+        align="start"
+        // Escape should close only the calendar, not the modal/panel underneath it.
+        onEscapeKeyDown={(e) => e.stopPropagation()}
+      >
         <Calendar
           mode="single"
           selected={selected}
-          onSelect={(d) => onChange(d ? formatDateISO(d) : '')}
+          defaultMonth={selected}
+          onSelect={(d) => {
+            onChange(d ? formatDateISO(d) : '');
+            setOpen(false);
+          }}
           autoFocus
         />
       </PopoverContent>

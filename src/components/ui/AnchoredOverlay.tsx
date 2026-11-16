@@ -144,9 +144,14 @@ export function AnchoredOverlay({
     if (!open || !closeOnOutsideClick) return;
     const onDocMouseDown = (e: MouseEvent) => {
       const t = e.target as Node;
+      const asEl = t instanceof Element ? t : null;
       if (
         panelRef.current?.contains(t) ||
-        (anchorEl && (anchorEl === t || anchorEl.contains(t)))
+        (anchorEl && (anchorEl === t || anchorEl.contains(t))) ||
+        // A portaled Radix popover (e.g. a DatePicker calendar opened from
+        // inside this panel) lives outside panelRef by design; clicking one of
+        // its days must not tear the panel down.
+        (asEl?.closest('[data-radix-popper-content-wrapper]') != null)
       ) {
         return;
       }
