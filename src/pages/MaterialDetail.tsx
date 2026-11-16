@@ -22,7 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { FormFooter } from '../components/form/FormFooter';
 import { FormModal } from '../components/form/FormModal';
 import { MaterialForm } from '../components/forms/MaterialForm';
-import { InventoryCalculationService, stageAvailableEntries } from '../lib/business/InventoryCalculationService';
+import { batchRawAvailableOf, InventoryCalculationService, stageAvailableEntries } from '../lib/business/InventoryCalculationService';
 import { materialCostSummary } from '../lib/processing/batchCosts';
 import { getMaterialBatchProgress, getSortedStages } from '../lib/processing/stageProgress';
 import { cn, formatCurrency, formatNumber } from '../lib/utils';
@@ -95,6 +95,10 @@ export function MaterialDetail() {
         stagePcsAvailable.set(e.stageId, (stagePcsAvailable.get(e.stageId) || 0) + e.pcs);
       }
     }
+    // Raw, never-dispatched pcs are also "awaiting" — for the chain entry
+    // stage they are what waits to go into production (the total purchase
+    // remainder).
+    const rawAwaiting = materialBatches.reduce((s, b) => s + batchRawAvailableOf(b), 0);
     for (const stage of sortedStages) {
       const stageSends = materialSends.filter(s => s.stageId === stage.id);
       const sent = stageSends.reduce((s, x) => s + (x.pcsSent || 0), 0);
@@ -102,7 +106,8 @@ export function MaterialDetail() {
       const losses = stageSends.reduce((s, x) => s + (x.lossQuantity || 0), 0);
       const holding = Math.max(0, sent - returned - losses);
       const dispatchCount = stageSends.length;
-      const available = stagePcsAvailable.get(stage.id) || 0;
+      const isEntryStage = rows.length === 0;
+      const available = (stagePcsAvailable.get(stage.id) || 0) + (isEntryStage ? rawAwaiting : 0);
       // Only show rows relevant to this material's path
       const pathOk = (
         (material?.processingPath === 'ready_made' && stage.sequence === 1) ||
